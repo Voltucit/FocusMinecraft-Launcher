@@ -1,5 +1,5 @@
 
-# FM_MinecraftLauncher
+# FocusMinecraft!Launcher
 
 ![frame](https://img.shields.io/badge/.NET-8.0-blue)
 ![license](https://img.shields.io/badge/协议-MIT-orange)
@@ -10,7 +10,7 @@
 
 ---
 
-FM_Launcher（FM Minecraft启动器）是一款由C#编写的Minecraft启动器，目前由我一人维护，如果你有建议，或是想参与开发，可以提交Issues和pr
+FocusMinecraft!Launcher（Focus Minecraft启动器）是一款由C#编写的Minecraft启动器，目前由我一人维护，如果你有建议，或是想参与开发，可以提交Issues和pr
 
 - 基本启动功能 √
 
