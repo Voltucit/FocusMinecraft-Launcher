@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml" x:Class="FMLauncher.Features.Java.Views.JavaPage">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="18"/>
+            <ColumnDefinition Width="320"/>
+        </Grid.ColumnDefinitions>
+        <Border Style="{StaticResource Card}" Margin="0">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top">
+                    <TextBlock Text="LOCAL / 已安装环境" Style="{StaticResource Eyebrow}"/>
+                    <WrapPanel Margin="0,8,0,12">
+                        <ui:Button Content="扫描 Java" Command="{Binding Detect}" Margin="0,0,8,8"/>
+                        <ui:Button Content="手动选择" Command="{Binding Browse}" Margin="0,0,8,8"/>
+                        <ui:Button Content="读取版本要求" Command="{Binding Recommend}" Margin="0,0,8,8"/>
+                    </WrapPanel>
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+                    <ui:Button Content="使用选中 Java" Command="{Binding Use}" Appearance="Primary" HorizontalAlignment="Left"/>
+                    <TextBlock Text="{Binding Status}" Style="{StaticResource StatusText}"/>
+                </StackPanel>
+                <ListBox ItemsSource="{Binding Installed}" SelectedItem="{Binding Selected}" DisplayMemberPath="Label" ItemContainerStyle="{StaticResource ListEntry}"/>
+            </DockPanel>
+        </Border>
+        <Border Grid.Column="2" Style="{StaticResource Card}" Margin="0">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Text="RUNTIME / 官方下载" Style="{StaticResource Eyebrow}"/>
+                    <TextBlock Text="选择所需主版本" Style="{StaticResource Subheading}" Margin="0,10,0,14"/>
+                    <TextBlock Text="Java 主版本，例如 8 / 17 / 21" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Text="{Binding Major, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBlock Text="发行版本" Style="{StaticResource FieldLabel}"/>
+                    <ComboBox SelectedValue="{Binding Distribution}" SelectedValuePath="Content">
+                        <ComboBoxItem Content="Temurin"/>
+                        <ComboBoxItem Content="Zulu"/>
+                    </ComboBox>
+                    <ui:Button Content="查询可下载包" Command="{Binding Query}" Margin="0,0,0,16"/>
+                    <ComboBox ItemsSource="{Binding Available}" SelectedItem="{Binding Runtime}" DisplayMemberPath="Label"/>
+                    <ui:Button Content="安装选中精确包" Command="{Binding Install}" Appearance="Primary"/>
+                    <TextBlock Text="仅在你点击安装后下载。自动选择只使用已安装的兼容环境。" Style="{StaticResource MutedText}" FontSize="11" Margin="0,20,0,0"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</UserControl>
