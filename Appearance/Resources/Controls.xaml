@@ -1,0 +1,208 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:cv="clr-namespace:FMLauncher.Common.Converters">
+    <cv:InverseBooleanConverter x:Key="Not"/>
+    <BooleanToVisibilityConverter x:Key="BoolVisibility"/>
+    <cv:EqualsConverter x:Key="Equals"/>
+    <SolidColorBrush x:Key="Ink" Color="#ECF2F5"/>
+    <SolidColorBrush x:Key="Muted" Color="#A5B4BE"/>
+    <SolidColorBrush x:Key="Canvas" Color="#10171D"/>
+    <SolidColorBrush x:Key="Surface" Color="#EC18232B"/>
+    <SolidColorBrush x:Key="SurfaceSoft" Color="#CD1E2B34"/>
+    <SolidColorBrush x:Key="AccentSoft" Color="#2458C6A5"/>
+    <SolidColorBrush x:Key="Line" Color="#35454F"/>
+    <SolidColorBrush x:Key="Accent" Color="#58C6A5"/>
+    <SolidColorBrush x:Key="OnAccent" Color="#101818"/>
+    <CornerRadius x:Key="CardRadius">16</CornerRadius>
+    <Thickness x:Key="PagePadding">24,16,24,20</Thickness>
+    <Style TargetType="UserControl">
+        <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+        <Setter Property="FontFamily" Value="Segoe UI Variable Text, Microsoft YaHei UI"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="UseLayoutRounding" Value="True"/>
+    </Style>
+    <Style x:Key="Card" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Surface}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource CardRadius}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="18"/>
+        <Setter Property="Margin" Value="0,0,0,16"/>
+    </Style>
+    <Style x:Key="SoftCard" TargetType="Border" BasedOn="{StaticResource Card}">
+        <Setter Property="Background" Value="{DynamicResource SurfaceSoft}"/>
+    </Style>
+    <Style x:Key="Tag" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource AccentSoft}"/>
+        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="Padding" Value="8,4"/>
+    </Style>
+    <Style x:Key="Eyebrow" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
+        <Setter Property="Margin" Value="0,0,0,8"/>
+    </Style>
+    <Style x:Key="Heading" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="26"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+        <Setter Property="Margin" Value="0,0,0,18"/>
+    </Style>
+    <Style x:Key="Subheading" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="17"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+        <Setter Property="Margin" Value="0,0,0,12"/>
+    </Style>
+    <Style x:Key="MutedText" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="LineHeight" Value="21"/>
+        <Setter Property="Margin" Value="0,0,0,12"/>
+    </Style>
+    <Style x:Key="FieldLabel" TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Margin" Value="0,0,0,4"/>
+    </Style>
+    <Style x:Key="StatusText" TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+        <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
+        <Setter Property="Margin" Value="0,8,0,0"/>
+    </Style>
+    <Style TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
+        <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+        <Setter Property="Background" Value="{DynamicResource SurfaceSoft}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
+        <Setter Property="Padding" Value="10,8"/>
+        <Setter Property="Margin" Value="0,2,0,12"/>
+        <Setter Property="MinHeight" Value="38"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="SelectionBrush" Value="{DynamicResource Accent}"/>
+        <Setter Property="CaretBrush" Value="{DynamicResource Ink}"/>
+    </Style>
+    <Style TargetType="PasswordBox" BasedOn="{StaticResource DefaultPasswordBoxStyle}">
+        <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+        <Setter Property="Background" Value="{DynamicResource SurfaceSoft}"/>
+        <Setter Property="Padding" Value="10,8"/>
+        <Setter Property="Margin" Value="0,2,0,12"/>
+    </Style>
+    <Style TargetType="ComboBox" BasedOn="{StaticResource DefaultComboBoxStyle}">
+        <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+        <Setter Property="Background" Value="{DynamicResource SurfaceSoft}"/>
+        <Setter Property="Padding" Value="10,8"/>
+        <Setter Property="MinHeight" Value="38"/>
+        <Setter Property="Margin" Value="0,2,0,12"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+    </Style>
+    <Style TargetType="ListBox">
+        <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+        <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True"/>
+        <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling"/>
+        <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
+        <Setter Property="Padding" Value="0"/>
+    </Style>
+    <Style x:Key="ListEntry" TargetType="ListBoxItem">
+        <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Padding" Value="14,12"/>
+        <Setter Property="Margin" Value="0,0,4,6"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="Container" Background="{TemplateBinding Background}" BorderBrush="Transparent" BorderThickness="1" CornerRadius="9" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Container" Property="Background" Value="{DynamicResource SurfaceSoft}"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Container" Property="Background" Value="{DynamicResource AccentSoft}"/>
+                            <Setter TargetName="Container" Property="BorderBrush" Value="{DynamicResource Accent}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                            <Setter TargetName="Container" Property="BorderBrush" Value="{DynamicResource Accent}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="NavEntry" TargetType="ListBoxItem" BasedOn="{StaticResource ListEntry}">
+        <Setter Property="MinHeight" Value="44"/>
+        <Setter Property="Padding" Value="12,10"/>
+        <Setter Property="Margin" Value="0,0,0,6"/>
+    </Style>
+    <Style x:Key="SectionTab" TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
+        <Setter Property="Padding" Value="22,10"/>
+        <Setter Property="MinHeight" Value="44"/>
+        <Setter Property="Margin" Value="0,0,8,0"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Grid>
+                        <Border x:Name="Fill" CornerRadius="8" Background="Transparent" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <Border x:Name="Indicator" Background="Transparent" Height="3" CornerRadius="1.5" VerticalAlignment="Bottom" Margin="22,0,22,0"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Fill" Property="Background" Value="{DynamicResource SurfaceSoft}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                            <Setter TargetName="Indicator" Property="Background" Value="{DynamicResource Accent}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Fill" Property="Background" Value="{DynamicResource AccentSoft}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style TargetType="CheckBox" BasedOn="{StaticResource DefaultCheckBoxStyle}">
+        <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+        <Setter Property="Margin" Value="0,6,0,12"/>
+    </Style>
+    <Style TargetType="Expander" BasedOn="{StaticResource DefaultExpanderStyle}">
+        <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+        <Setter Property="Margin" Value="0,0,0,12"/>
+    </Style>
+    <Style TargetType="TabControl">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabControl">
+            <DockPanel><TabPanel DockPanel.Dock="Top" IsItemsHost="True" Margin="0,0,0,4"/>
+                <ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+            </DockPanel>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="TabItem">
+        <Setter Property="Padding" Value="16,10"/>
+        <Setter Property="Margin" Value="0,0,8,0"/>
+        <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabItem">
+            <Border x:Name="Tab" Background="Transparent" Padding="{TemplateBinding Padding}" CornerRadius="8">
+                <ContentPresenter ContentSource="Header" RecognizesAccessKey="True"/>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Tab" Property="Background" Value="{DynamicResource SurfaceSoft}"/></Trigger>
+                <Trigger Property="IsSelected" Value="True"><Setter TargetName="Tab" Property="Background" Value="{DynamicResource AccentSoft}"/><Setter Property="Foreground" Value="{DynamicResource Ink}"/><Setter Property="FontWeight" Value="SemiBold"/></Trigger>
+                <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Tab" Property="Background" Value="{DynamicResource AccentSoft}"/></Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+</ResourceDictionary>

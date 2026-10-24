@@ -1,4 +1,4 @@
-
+﻿
 # FocusMinecraft!Launcher
 
 ![frame](https://img.shields.io/badge/.NET-9.0-blue)
