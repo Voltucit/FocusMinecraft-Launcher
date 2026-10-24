@@ -1,0 +1,12 @@
+# .NET build output
+[Bb]in/
+[Oo]bj/
+artifacts/
+TestResults/
+
+# Local IDE state
+.idea/
+.vs/
+*.user
+*.suo
+*.sln.docstates
