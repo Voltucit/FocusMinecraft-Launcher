@@ -10,7 +10,7 @@
 
 ---
 
-FocusMinecraft!Launcher（Focus Minecraft启动器）正在从C#迁移至Python，目前由我一人维护，如果你有建议，或是想参与开发，可以提交Issues和pr
+FocusMinecraft!Launcher（Focus Minecraft启动器）正在重构至2.0，目前由我一人维护，如果你有建议，或是想参与开发，可以提交Issues和pr
 
 - 基本启动功能 √
 
