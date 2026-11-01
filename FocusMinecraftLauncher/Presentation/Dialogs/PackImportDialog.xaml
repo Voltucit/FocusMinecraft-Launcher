@@ -1,0 +1,114 @@
+<Window x:Class="FocusMinecraftLauncher.Presentation.Dialogs.PackImportDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:visual="clr-namespace:FocusMinecraftLauncher.Presentation.Controls"
+        Title="导入整合包" Width="520" SizeToContent="Height"
+        WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" ShowActivated="True"
+        FontFamily="Segoe UI Variable Text, Microsoft YaHei UI" FontSize="14"
+        Foreground="{DynamicResource AppText}"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
+        AutomationProperties.Name="导入整合包确认"
+        visual:ThemeVisuals.IsSoft="{DynamicResource SoftEnabled}"
+        visual:ThemeVisuals.IsFlat="{DynamicResource FlatEnabled}">
+    <Window.Resources>
+        <!-- 卡片表面沿用主题的 Surface、描边与圆角；Soft 主题补一层弹窗阴影。 -->
+        <Style x:Key="DialogSurface" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource AppBackground}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SubtleBorder}"/>
+            <Setter Property="BorderThickness" Value="{DynamicResource OutlineThickness}"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource CardCornerRadius}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsSoft), RelativeSource={RelativeSource Self}}" Value="True">
+                    <Setter Property="BorderThickness" Value="0"/>
+                    <Setter Property="Effect" Value="{DynamicResource SoftPopupShadow}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="IconTile" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource ControlHover}"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius12}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsSoft), RelativeSource={RelativeSource Self}}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource SoftIconBackground}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="DetailLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource MutedText}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,16,0"/>
+        </Style>
+        <Style x:Key="DetailValue" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+    </Window.Resources>
+    <Border x:Name="Frame" Style="{StaticResource DialogSurface}" Margin="20"
+            MouseLeftButtonDown="DragWindow">
+        <!-- 玻璃主题的 Surface 带透明度，先用同一圆角的不透明底色兜住，避免透出桌面。 -->
+        <Border Background="{DynamicResource Surface}" CornerRadius="{DynamicResource CardCornerRadius}"
+                Margin="{DynamicResource OutlineThickness}" Padding="28,24">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Border Style="{StaticResource IconTile}" Width="44" Height="44" VerticalAlignment="Top">
+                    <Path Width="22" Height="22" Stretch="Uniform"
+                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                          Stroke="{DynamicResource AccentText}" StrokeThickness="1.5"
+                          StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                          Data="M12 3 L4.5 7.2 L4.5 16.8 L12 21 L19.5 16.8 L19.5 7.2 Z M4.5 7.2 L12 11.4 L12 21 M12 11.4 L19.5 7.2"/>
+                </Border>
+                <StackPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="导入整合包" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="PackName" Style="{StaticResource Muted}" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Grid>
+            <Grid Grid.Row="1" Margin="0,22,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="76"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock Text="Minecraft" Style="{StaticResource DetailLabel}"/>
+                <TextBlock x:Name="MinecraftValue" Grid.Column="1" Style="{StaticResource DetailValue}"/>
+                <TextBlock Grid.Row="1" Text="加载器" Style="{StaticResource DetailLabel}" Margin="0,10,16,0"/>
+                <TextBlock x:Name="LoaderValue" Grid.Row="1" Grid.Column="1" Style="{StaticResource DetailValue}" Margin="0,10,0,0"/>
+                <TextBlock Grid.Row="2" Text="实例名称" Style="{StaticResource DetailLabel}" Margin="0,10,16,0"/>
+                <TextBlock x:Name="InstanceValue" Grid.Row="2" Grid.Column="1" Style="{StaticResource DetailValue}" Margin="0,10,0,0"/>
+                <TextBlock Grid.Row="3" Text="资源文件" Style="{StaticResource DetailLabel}" Margin="0,10,16,0" VerticalAlignment="Top"/>
+                <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,10,0,0">
+                    <TextBlock x:Name="FilesValue" Style="{StaticResource DetailValue}"/>
+                    <TextBlock x:Name="OptionalNote" FontSize="12" Foreground="{DynamicResource MutedText}"
+                               Margin="0,4,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>
+                </StackPanel>
+            </Grid>
+            <Border Grid.Row="2" BorderBrush="{DynamicResource SubtleBorder}" BorderThickness="0,1,0,0" Margin="0,20,0,0"/>
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+                <fluent:Button x:Name="CancelButton" Content="取消" Style="{StaticResource QuietButton}"
+                               MinWidth="88" IsCancel="True" Click="Decline"
+                               AutomationProperties.Name="取消导入"/>
+                <fluent:Button x:Name="ConfirmButton" Content="导入" Style="{StaticResource PrimaryButton}"
+                               MinWidth="96" Margin="8,0,0,0" IsDefault="True" Click="Accept"
+                               AutomationProperties.Name="确认导入"/>
+            </StackPanel>
+        </Grid>
+        </Border>
+    </Border>
+</Window>
