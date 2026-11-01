@@ -1,7 +1,6 @@
 name: Release
 
-# 手动填写版本号后，构建并发布一个 GitHub Release。
-# Release 的正文取自仓库根目录 CHANGELOG.md 中与该版本号对应的小节。
+# 只发 Release：把 CHANGELOG.md 里对应版本号的小节作为 Release 正文，不构建、不打包。
 on:
   workflow_dispatch:
     inputs:
@@ -24,9 +23,9 @@ concurrency:
 
 jobs:
   release:
-    name: 构建并发布
+    name: 发布
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - name: 检出仓库
         uses: actions/checkout@v4
@@ -44,11 +43,8 @@ jobs:
             throw "版本号格式不正确：$version。请使用 1.2.3 或 1.2.3-beta.1 这样的形式。"
           }
           "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          # csproj 里写着固定的 1.0.0.0，发布时必须同时覆盖程序集版本与文件版本。
-          $assembly = ($version -split '-')[0] + ".0"
-          "APP_ASSEMBLY_VERSION=$assembly" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "RELEASE_TAG=v$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          Write-Host "准备发布 $version（程序集版本 $assembly，标签 v$version）。"
+          Write-Host "准备发布 $version（标签 v$version）。"
 
       - name: 检查标签是否已被占用
         shell: pwsh
@@ -101,39 +97,6 @@ jobs:
           "NOTES_FILE=$notes" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host "已读取 $env:APP_VERSION 的更新内容，共 $($body.Count) 行。"
 
-      - name: 安装 .NET SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 10.0.x
-
-      - name: 发布应用
-        shell: pwsh
-        run: |
-          $output = Join-Path $env:RUNNER_TEMP "publish"
-          dotnet publish "FocusMinecraftLauncher/FocusMinecraftLauncher.csproj" `
-            --configuration Release `
-            --runtime win-x64 `
-            --self-contained true `
-            "-p:Version=$env:APP_VERSION" `
-            "-p:AssemblyVersion=$env:APP_ASSEMBLY_VERSION" `
-            "-p:FileVersion=$env:APP_ASSEMBLY_VERSION" `
-            "-p:InformationalVersion=$env:APP_VERSION" `
-            "-p:DebugType=none" `
-            --output $output
-          if ($LASTEXITCODE -ne 0) { throw "dotnet publish 失败，退出码 $LASTEXITCODE。" }
-          if (-not (Test-Path (Join-Path $output "FocusMinecraftLauncher.exe"))) {
-            throw "发布结果里没有 FocusMinecraftLauncher.exe，请检查项目输出名。"
-          }
-          "PUBLISH_DIR=$output" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-
-      - name: 打包产物
-        shell: pwsh
-        run: |
-          $zip = Join-Path $env:RUNNER_TEMP "FocusMinecraftLauncher-$env:APP_VERSION-win-x64.zip"
-          Compress-Archive -Path (Join-Path $env:PUBLISH_DIR '*') -DestinationPath $zip -CompressionLevel Optimal
-          "ASSET_PATH=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          Write-Host "已打包 $(Split-Path -Leaf $zip)。"
-
       - name: 创建 GitHub Release
         shell: pwsh
         env:
@@ -149,8 +112,5 @@ jobs:
 
           gh release create $env:RELEASE_TAG @flags
           if ($LASTEXITCODE -ne 0) { throw "创建 Release 失败，退出码 $LASTEXITCODE。" }
-
-          gh release upload $env:RELEASE_TAG $env:ASSET_PATH
-          if ($LASTEXITCODE -ne 0) { throw "上传产物失败，退出码 $LASTEXITCODE。" }
 
           Write-Host "已发布 $env:RELEASE_TAG。"
