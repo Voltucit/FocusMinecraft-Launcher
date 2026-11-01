@@ -24,8 +24,7 @@
                                         ToolTip="{Binding JavaPath}" AutomationProperties.Name="此实例的 Java 路径，留空自动选择"/>
                         <fluent:Button Grid.Column="1" Content="浏览" Command="{Binding BrowseJava}" Margin="8,0,0,0"/>
                     </Grid>
-                    <fluent:Button Content="恢复自动选择" Command="{Binding ClearJava}" Style="{StaticResource QuietButton}"
-                                   HorizontalAlignment="Left" Margin="0,8,0,0" Visibility="{Binding IsJavaAutoSelected, Converter={StaticResource NotVisibility}}"/>
+                    <ui:JavaRuntimeSelector DataContext="{Binding JavaDetection}" Margin="0,8,0,0"/>
                 </StackPanel>
                 <StackPanel Margin="0,8,0,0" Visibility="{Binding IsJavaAutoSelected, Converter={StaticResource BoolVisibility}}">
                     <TextBlock Text="{Binding JavaRecommendationText}" Style="{StaticResource Muted}"
@@ -54,7 +53,7 @@
             </StackPanel>
         </ui:SettingRow>
         <ui:SettingRow Title="游戏目录"><fluent:TextBox Text="{Binding Directory, Mode=OneWay}" IsReadOnly="True" ToolTip="{Binding Directory}" AutomationProperties.Name="当前实例目录"/></ui:SettingRow>
-        <ui:SettingRow Title="隔离方式"><TextBlock Text="按版本使用独立目录" Style="{StaticResource Muted}"/></ui:SettingRow>
+        <ui:SettingRow Title="隔离方式"><TextBlock Text="{Binding IsolationText}" Style="{StaticResource Muted}"/></ui:SettingRow>
         <Expander Header="高级参数" Margin="0,12,0,0">
             <StackPanel>
                 <CheckBox Content="使用全局参数" IsChecked="{Binding UseGlobalArguments, Mode=TwoWay}" Margin="0,8,0,8"/>

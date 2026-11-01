@@ -19,14 +19,13 @@
             <Border x:Name="Frame" Padding="{TemplateBinding Padding}" Background="Transparent" BorderBrush="Transparent" BorderThickness="{DynamicResource OutlineThickness}" CornerRadius="{DynamicResource ControlCornerRadius}">
                 <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="32"/></Grid.ColumnDefinitions>
                     <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Stretch" TextElement.Foreground="{DynamicResource AppText}"/>
-                    <Path x:Name="Arrow" Grid.Column="1" Data="M0,0 L4,4 8,0" Width="8" Height="4" Stretch="Uniform"
+                    <ui:DisclosureArrow IsExpanded="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=ToggleButton}}" x:Name="Arrow" Grid.Column="1" Data="M0,0 L4,4 8,0" Width="8" Height="4" Stretch="Uniform"
                           IsHitTestVisible="False" Stroke="{DynamicResource AppText}" StrokeThickness="1.5" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5"/>
                 </Grid>
             </Border>
             <ControlTemplate.Triggers>
                 <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Frame" Property="Background" Value="{DynamicResource ControlHover}"/><Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource FocusRing}"/></Trigger>
                 <Trigger Property="IsPressed" Value="True"><Setter TargetName="Frame" Property="Background" Value="{DynamicResource ControlPressed}"/></Trigger>
-                <Trigger Property="IsChecked" Value="True"><Setter TargetName="Arrow" Property="RenderTransform"><Setter.Value><RotateTransform Angle="180"/></Setter.Value></Setter></Trigger>
                 <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="{DynamicResource DisabledOpacity}"/></Trigger>
             </ControlTemplate.Triggers>
         </ControlTemplate></Setter.Value></Setter>
@@ -39,14 +38,14 @@
                               IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
                               Content="{TemplateBinding Header}" ContentTemplate="{TemplateBinding HeaderTemplate}"
                               AutomationProperties.Name="{Binding (AutomationProperties.Name), RelativeSource={RelativeSource TemplatedParent}}"/>
-                <ui:RevealDecorator x:Name="PART_Reveal"><ContentPresenter ContentSource="Content" Margin="12,4,12,12" TextElement.Foreground="{DynamicResource AppText}"/></ui:RevealDecorator>
+                <ui:RevealDecorator x:Name="PART_Reveal" IsRevealed="{TemplateBinding IsExpanded}"><ContentPresenter ContentSource="Content" Margin="12,4,12,12" TextElement.Foreground="{DynamicResource AppText}"/></ui:RevealDecorator>
             </StackPanel>
         </ControlTemplate></Setter.Value></Setter>
     </Style>
     <!-- 筛选标题在第二行，列表在其下全宽展开，类型与加载器控件不嵌入折叠按钮。 -->
     <Style x:Key="CommunityRevealOnly" TargetType="ui:AnimatedExpander" BasedOn="{StaticResource CommunityExpander}">
         <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ui:AnimatedExpander">
-            <ui:RevealDecorator x:Name="PART_Reveal"><ContentPresenter ContentSource="Content" TextElement.Foreground="{DynamicResource AppText}"/></ui:RevealDecorator>
+            <ui:RevealDecorator x:Name="PART_Reveal" IsRevealed="{TemplateBinding IsExpanded}"><ContentPresenter ContentSource="Content" TextElement.Foreground="{DynamicResource AppText}"/></ui:RevealDecorator>
         </ControlTemplate></Setter.Value></Setter>
     </Style>
     <Style x:Key="CommunityScrollBar" TargetType="ScrollBar">

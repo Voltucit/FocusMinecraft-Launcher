@@ -5,6 +5,7 @@ using FMCore.ModsResources;
 using FocusMinecraftLauncher.Features.Downloads.Models;
 using FocusMinecraftLauncher.Infrastructure.Configuration;
 using FocusMinecraftLauncher.Infrastructure.Runtime;
+using FocusMinecraftLauncher.Presentation.Dialogs;
 
 namespace FocusMinecraftLauncher.Preview;
 
@@ -57,8 +58,8 @@ public sealed partial class PreviewSession
                 }
                 foreach(var incompatible in version.Dependencies.Where(d=>d.DependencyType=="incompatible"))
                 {
-                    var conflict=options.Resources.FirstOrDefault(pair=>!pair.Key.EndsWith(".disabled",StringComparison.OrdinalIgnoreCase)
-                        && File.Exists(ModpackArchive.SafePath(selected.Folder,pair.Key))
+                    var conflict=options.ResourcesFor(selected).FirstOrDefault(pair=>!pair.Key.EndsWith(".disabled",StringComparison.OrdinalIgnoreCase)
+                        && File.Exists(ModpackArchive.SafePath(selected.GameDirectory,pair.Key))
                         && (incompatible.VersionId!=null?pair.Value.VersionId==incompatible.VersionId:pair.Value.ProjectId==incompatible.ProjectId));
                     if(conflict.Value!=null)throw new InvalidDataException(project.Title+" 与已安装资源 "+conflict.Value.Name+" 不兼容，请先在 Mod 管理中处理。");
                 }
@@ -75,8 +76,8 @@ public sealed partial class PreviewSession
                         if(projectVersions.TryGetValue(dependency.ProjectId,out var planned))reusable=await client.GetVersionAsync(planned,token);
                         else
                         {
-                            var installed=options.Resources.Where(pair=>pair.Value.ProjectId==dependency.ProjectId&&pair.Value.VersionId.Length>0&&!pair.Key.EndsWith(".disabled",StringComparison.OrdinalIgnoreCase)
-                                &&File.Exists(ModpackArchive.SafePath(selected.Folder,pair.Key))).Select(pair=>pair.Value.VersionId).Distinct().ToArray();
+                            var installed=options.ResourcesFor(selected).Where(pair=>pair.Value.ProjectId==dependency.ProjectId&&pair.Value.VersionId.Length>0&&!pair.Key.EndsWith(".disabled",StringComparison.OrdinalIgnoreCase)
+                                &&File.Exists(ModpackArchive.SafePath(selected.GameDirectory,pair.Key))).Select(pair=>pair.Value.VersionId).Distinct().ToArray();
                             if(installed.Length==1)
                             {
                                 try{reusable=await client.GetVersionAsync(installed[0],token);}
@@ -103,9 +104,9 @@ public sealed partial class PreviewSession
             string? datapackFolder = null;
             if (installs.Any(i => i.Project.ProjectType == "datapack" || i.Version.Loaders.Contains("datapack")))
             {
-                var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "选择目标存档文件夹", InitialDirectory = Path.Combine(selected.Folder, "saves") };
+                var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "选择目标存档文件夹", InitialDirectory = Path.Combine(selected.GameDirectory, "saves") };
                 if (dialog.ShowDialog(Application.Current.MainWindow) != true) {Cancel(task); throw new OperationCanceledException(token); }
-                var saves = Path.GetFullPath(Path.Combine(selected.Folder, "saves")) + Path.DirectorySeparatorChar;
+                var saves = Path.GetFullPath(Path.Combine(selected.GameDirectory, "saves")) + Path.DirectorySeparatorChar;
                 if (!Path.GetFullPath(dialog.FolderName).StartsWith(saves, StringComparison.OrdinalIgnoreCase)||!File.Exists(Path.Combine(dialog.FolderName,"level.dat"))) throw new InvalidOperationException("请选择当前实例 saves 内的存档文件夹。");
                 datapackFolder = Path.Combine(dialog.FolderName, "datapacks");
             }
@@ -113,13 +114,13 @@ public sealed partial class PreviewSession
             foreach (var item in installs)
             {
                 var directory = item.Version.Loaders.Contains("datapack") || item.Project.ProjectType == "datapack" ? datapackFolder!
-                    : Path.Combine(selected.Folder, item.Project.ProjectType switch { "resourcepack" => "resourcepacks", "shader" => "shaderpacks", _ => "mods" });
+                    : Path.Combine(selected.GameDirectory, item.Project.ProjectType switch { "resourcepack" => "resourcepacks", "shader" => "shaderpacks", _ => "mods" });
                 var format = LauncherConfiguration.Text(_configuration.ReadLauncher()["downloads"]?["fileNameFormat"], "原文件名");
                 var name = format switch { "资源名称 + 版本号" => item.Project.Title + "-" + item.Version.VersionNumber + Path.GetExtension(item.File.Filename), "译名 + 原文件名" or "资源名称 + 原文件名" => "[" + item.Project.Title + "] " + item.File.Filename, _ => item.File.Filename };
                 name = string.Join("_", name.Split(Path.GetInvalidFileNameChars()));
-                _ = ModpackArchive.SafePath(selected.Folder,Path.GetRelativePath(selected.Folder,Path.Combine(directory,name)));
+                _ = ModpackArchive.SafePath(selected.GameDirectory,Path.GetRelativePath(selected.GameDirectory,Path.Combine(directory,name)));
                 var destination = ModpackArchive.SafePath(directory, name);
-                var relative = Path.GetRelativePath(selected.Folder, destination).Replace('\\', '/');
+                var relative = Path.GetRelativePath(selected.GameDirectory, destination).Replace('\\', '/');
                 files.Add(new(relative,item.Project.Id,item.Version.Id,item.Project.Title,item.File));
             }
             var plan=await ResourceFileInstaller.PlanAsync(selected,files,token);
@@ -162,7 +163,7 @@ public sealed partial class PreviewSession
         var original=name;var suffix=1;
         while(Directory.Exists(Path.Combine(root,"versions",name))||Tasks.Any(t=>t.IsActive&&string.Equals(InstanceStore.Key(t.Root,t.InstanceId),InstanceStore.Key(root,name),StringComparison.OrdinalIgnoreCase)))name=original+"-"+suffix++;
         var optional=manifest.Files.Count(f=>f.Client=="optional");
-        if(MessageBox.Show($"导入 {manifest.Name}\nMinecraft {manifest.Minecraft}\n安装名称：{name}\n可选文件 {optional} 项将跳过。","导入整合包",MessageBoxButton.OKCancel,MessageBoxImage.Information)!=MessageBoxResult.OK)return null;
+        if(new PackImportDialog(manifest,name,optional){Owner=Application.Current.MainWindow}.ShowDialog()!=true)return null;
         return new(manifest,root,name);
     }
     /// <summary>在线下载与本地拖拽共用完整安装步骤；同一在线任务包含安装、取消和重试，不提前报告完成。</summary>
@@ -175,7 +176,7 @@ public sealed partial class PreviewSession
         {
             await SetIncompleteAsync(root,instanceName,true);
             await InstallComponentsAsync(root,instanceName,manifest.Minecraft,manifest.Loader,manifest.LoaderVersion,"",task,token);
-            var instance=new PreviewInstance(instanceName,manifest.Name,manifest.Minecraft,manifest.Loader){Root=root};
+            var instance=new PreviewInstance(instanceName,manifest.Name,manifest.Minecraft,manifest.Loader){Root=root,IsolationMode=SavedSettings.VersionIsolation};
             var options=InstanceStore.Read(instance);options.Name=manifest.Name;options.Description=manifest.Summary;options.Source="Modrinth 整合包";options.SourceProjectId=sourceProjectId;options.SourceVersionId=sourceVersionId;
             await Task.Run(()=>ModpackArchive.InstallContentAsync(path,manifest,instance,options,DownloadConcurrency,p=>Report(task,"收集整合包资源",p),token),token);
             if(sourceIcon!=null&&!File.Exists(Path.Combine(instance.Folder,"icon.png")))

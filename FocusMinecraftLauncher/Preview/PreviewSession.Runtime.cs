@@ -21,6 +21,8 @@ public sealed partial class PreviewSession
     private int _refreshRevision;
     private string _selectedRoot = "", _restoreId = "";
     public string SelectedRoot => _selectedRoot;
+    private bool _applyingIsolation;
+    public bool IsApplyingIsolation => _applyingIsolation;
     public event Action<string, bool>? TaskNotification;
     /// <summary>实例文件发生变化后通知已打开的管理页；目录和实例标识共同确定通知范围。</summary>
     public event Action<string, string>? InstanceContentChanged;
@@ -81,6 +83,7 @@ public sealed partial class PreviewSession
             if (revision != _refreshRevision || _lifetime.IsCancellationRequested) return;
             var wanted = CurrentInstance?.Id ?? _restoreId;
             var items = found.Where(i => !_incomplete.Contains(InstanceStore.Key(root, i.Id))).ToArray();
+            foreach (var item in items) item.IsolationMode = SavedSettings.VersionIsolation;
             // 尽量保留原对象，避免安装刷新打断当前编辑页及选择。
             bool SameInstance(PreviewInstance left, PreviewInstance right) =>
                 string.Equals(InstanceStore.Key(left.Root, left.Id), InstanceStore.Key(right.Root, right.Id), StringComparison.OrdinalIgnoreCase)
@@ -93,6 +96,8 @@ public sealed partial class PreviewSession
                 else
                 {
                     existing.Name = item.Name; existing.Description = item.Description; existing.Category = item.Category;
+                    existing.RequiredJava = item.RequiredJava; existing.MetadataIssue = item.MetadataIssue;
+                    existing.IsolationMode = SavedSettings.VersionIsolation;
                     existing.IsFavorite = item.IsFavorite; existing.Options = item.Options; existing.IconImage = item.IconImage;existing.FallbackIconImage=item.FallbackIconImage;
                     existing.RefreshOptiFineState();
                 }
@@ -125,6 +130,7 @@ public sealed partial class PreviewSession
     }
     public PreviewTask Enqueue(PreviewTaskKind kind, string name, string version, string root, string instanceId, Func<PreviewTask, CancellationToken, Task> run)
     {
+        if (IsApplyingIsolation) throw new InvalidOperationException("正在应用版本隔离设置，请稍后重试。");
         var item = new PreviewTask(kind, name, version) { Root = root, InstanceId = instanceId };
         _retryOperations[item] = run; Tasks.Insert(0, item); _active = item;
         _executions[item] = ExecuteAsync(item, run); Signal(); return item;
@@ -169,8 +175,11 @@ public sealed partial class PreviewSession
     private void Cancel(PreviewTask? task)
     {
         if (task == null || !_operations.TryGetValue(task, out var cancellation)) return;
-        if (task.IsRunningGame && MessageBox.Show("强制结束游戏可能丢失未保存的进度。是否继续？", "结束游戏", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
-        cancellation.Cancel(); task.Stage = "正在取消"; task.Refresh();
+        if (task.IsRunningGame && !Presentation.Dialogs.MessageDialog.Confirm("关闭游戏",
+            $"将强制关闭“{task.Name}”，未保存的进度可能丢失。", "关闭游戏", "继续游戏")) return;
+        // 模态确认期间游戏可能自行退出；重新取得仍存活的操作，避免取消已释放的会话。
+        if (!task.IsActive || !_operations.TryGetValue(task, out cancellation) || cancellation.IsCancellationRequested) return;
+        cancellation.Cancel(); task.Stage = task.IsRunningGame ? "正在关闭游戏" : "正在取消"; task.Refresh();
     }
     private void Retry(PreviewTask? task)
     {
@@ -210,7 +219,7 @@ public sealed partial class PreviewSession
                 await SetIncompleteAsync(root, name, true);
                 await InstallComponentsAsync(root, name, game, loader, loaderVersion, optifine, task, token);
                 token.ThrowIfCancellationRequested();
-                var instance = new PreviewInstance(name, name, game, loader) { Root = root };
+                var instance = new PreviewInstance(name, name, game, loader) { Root = root, IsolationMode = SavedSettings.VersionIsolation };
                 var options = InstanceStore.Read(instance); options.Name = name; options.Source = "Minecraft";
                 await InstanceStore.SaveAsync(instance, options);
                 await SetIncompleteAsync(root, name, false);
@@ -236,7 +245,7 @@ public sealed partial class PreviewSession
                     if(string.IsNullOrWhiteSpace(SavedSettings.JavaPath))
                     {
                         await new MinecraftInstaller(game,root,threads){Source=source}.InstallAsync(p=>Report(task,p.Message,p.Download),token);
-                        var baseInstance=new PreviewInstance(game,game,game,"原版"){Root=root};
+                        var baseInstance=new PreviewInstance(game,game,game,"原版"){Root=root,IsolationMode=SavedSettings.VersionIsolation};
                         var selected=await RuntimeSupport.SelectCheckedLauncherAsync(baseInstance,FMCore.Accounts.OfflineAccount.Create("FMLauncher"),new InstanceOptions(),SavedSettings,token);
                         java=selected.JavaPath;
                     }
@@ -249,9 +258,9 @@ public sealed partial class PreviewSession
                     if(optiFineMod!=null)
                     {
                         token.ThrowIfCancellationRequested();
-                        var instance=new PreviewInstance(name,name,game,"Forge"){Root=root};
+                        var instance=new PreviewInstance(name,name,game,"Forge"){Root=root,IsolationMode=SavedSettings.VersionIsolation};
                         ModpackArchive.EnsureInstanceWritePath(instance);
-                        var component=await OptiFineForgeIntegration.InstallAsync(optiFineMod,loaderVersion,instance.Folder,p=>Report(task,"下载 OptiFine（BMCLAPI）",file:p),token);
+                        var component=await OptiFineForgeIntegration.InstallAsync(optiFineMod,loaderVersion,instance.GameDirectory,p=>Report(task,"下载 OptiFine（BMCLAPI）",file:p),token);
                         var options=InstanceStore.Read(instance);options.OptiFineMod=component;
                         await InstanceStore.SaveAsync(instance,options);
                         Log("Forge 与 OptiFine 接入完成："+game+" / "+loaderVersion+" / "+component.Edition);
@@ -265,7 +274,7 @@ public sealed partial class PreviewSession
                     if (name != game)
                     {
                         var directory = Path.Combine(root, "versions", name); Directory.CreateDirectory(directory);
-                        // 仅创建继承原版的实例声明；继承、参数和依赖仍由核心解释。
+                        // 创建安装声明后交给核心展开为独立版本，不在启动器内合并版本配置。
                         var version=await new FMCore.Versions.MinecraftVersionReader().GetVersionAsync(game,root,token);
                         var temporary=Path.Combine(directory,".fmlauncher-"+Guid.NewGuid().ToString("N")+".tmp");
                         try
@@ -276,13 +285,26 @@ public sealed partial class PreviewSession
                             if(File.Exists(profile))
                             {
                                 var existing=System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(profile,token));
-                                if(existing?["id"]?.GetValue<string>()!=name||existing?["inheritsFrom"]?.GetValue<string>()!=game)throw new IOException("已有版本声明与本次安装不同，未覆盖。");
+                                var recorded=InstanceStore.Read(new PreviewInstance(name,name,game,"原版"){Root=root});
+                                if(existing?["id"]?.GetValue<string>()!=name ||
+                                    (existing?["inheritsFrom"]?.GetValue<string>()!=game &&
+                                     !(existing?["inheritsFrom"]==null && recorded.GameVersion==game)))
+                                    throw new IOException("已有版本声明与本次安装不同，未覆盖。");
                             }
                             else File.Move(temporary,profile,false);
                         }
                         finally{if(File.Exists(temporary))File.Delete(temporary);}
                     }
                 }
+                var installed=new PreviewInstance(name,name,game,loader){Root=root,IsolationMode=SavedSettings.VersionIsolation};
+                await InstanceStore.UpdateAsync(installed,options=>options.GameVersion=game);
+                if(loader is "" or "原版" && optifine.Length==0 && name!=game)
+                {
+                    Report(task,"生成独立游戏版本");
+                    await new FMCore.Versions.MinecraftVersionConverter(name,root).MakeIndependentAsync(token);
+                }
+                // 核心安装器默认使用独立工作目录；共享模式还需将旧版资源映射到实际启动目录。
+                if(!installed.UsesGameIsolation)await CheckAndCompleteFilesAsync(installed,task,token);
     }
     private Task BeginLaunchAsync()
     {
@@ -299,9 +321,17 @@ public sealed partial class PreviewSession
             var settings = InstanceStore.Read(instance);
             var global = SavedSettings.Copy();
             Report(task, "检测 Java");
+            var requiredJava = instance.RequiredJava;
             var javaCandidates = await RuntimeSupport.ReadLaunchJavaCandidatesAsync(instance, settings, global, token);
             await EnsureFilesAsync(instance, task, token);
+            // 恢复缺少的父版本后才能得到完整 Java 声明，此时重新按核心元数据选择。
+            if (requiredJava != instance.RequiredJava)
+                javaCandidates = await RuntimeSupport.ReadLaunchJavaCandidatesAsync(instance, settings, global, token);
+            // 缺少匹配版本时使用更高版本的 Java 兜底；这类兜底启动失败要额外弹框说明原因。
+            var fallbackJava = instance.RequiredJava is { } required && javaCandidates[0].MajorVersion > required;
             Report(task, "检查启动配置");
+            try
+            {
             var selectedLauncher = await RuntimeSupport.SelectCheckedLauncherAsync(instance,account.RuntimeAccount,settings,global,token,javaCandidates);
             var launcher = selectedLauncher.Launcher;
             token.ThrowIfCancellationRequested();
@@ -311,31 +341,18 @@ public sealed partial class PreviewSession
                 if (!task.IsActive) return;
                 task.Stage = p.Stage == LaunchStage.JavaStarted ? "已启动" : p.Stage == LaunchStage.GameExited ? "游戏已退出" : "启动中";
                 task.IsRunningGame = p.Stage == LaunchStage.JavaStarted || task.IsRunningGame;
-                task.Total = task.Bytes = 0; task.Refresh(); Signal();
+                task.Total = task.Bytes = 0; task.BytesPerSecond = 0; task.CompletedFiles = task.TotalFiles = 0;
+                task.Refresh(); Signal();
             }), line => Log(line), line => Log(line), token);
             if (code != 0) throw new InvalidOperationException("游戏异常退出，退出码：" + code + "。请在任务记录中查看日志。");
             task.Stage = "游戏已退出";
-    }
-    /// <summary>离线校验通过时直接返回，否则交由核心联网补全并校验；仅正常完成后允许进入启动配置检查。</summary>
-    public async Task EnsureFilesAsync(PreviewInstance instance, PreviewTask task, CancellationToken token)
-    {
-        Report(task, "检查完整性");
-        var checker = new GameFileChecker(instance.Id, instance.Root);
-        var check = await checker.CheckAsync(p => Report(task, $"检查完整性 {p.CheckedFiles}/{p.TotalKnownFiles}"), token);
-        token.ThrowIfCancellationRequested();
-        if (check.FileContentVerified) return;
-
-        Log(instance.Id + $"：文件检查发现缺失 {check.MissingFiles} 项，内容不符 {check.InvalidFiles} 项，校验声明不足 {check.UnverifiableFiles} 项，交由核心补全并校验。");
-        // MetadataMissing 表示本地声明不足，不等于文件损坏。补全器会在线解析缺少的声明并核验文件；
-        // 正常返回即完成本轮校验，不再用读取同一份原始声明的离线检查器重复拦截。
-        var completed = await new GameFileCompleter(instance.Id, instance.Root, DownloadConcurrency) { Source = FileSource }.CompleteAsync(p =>
-        {
-            var stage = p.Stage is GameFileCompletionStage.CompletingClientAndLibraries or GameFileCompletionStage.CompletingResources
-                ? "补全并校验文件" : "检查完整性";
-            Report(task, stage + "：" + p.Message, p.Download);
-        }, token);
-        token.ThrowIfCancellationRequested();
-        Log(instance.Id + $"：核心文件校验完成，共 {completed.TotalFiles} 个文件，下载 {completed.DownloadedFiles} 个，复用 {completed.ReusedFiles} 个。");
-        Report(task, "检查完整性完成");
+            }
+            catch (Exception error) when (fallbackJava && error is not OperationCanceledException)
+            {
+                var used = javaCandidates[0].MajorVersion;
+                Presentation.Dialogs.MessageDialog.Show("游戏启动失败",
+                    $"没有找到与游戏匹配的 Java {instance.RequiredJava}，已改用 Java {used} 启动，但这次启动没有成功。\n\n{RuntimeSupport.Error(error)}");
+                throw;
+            }
     }
 }

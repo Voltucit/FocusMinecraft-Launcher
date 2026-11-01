@@ -33,13 +33,18 @@
             <TabItem Header="可下载版本" Foreground="{DynamicResource AppText}">
                 <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                     <StackPanel Margin="0,0,0,12">
+                        <TabControl ItemsSource="{Binding LoaderTabs}" SelectedValuePath="Key" SelectedValue="{Binding SelectedLoader, Mode=TwoWay}"
+                                    Visibility="{Binding HasLoaderNavigation, Converter={StaticResource BoolVisibility}}" AutomationProperties.Name="{Binding LoaderNavigationName}" Margin="0,0,0,12">
+                            <TabControl.Template><ControlTemplate TargetType="TabControl"><TabPanel IsItemsHost="True" KeyboardNavigation.TabNavigation="Local"/></ControlTemplate></TabControl.Template>
+                            <TabControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding Title}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=TabItem}}"/></DataTemplate></TabControl.ItemTemplate>
+                        </TabControl>
                         <ToggleButton Style="{StaticResource CommunityDisclosureToggle}" IsChecked="{Binding VersionFilter.IsExpanded, Mode=TwoWay}" AutomationProperties.Name="展开游戏版本筛选">
                             <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="游戏版本" Style="{StaticResource ResourceBody}" Margin="0,0,16,0"/><TextBlock Grid.Column="1" Text="{Binding VersionFilter.SelectionText}" Style="{StaticResource ResourceDescription}"/></Grid>
                         </ToggleButton>
-                        <local:GameVersionFilterBody DataContext="{Binding VersionFilter}"/>
                     </StackPanel>
                     <ScrollViewer Grid.Row="1" Style="{StaticResource CommunityScroll}" local:ScrollRetention.Position="{Binding FileScroll}" Padding="0,0,8,0">
                         <StackPanel>
+                            <local:GameVersionFilterBody DataContext="{Binding VersionFilter}"/>
                             <TextBlock Text="未提供匹配的文件版本" Style="{StaticResource ResourceDescription}" Visibility="{Binding HasFiles, Converter={StaticResource NotVisibility}}"/>
                             <ItemsControl ItemsSource="{Binding Groups}"><ItemsControl.ItemTemplate><DataTemplate>
                                 <ui:AnimatedExpander Style="{StaticResource CommunityExpander}" IsExpanded="{Binding IsExpanded, Mode=TwoWay}" Margin="0,0,0,8" AutomationProperties.Name="{Binding Title}">

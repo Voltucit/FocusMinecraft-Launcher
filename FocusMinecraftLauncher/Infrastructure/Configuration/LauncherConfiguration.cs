@@ -185,7 +185,7 @@ public sealed class LauncherConfiguration
             ["homeLayouts"] = new JsonObject { ["Classic"] = new JsonObject(), ["Minimal"] = new JsonObject(), ["Centered"] = new JsonObject() }
         },
         ["selection"] = new JsonObject { ["instanceId"] = null },
-        ["global"] = new JsonObject { ["javaPath"] = "", ["memoryMb"] = 4096, ["gameDirectory"] = MinecraftDirectory, ["jvmArguments"] = "" },
+        ["global"] = new JsonObject { ["versionIsolation"] = "All", ["javaPath"] = "", ["memoryMb"] = 4096, ["gameDirectory"] = MinecraftDirectory, ["jvmArguments"] = "" },
         ["downloads"] = new JsonObject()
     };
     private static JsonObject DefaultAccounts() => new()

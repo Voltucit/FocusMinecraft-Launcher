@@ -15,15 +15,22 @@ namespace FocusMinecraftLauncher.Features.Home.ViewModels.Instances;
 /// <summary>实际 mrpack 导出与三态文件选择；目标位置在开始导出后由系统对话框确定。</summary>
 public sealed class InstanceExportViewModel : ObservableObject, IDisposable
 {
+    private const string MrpackFormat="Modrinth (.mrpack)";
+    private const string PclZipFormat="PCL 兼容 (.zip)";
+    private bool IsPclZip=>_format==PclZipFormat;
     private readonly PreviewSession _session;
     private PreviewTask? _exportTask;
-    private string _name,_version="1.0.0",_author="",_description="",_destinationPath="",_includes="",_excludes="",_notice="",_nameError="",_versionError="",_includesError="",_excludesError="",_state="";
+    private string _name,_version="1.0.0",_author="",_description="",_destinationPath="",_includes="",_excludes="",_notice="",_nameError="",_versionError="",_includesError="",_excludesError="",_state="",_format=MrpackFormat;
     private bool _onlyModrinth,_busy,_advanced,_bundle,_completed,_loading=true;
     private string[] _allFiles=[];
+    private bool _reloadRequested, _disposed;
+    private string _listedDirectory = "";
     public PreviewInstance Instance { get; }
     public ObservableCollection<ExportSelectionNode> Content { get; }=[];
     public ObservableCollection<string> SourceConflicts { get; }=[];
-    public string[] Formats { get; }=["Modrinth (.mrpack)"];
+    public string[] Formats { get; }=[MrpackFormat,PclZipFormat];
+    public string SelectedFormat { get=>_format;set {Set(ref _format,value);Changed(nameof(FormatHint));} }
+    public string FormatHint=>IsPclZip?"导出为 zip 压缩包，PCL2 可直接识别并导入。":"导出为 .mrpack，Modrinth 与 PCL2 均可识别。";
     public string Name { get=>_name;set {Set(ref _name,value);NameError="";} }
     public string Version { get=>_version;set {Set(ref _version,value);VersionError="";} }
     public string Author { get=>_author;set=>Set(ref _author,value); }
@@ -71,10 +78,17 @@ public sealed class InstanceExportViewModel : ObservableObject, IDisposable
         session.PropertyChanged+=TaskStateChanged;
         _ = ReadFilesAsync();
     }
-    public Task RefreshFilesAsync() => IsBusy || _loading ? Task.CompletedTask : ReadFilesAsync();
+    public Task RefreshFilesAsync()
+    {
+        if (IsBusy || _disposed) return Task.CompletedTask;
+        if (_loading) { _reloadRequested = true; return Task.CompletedTask; }
+        return ReadFilesAsync();
+    }
     private async Task ReadFilesAsync()
     {
-        var previous = Content.SelectMany(node=>node.Walk()).Where(node=>node.Children.Count==0&&node.CanToggle)
+        var gameDirectory = Instance.GameDirectory;
+        var isolated = Instance.UsesGameIsolation;
+        var previous = Content.Where(_ => _listedDirectory.Equals(gameDirectory, StringComparison.OrdinalIgnoreCase)).SelectMany(node=>node.Walk()).Where(node=>node.Children.Count==0&&node.CanToggle)
             .ToDictionary(node=>node.Key,node=>node.IsChecked,StringComparer.OrdinalIgnoreCase);
         var expanded = Content.SelectMany(node=>node.Walk()).ToDictionary(node=>node.Key,node=>node.IsExpanded,StringComparer.OrdinalIgnoreCase);
         _loading=true;CommandManager.InvalidateRequerySuggested();
@@ -82,7 +96,10 @@ public sealed class InstanceExportViewModel : ObservableObject, IDisposable
         {
             Stage="扫描实例文件";
             Instance.Options=InstanceStore.Read(Instance);
-            _allFiles=await Task.Run(()=>ModpackArchive.Files(Instance.Folder).Select(f=>Path.GetRelativePath(Instance.Folder,f).Replace('\\','/')).Where(f=>!ModpackArchive.Private(f)&&f!=InstanceStore.FileName&&f!=Instance.Id+".json"&&f!=Instance.Id+".jar"&&!f.StartsWith("natives/")&&!f.StartsWith(".fmcore")).Order(StringComparer.OrdinalIgnoreCase).ToArray());
+            var files=await Task.Run(()=>ModpackArchive.Files(gameDirectory, !isolated).Select(f=>Path.GetRelativePath(gameDirectory,f).Replace('\\','/')).Where(f=>!ModpackArchive.Private(f)&&f!=InstanceStore.FileName&&f!=Instance.Id+".json"&&f!=Instance.Id+".jar"&&!f.StartsWith("natives/")&&!f.StartsWith(".fmcore")).Order(StringComparer.OrdinalIgnoreCase).ToArray());
+            if (_disposed) return;
+            if (!gameDirectory.Equals(Instance.GameDirectory, StringComparison.OrdinalIgnoreCase)) { _reloadRequested = true; return; }
+            _allFiles = files; _listedDirectory = gameDirectory;
             foreach(var old in Content.SelectMany(node=>node.Walk()))old.PropertyChanged-=NodeChanged;
             Content.Clear();
             Content.Add(new("manifest","游戏版本与加载器信息",true,"仅声明版本，不复制游戏本体。",false));
@@ -120,7 +137,7 @@ public sealed class InstanceExportViewModel : ObservableObject, IDisposable
             Stage="";UpdateConflicts();Refresh();
         }
         catch(Exception error){Stage=RuntimeSupport.Error(error);}
-        finally{_loading=false;CommandManager.InvalidateRequerySuggested();}
+        finally{_loading=false;CommandManager.InvalidateRequerySuggested();if(_reloadRequested&&!_disposed){_reloadRequested=false;_ = ReadFilesAsync();}}
     }
     private IEnumerable<string> SelectedFiles()=>Content.SelectMany(n=>n.Walk()).Where(n=>n.Children.Count==0&&n.CanToggle&&n.IsChecked==true).Select(n=>n.Key);
     private static bool InvalidRule(string text)=>text.Split(['\r','\n'],StringSplitOptions.RemoveEmptyEntries).Any(line=>Path.IsPathRooted(line.Trim())||line.Replace('\\','/').Split('/').Contains("..")||line.Contains(':'));
@@ -140,7 +157,7 @@ public sealed class InstanceExportViewModel : ObservableObject, IDisposable
         SourceConflicts.Clear();
         if(OnlyModrinth)
             foreach(var path in ResolveSelection().Where(p=>p.Split('/')[0] is "mods" or "resourcepacks" or "shaderpacks"))
-                if(!Instance.Options.Resources.TryGetValue(path,out var origin)||!Uri.TryCreate(origin.Url,UriKind.Absolute,out var uri)||uri.Host!="cdn.modrinth.com")SourceConflicts.Add(path);
+                if(!Instance.Options.ResourcesFor(Instance).TryGetValue(path,out var origin)||!Uri.TryCreate(origin.Url,UriKind.Absolute,out var uri)||uri.Host!="cdn.modrinth.com")SourceConflicts.Add(path);
         Changed(nameof(HasConflicts));
     }
     private void NodeChanged(object? sender,PropertyChangedEventArgs e){if(e.PropertyName==nameof(ExportSelectionNode.IsChecked)){Changed(nameof(SelectionText));Changed(nameof(PrivacyWarning));UpdateConflicts();}}
@@ -152,7 +169,7 @@ public sealed class InstanceExportViewModel : ObservableObject, IDisposable
         UpdateConflicts();if(NameError.Length+VersionError.Length+RulesError.Length>0||HasConflicts){AdvancedExpanded=HasConflicts||RulesError.Length>0;return;}
         var files=ResolveSelection();
         if(PrivacyWarning.Length>0&&MessageBox.Show(PrivacyWarning,"导出整合包",MessageBoxButton.OKCancel,MessageBoxImage.Warning)!=MessageBoxResult.OK)return;
-        var dialog=new SaveFileDialog{Title="导出整合包",Filter="Modrinth 整合包|*.mrpack",DefaultExt=".mrpack",AddExtension=true,OverwritePrompt=true,FileName=string.Join("_",(Name+"-"+Version).Split(Path.GetInvalidFileNameChars()))};
+        var dialog=new SaveFileDialog{Title="导出整合包",Filter=IsPclZip?"压缩文件|*.zip":"Modrinth 整合包|*.mrpack",DefaultExt=IsPclZip?".zip":".mrpack",AddExtension=true,OverwritePrompt=true,FileName=string.Join("_",(Name+"-"+Version).Split(Path.GetInvalidFileNameChars()))};
         if(dialog.ShowDialog(Application.Current.MainWindow)!=true)return;
         DestinationPath=dialog.FileName;_exportTask=null;_completed=false;IsBusy=true;Notice="";Changed(nameof(HasResult));CommandManager.InvalidateRequerySuggested();
         try
@@ -218,5 +235,5 @@ public sealed class InstanceExportViewModel : ObservableObject, IDisposable
         }
         Changed(nameof(HasResult));
     }
-    public void Dispose(){_session.PropertyChanged-=TaskStateChanged;if(_exportTask?.IsActive==true)_session.CancelTask.Execute(_exportTask);foreach(var node in Content.SelectMany(n=>n.Walk()))node.PropertyChanged-=NodeChanged;}
+    public void Dispose(){_disposed=true;_session.PropertyChanged-=TaskStateChanged;if(_exportTask?.IsActive==true)_session.CancelTask.Execute(_exportTask);foreach(var node in Content.SelectMany(n=>n.Walk()))node.PropertyChanged-=NodeChanged;}
 }

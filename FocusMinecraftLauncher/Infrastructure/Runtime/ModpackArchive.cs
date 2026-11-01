@@ -38,6 +38,25 @@ public static class ModpackArchive
         if(!string.Equals(Path.GetDirectoryName(folder),versions,StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("实例必须位于所选目录的 versions 文件夹内。");
         _ = SafePath(instance.Root,"versions/"+Path.GetFileName(folder));
     }
+    /// <summary>版本元数据仍在 versions 内，游戏内容仅允许写入该版本目录或明确选择的共享根目录。</summary>
+    public static void EnsureGameDirectoryWritePath(PreviewInstance instance)
+    {
+        EnsureInstanceWritePath(instance);
+        var game = Path.GetFullPath(instance.GameDirectory);
+        if (!game.Equals(Path.GetFullPath(instance.Root), StringComparison.OrdinalIgnoreCase)
+            && !game.Equals(Path.GetFullPath(instance.Folder), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("游戏目录不属于当前实例或所选共享目录。");
+        if ((Directory.Exists(game) || File.Exists(game)) && File.GetAttributes(game).HasFlag(FileAttributes.ReparsePoint))
+            throw new InvalidDataException("不能通过目录链接写入游戏目录。");
+    }
+    private static bool SharedCorePath(string relative) => new[] { "versions", "libraries", "assets", "natives", ".fmcore" }
+        .Contains(relative.Replace('\\', '/').Split('/')[0], StringComparer.OrdinalIgnoreCase);
+    /// <summary>整合包允许的下载地址：Modrinth CDN、代码托管与 CurseForge CDN；下载后仍按索引里的 SHA-1 和 SHA-512 校验。</summary>
+    private static bool AllowedDownload(string address)
+        => Uri.TryCreate(address, UriKind.Absolute, out var url) && url.Scheme == "https" && url.UserInfo.Length == 0
+            && (url.Host is "cdn.modrinth.com" or "github.com" or "raw.githubusercontent.com" or "gitlab.com"
+                || url.Host.Equals("forgecdn.net", StringComparison.OrdinalIgnoreCase)
+                || url.Host.EndsWith(".forgecdn.net", StringComparison.OrdinalIgnoreCase));
     private static bool ReservedName(string name)=>System.Text.RegularExpressions.Regex.IsMatch(name.Split('.')[0],@"\A(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])\z",System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     public static PackManifest Read(string path)
     {
@@ -61,7 +80,7 @@ public static class ModpackArchive
             if (sha1.Length != 40 || sha512.Length != 128 || !sha1.All(Uri.IsHexDigit) || !sha512.All(Uri.IsHexDigit)) throw new InvalidDataException("整合包资源缺少有效校验值。");
             var urls = (item?["downloads"] as JsonArray)?.Select(u => u?.GetValue<string>() ?? "").ToArray() ?? [];
             foreach (var address in urls)
-                if (!Uri.TryCreate(address, UriKind.Absolute, out var url) || url.Scheme != "https" || url.UserInfo.Length > 0 || !(url.Host is "cdn.modrinth.com" or "github.com" or "raw.githubusercontent.com" or "gitlab.com")) throw new InvalidDataException("整合包包含未经允许的下载地址。");
+                if (!AllowedDownload(address)) throw new InvalidDataException("整合包包含未经允许的下载地址：" + (Uri.TryCreate(address, UriKind.Absolute, out var addressUri) ? addressUri.Host : address));
             if (urls.Length == 0) throw new InvalidDataException("整合包资源缺少下载地址。");
             var client = item?["env"]?["client"]?.GetValue<string>() ?? "required";
             if (client is not ("required" or "optional" or "unsupported")) throw new InvalidDataException("资源客户端环境声明无效。");
@@ -85,23 +104,24 @@ public static class ModpackArchive
     }
     public static async Task InstallContentAsync(string archivePath, PackManifest manifest, PreviewInstance instance, InstanceOptions options, int concurrency, Action<DownloadBatchProgress> progress, CancellationToken token)
     {
+        EnsureGameDirectoryWritePath(instance);
         using var archive = ZipFile.OpenRead(archivePath);
         var overrides=new Dictionary<string,ZipArchiveEntry>(StringComparer.OrdinalIgnoreCase);
         foreach(var layer in new[]{"overrides/","client-overrides/"})
             foreach(var entry in archive.Entries.Where(e=>e.FullName.StartsWith(layer,StringComparison.Ordinal)&&!e.FullName.EndsWith('/')))
-            {var relative=entry.FullName[layer.Length..].Replace('\\','/');ProtectProfile(relative,instance.Id);overrides[relative]=entry;}
+            {var relative=entry.FullName[layer.Length..].Replace('\\','/');ProtectProfile(relative,instance.Id,!instance.UsesGameIsolation);overrides[relative]=entry;}
         var files = manifest.Files.Where(f => f.Client == "required"&&!overrides.ContainsKey(f.Path.Replace('\\','/'))).ToArray();
-        foreach (var file in files) ProtectProfile(file.Path, instance.Id);
-        await FileDownloader.DownloadManyAsync(files.Select(f => new DownloadRequest { Url = f.Urls[0], FilePath = SafePath(instance.Folder, f.Path), Size = f.Size, Sha1 = f.Sha1 }), concurrency, progress, token);
+        foreach (var file in files) ProtectProfile(file.Path, instance.Id, !instance.UsesGameIsolation);
+        await FileDownloader.DownloadManyAsync(files.Select(f => new DownloadRequest { Url = f.Urls[0], FilePath = SafePath(instance.GameDirectory, f.Path), Size = f.Size, Sha1 = f.Sha1 }), concurrency, progress, token);
         foreach (var file in files)
         {
-            await using var stream = File.OpenRead(SafePath(instance.Folder, file.Path));
+            await using var stream = File.OpenRead(SafePath(instance.GameDirectory, file.Path));
             if (!Convert.ToHexString(await SHA512.HashDataAsync(stream, token)).Equals(file.Sha512, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("整合包资源 SHA-512 校验失败：" + file.Path);
-            if (new Uri(file.Urls[0]).Host == "cdn.modrinth.com") options.Resources[file.Path.Replace('\\','/')] = new("", "", file.Urls[0], file.Sha1, file.Sha512, file.Size, Path.GetFileName(file.Path));
+            if (AllowedDownload(file.Urls[0])) options.ResourcesFor(instance)[file.Path.Replace('\\','/')] = new("", "", file.Urls[0], file.Sha1, file.Sha512, file.Size, Path.GetFileName(file.Path));
         }
         foreach(var item in overrides)
         {
-            token.ThrowIfCancellationRequested();var destination=SafePath(instance.Folder,item.Key);
+            token.ThrowIfCancellationRequested();var destination=SafePath(instance.GameDirectory,item.Key);
             if(File.Exists(destination))
             {
                 await using var current=File.OpenRead(destination);await using var expected=item.Value.Open();
@@ -119,21 +139,30 @@ public static class ModpackArchive
                 token.ThrowIfCancellationRequested();File.Move(temporary,destination,false);
             }
             finally{if(File.Exists(temporary))File.Delete(temporary);}
-            options.Resources.Remove(item.Key);
+            options.ResourcesFor(instance).Remove(item.Key);
         }
     }
-    private static void ProtectProfile(string relative, string id)
+    private static void ProtectProfile(string relative, string id, bool shared = false)
     {
+        if (shared && SharedCorePath(relative)) throw new InvalidDataException("整合包不能覆盖共享目录中的游戏核心文件。");
         var path = relative.Replace('\\', '/'); var first = path.Split('/')[0];
         if (first.Equals(id + ".json", StringComparison.OrdinalIgnoreCase) || first.Equals(id + ".jar", StringComparison.OrdinalIgnoreCase) || first.Equals(InstanceStore.FileName, StringComparison.OrdinalIgnoreCase)
             || first.Equals("FMLauncher", StringComparison.OrdinalIgnoreCase) || first.Equals("versions", StringComparison.OrdinalIgnoreCase) || first.Contains("account", StringComparison.OrdinalIgnoreCase) || first.Contains("token", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("整合包不能覆盖启动器、账户或核心版本配置。");
     }
     /// <summary>只枚举实例内的常规文件，不跟随链接；凭据、日志、历史和服务记录默认不进入导出。</summary>
-    public static IEnumerable<string> Files(string root)
+    public static IEnumerable<string> Files(string root, bool skipSharedCore = false)
     {
         if (!Directory.Exists(root)) yield break;
-        var options = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint, IgnoreInaccessible = false };
-        foreach (var file in Directory.EnumerateFiles(root, "*", options)) yield return file;
+        var pending = new Stack<string>(); pending.Push(root);
+        while (pending.Count > 0)
+        {
+            var directory = pending.Pop();
+            foreach (var file in Directory.EnumerateFiles(directory))
+                if (!File.GetAttributes(file).HasFlag(FileAttributes.ReparsePoint)) yield return file;
+            foreach (var child in Directory.EnumerateDirectories(directory))
+                if (!File.GetAttributes(child).HasFlag(FileAttributes.ReparsePoint)
+                    && !(skipSharedCore && directory == root && SharedCorePath(Path.GetFileName(child)))) pending.Push(child);
+        }
     }
     public static bool Private(string relative) => relative.Split('/', '\\').Any(p => p.Equals(".fmlauncher",StringComparison.OrdinalIgnoreCase)||p.Contains("account", StringComparison.OrdinalIgnoreCase) || p.Contains("token", StringComparison.OrdinalIgnoreCase) || p is "launcher_profiles.json" or "launcher_accounts.json" or "usercache.json" or "usernamecache.json" or "logs" or "crash-reports" or "command_history.txt");
     /// <summary>扫描并按真实读取字节报告进度；临时归档完成且原子替换成功后才报告完成。</summary>
@@ -157,10 +186,11 @@ public static class ModpackArchive
             foreach(var relative in paths)
             {
                 token.ThrowIfCancellationRequested();
+                if (!instance.UsesGameIsolation && SharedCorePath(relative)) throw new InvalidDataException("不能导出共享目录中的游戏核心文件。");
                 if(Private(relative))throw new InvalidDataException("不能导出账户凭据、历史记录或启动器备份："+relative);
-                var file=SafePath(instance.Folder,relative);
+                var file=SafePath(instance.GameDirectory,relative);
                 if(!File.Exists(file))throw new FileNotFoundException("所选文件已不存在："+relative);
-                var size=new FileInfo(file).Length;var origin=options.Resources.GetValueOrDefault(relative);
+                var size=new FileInfo(file).Length;var origin=options.ResourcesFor(instance).GetValueOrDefault(relative);
                 if(onlyModrinth&&relative.Split('/')[0] is "mods" or "resourcepacks" or "shaderpacks")
                     if(origin==null||!Uri.TryCreate(origin.Url,UriKind.Absolute,out var address)||address.Scheme!="https"||address.Host!="cdn.modrinth.com")
                         throw new InvalidDataException("资源不能确认为 Modrinth 来源："+relative);
@@ -172,7 +202,7 @@ public static class ModpackArchive
             foreach(var source in sources)
             {
                 token.ThrowIfCancellationRequested();
-                if(source.Origin is {} origin)
+                if(source.Origin is {} origin && AllowedDownload(origin.Url))
                 {
                     using var sha1=IncrementalHash.CreateHash(HashAlgorithmName.SHA1);
                     using var sha512=IncrementalHash.CreateHash(HashAlgorithmName.SHA512);

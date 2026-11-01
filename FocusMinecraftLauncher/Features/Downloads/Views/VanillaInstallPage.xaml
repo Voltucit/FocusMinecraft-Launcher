@@ -32,7 +32,7 @@
                             </ui:AnimatedExpander.Header>
                             <ItemsControl ItemsSource="{Binding Choices}"><ItemsControl.ItemTemplate><DataTemplate>
                                 <RadioButton Style="{StaticResource DownloadChoice}" IsChecked="{Binding IsSelected, Mode=OneWay}" IsEnabled="{Binding CanChoose}" Command="{Binding Choose}" ToolTip="{Binding Hint}" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="{Binding Option.Version}">
-                                    <StackPanel><TextBlock Text="{Binding Option.Version}" FontWeight="Medium"/><WrapPanel><TextBlock Text="{Binding Option.Date}" Style="{StaticResource DownloadMeta}"/><TextBlock Text="{Binding Option.Stability}" Style="{StaticResource DownloadMeta}"/></WrapPanel><TextBlock Text="{Binding Option.ForgeNote}" Style="{StaticResource DownloadMeta}" Visibility="{Binding Option.ForgeNote, Converter={StaticResource TextVisibility}}"/></StackPanel>
+                                    <StackPanel><TextBlock Text="{Binding Option.Version}" FontWeight="Medium"/><WrapPanel><TextBlock Text="{Binding Option.Date}" Style="{StaticResource DownloadMeta}" Visibility="{Binding Option.Date, Converter={StaticResource TextVisibility}}"/><TextBlock Text="{Binding Option.Stability}" Style="{StaticResource DownloadMeta}"/></WrapPanel><TextBlock Text="{Binding Option.ForgeNote}" Style="{StaticResource DownloadMeta}" Visibility="{Binding Option.ForgeNote, Converter={StaticResource TextVisibility}}"/></StackPanel>
                                 </RadioButton>
                             </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
                         </ui:AnimatedExpander>

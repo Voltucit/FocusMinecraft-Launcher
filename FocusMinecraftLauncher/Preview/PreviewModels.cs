@@ -1,6 +1,7 @@
 using FocusMinecraftLauncher.Common;
 using System.Windows.Media;
 using FocusMinecraftLauncher.Presentation;
+using FocusMinecraftLauncher.Features.Home.Models;
 namespace FocusMinecraftLauncher.Preview;
 /// <summary>账户资料与运行时认证结果分离，读取配置不等于 Microsoft 认证成功。</summary>
 public sealed class PreviewAccount : ObservableObject
@@ -69,7 +70,10 @@ public sealed class PreviewInstance(string id, string name, string version, stri
     private ImageSource? _icon, _fallbackIcon;
     public string Id { get; } = id;
     public string Name { get => _name; set => Set(ref _name, value); }
-    public string Version { get; } = version;
+    private string _version = version, _metadataIssue = "";
+    public string Version { get => _version; set { if (Set(ref _version, value)) Changed(nameof(VersionText)); } }
+    public string MetadataIssue { get => _metadataIssue; set { if (Set(ref _metadataIssue, value)) Changed(nameof(ReadinessText)); } }
+    public string ReadinessText => MetadataIssue.Length > 0 ? MetadataIssue : "启动前将检查完整性";
     public string Loader { get; } = loader;
     public string VersionType { get; } = versionType;
     public string Description { get => _description; set => Set(ref _description, value); }
@@ -84,15 +88,30 @@ public sealed class PreviewInstance(string id, string name, string version, stri
     public string Root { get; init; } = "";
     public string DirectoryPath { get; init; } = "";
     public string Folder => DirectoryPath.Length > 0 ? DirectoryPath : System.IO.Path.Combine(Root, "versions", Id);
-    public int? RequiredJava { get; init; }
-    public string LoaderVersion { get; init; } = "";
+    private VersionIsolationMode _isolation = VersionIsolationMode.All;
+    public VersionIsolationMode IsolationMode
+    {
+        get => _isolation;
+        set
+        {
+            if (!Set(ref _isolation, Enum.IsDefined(value) ? value : VersionIsolationMode.All)) return;
+            Changed(nameof(UsesGameIsolation)); Changed(nameof(GameDirectory)); Changed(nameof(IsolationText)); RefreshOptiFineState();
+        }
+    }
+    public bool UsesGameIsolation => IsolationMode == VersionIsolationMode.All || IsolationMode == VersionIsolationMode.ModdedOnly && SupportsMods;
+    public string GameDirectory => UsesGameIsolation ? Folder : Root;
+    public string IsolationText => UsesGameIsolation ? "按版本使用独立目录" : "使用共享游戏目录";
+    public bool IsEditingContent { get; set; }
+
+    public int? RequiredJava { get; set; }
+    public string LoaderVersion { get; set; } = "";
     private string _optiFineVersion="";
     public string OptiFineVersion {get=>_optiFineVersion;private set {if(Set(ref _optiFineVersion,value))Changed(nameof(ComponentsText));}}
     public string ComponentsText=>Loader+(LoaderVersion.Length>0?" "+LoaderVersion:"")+(OptiFineVersion.Length>0?" / OptiFine "+OptiFineVersion:"");
     public void RefreshOptiFineState()
     {
         var component=Options.OptiFineMod;
-        OptiFineVersion=component!=null&&System.IO.Path.GetFileName(component.FileName)==component.FileName&&System.IO.File.Exists(System.IO.Path.Combine(Folder,"mods",component.FileName))?component.Edition:"";
+        OptiFineVersion=component!=null&&System.IO.Path.GetFileName(component.FileName)==component.FileName&&System.IO.File.Exists(System.IO.Path.Combine(GameDirectory,"mods",component.FileName))?component.Edition:"";
     }
     public Infrastructure.Runtime.InstanceOptions Options { get; set; } = new();
     public bool SupportsMods => Loader is "Fabric" or "Forge" or "NeoForge";
@@ -130,11 +149,23 @@ public sealed class PreviewTask(PreviewTaskKind kind, string name, string versio
     public double BytesPerSecond { get; set; }
     public int CompletedFiles { get; set; }
     public int TotalFiles { get; set; }
-    public bool IsRunningGame { get; set; }
+    private bool _runningGame;
+    public bool IsRunningGame
+    {
+        get => _runningGame;
+        set
+        {
+            if (!Set(ref _runningGame, value)) return;
+            Changed(nameof(ShowProgress)); Changed(nameof(IsIndeterminate)); Changed(nameof(CancelText));
+        }
+    }
     public bool IsActive => State is "排队中" or "进行中";
     public bool CanRetry => State is "失败" or "已取消";
     public bool HasBytes => Total > 0 || Bytes > 0;
-    public bool IsIndeterminate => IsActive && Total <= 0 && TotalFiles<=0;
+    /// <summary>游戏进程已启动后只保留运行状态和关闭操作，不再显示启动或下载进度。</summary>
+    public bool ShowProgress => IsActive && !IsRunningGame;
+    public bool IsIndeterminate => ShowProgress && Total <= 0 && TotalFiles<=0;
+    public string CancelText => IsRunningGame ? "关闭游戏" : Kind == PreviewTaskKind.Launch ? "取消启动" : "取消";
     public double Percent => Total > 0 ? Math.Clamp(100d * Bytes / Total, 0, 100) : TotalFiles>0?Math.Clamp(100d*CompletedFiles/TotalFiles,0,100):0;
     public string DownloadLabel => Kind==PreviewTaskKind.Export&&TotalFiles>0
         ? $"{CompletedFiles} / {TotalFiles} 个文件"+(Total>0?$"，已处理 {Bytes/1048576d:0.0} / {Total/1048576d:0.0} MiB":"")

@@ -163,9 +163,9 @@ public sealed class VanillaInstallViewModel : ObservableObject
             {
                 IReadOnlyList<ComponentVersionItem> versions = group.Name switch
                 {
-                    "Fabric" => (await FMCore.Modsloader.FabricInstaller.GetLoaderVersionsAsync(Game.Number, session.MetadataSource)).Select(v => new ComponentVersionItem(v.Version, "", v.Stable ? "稳定版" : "测试版", [])).ToArray(),
-                    "Forge" => (await FMCore.Modsloader.ForgeInstaller.GetVersionsAsync(Game.Number, session.MetadataSource)).Select(v => new ComponentVersionItem(v, "", "", [])).ToArray(),
-                    "NeoForge" => (await FMCore.Modsloader.NeoForgeInstaller.GetVersionsAsync(Game.Number, session.MetadataSource)).Select(v => new ComponentVersionItem(v, "", "", [])).ToArray(),
+                    "Fabric" => await WithDatesAsync("Fabric", (await FMCore.Modsloader.FabricInstaller.GetLoaderVersionsAsync(Game.Number, session.MetadataSource)).Select(v => new ComponentVersionItem(v.Version, "", v.Stable ? "稳定版" : "测试版", [])).ToArray()),
+                    "Forge" => await WithDatesAsync("Forge", (await FMCore.Modsloader.ForgeInstaller.GetVersionsAsync(Game.Number, session.MetadataSource)).Select(v => new ComponentVersionItem(v, "", "", [])).ToArray()),
+                    "NeoForge" => await WithDatesAsync("NeoForge", (await FMCore.Modsloader.NeoForgeInstaller.GetVersionsAsync(Game.Number, session.MetadataSource)).Select(v => new ComponentVersionItem(v, "", "", [])).ToArray()),
                     _ => await LoadOptiFineOptionsAsync(session)
                 };
                 group.SetOptions(versions, "当前游戏版本暂无可用版本");
@@ -173,6 +173,12 @@ public sealed class VanillaInstallViewModel : ObservableObject
             }
             catch (Exception error) { group.SetOptions([], "查询失败，请重新进入此页重试"); session.Log(group.Name + "版本查询：" + FocusMinecraftLauncher.Infrastructure.Runtime.RuntimeSupport.Error(error)); }
         }));
+    }
+    /// <summary>发布日期只用于展示；查询失败时保留空日期，不影响版本选择。</summary>
+    private async Task<IReadOnlyList<ComponentVersionItem>> WithDatesAsync(string kind, ComponentVersionItem[] items)
+    {
+        var dates = await LoaderReleaseDates.GetAsync(kind, Game.Number, items.Select(item => item.Version));
+        return dates.Count == 0 ? items : items.Select(item => item with { Date = dates.GetValueOrDefault(item.Version) ?? item.Date }).ToArray();
     }
     private async Task<IReadOnlyList<ComponentVersionItem>> LoadOptiFineOptionsAsync(FocusMinecraftLauncher.Preview.PreviewSession session)
     {

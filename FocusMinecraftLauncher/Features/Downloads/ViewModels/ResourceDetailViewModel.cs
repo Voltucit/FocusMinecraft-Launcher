@@ -31,21 +31,25 @@ public sealed class ResourceFileRowViewModel : ObservableObject
     { _owner = owner; File = file; Select = new(_ => owner.SelectedFile = file); DownloadPreview = new(_ => { owner.SelectedFile = file; preview(file); }); }
 }
 
-public sealed class ResourceFileGroupViewModel(string title, IEnumerable<ResourceFileRowViewModel> files, bool expanded) : ObservableObject
+public sealed class ResourceFileGroupViewModel(string key, string title, IEnumerable<ResourceFileRowViewModel> files, bool expanded) : ObservableObject
 {
     private bool _expanded = expanded;
+    public string Key { get; } = key;
     public string Title { get; } = title;
     public IReadOnlyList<ResourceFileRowViewModel> Files { get; } = files.ToArray();
     public string Count => Files.Count + " 个文件";
     public bool IsExpanded { get => _expanded; set => Set(ref _expanded, value); }
 }
 
-/// <summary>资源详情和列表共用文件选择，前置列表只取当前文件声明的本地资料。</summary>
+public sealed record ResourceLoaderTab(string Key, string Title);
+
+/// <summary>资源详情和列表共用文件选择，按实际加载器筛选及游戏版本系列展示，不改变精确兼容声明。</summary>
 public sealed class ResourceDetailViewModel : ObservableObject, IDisposable
 {
     private readonly Action<ResourceFileItem> _preview;
     private string _notice = "";
     private int _tab;
+    private string _loader = "";
     private readonly Dictionary<string, bool> _groupExpansion = [];
     public ResourceEntryViewModel Entry { get; }
     public ResourceProject Project => Entry.Project;
@@ -54,6 +58,19 @@ public sealed class ResourceDetailViewModel : ObservableObject, IDisposable
     public DownloadScrollPosition DependencyScroll { get; } = new();
     public GameVersionFilterViewModel VersionFilter { get; }
     public string GameVersion => VersionFilter.SelectedVersion;
+    public IReadOnlyList<ResourceLoaderTab> LoaderTabs { get; }
+    public bool HasLoaderNavigation => Project.UsesEnvironment && LoaderTabs.Count > 1;
+    public string LoaderNavigationName => Project.Category == DownloadSection.Shaders ? "运行环境" : "加载器";
+    public string SelectedLoader
+    {
+        get => _loader;
+        set
+        {
+            var selected = LoaderTabs.Any(item => item.Key == value) ? value : "";
+            if (Set(ref _loader, selected)) BuildGroups();
+        }
+    }
+
     public ObservableCollection<ResourceFileGroupViewModel> Groups { get; } = [];
     public ObservableCollection<DependencyViewModel> Dependencies => Entry.Dependencies;
     public IReadOnlyList<GalleryImageViewModel> Gallery { get; }
@@ -71,6 +88,10 @@ public sealed class ResourceDetailViewModel : ObservableObject, IDisposable
     public ResourceDetailViewModel(ResourceEntryViewModel entry, Action back, Action<ResourceFileItem> preview, Action<string> showImage)
     {
         Entry = entry; _preview = preview;
+        LoaderTabs = [new("", "全部"), .. (Project.UsesEnvironment
+            ? Project.Files.SelectMany(FileLoaders).Where(loader => !string.IsNullOrWhiteSpace(loader)).Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(LoaderOrder).ThenBy(LoaderTitle, StringComparer.OrdinalIgnoreCase).Select(loader => new ResourceLoaderTab(loader, LoaderTitle(loader)))
+            : Enumerable.Empty<ResourceLoaderTab>())];
         Back = new(_ => back());
         CopyName = new(_ =>
         {
@@ -86,22 +107,47 @@ public sealed class ResourceDetailViewModel : ObservableObject, IDisposable
     {
         if (e.PropertyName is nameof(ResourceEntryViewModel.HasDependencies) or nameof(ResourceEntryViewModel.DependencyStatus)) RefreshDependencies();
         if (e.PropertyName != nameof(ResourceEntryViewModel.SelectedFile)) return;
-        if(SelectedFile != null && GameVersion != "全部" && !SelectedFile.GameVersions.Contains(GameVersion)) VersionFilter.Select("全部");
+        if (SelectedFile is { } selected)
+        {
+            var resetLoader = !MatchesLoader(selected);
+            if (resetLoader) { _loader = ""; Changed(nameof(SelectedLoader)); }
+            if (GameVersion != "全部" && !selected.GameVersions.Contains(GameVersion, StringComparer.OrdinalIgnoreCase)) VersionFilter.Select("全部");
+            else if (resetLoader) BuildGroups();
+        }
         Changed(nameof(SelectedFile)); RefreshDependencies();
         foreach (var file in Groups.SelectMany(g => g.Files)) file.Refresh();
     }
+    /// <summary>加载器作为子导航，版本按系列归组；同一文件支持多个补丁版本时，在同一系列内只展示一次。</summary>
     private void BuildGroups()
     {
-        foreach (var group in Groups) _groupExpansion[group.Title] = group.IsExpanded;
+        foreach (var group in Groups) _groupExpansion[group.Key] = group.IsExpanded;
         Groups.Clear();
-        var rows = Project.Files.Where(f => GameVersion == "全部" || f.GameVersions.Contains(GameVersion))
-            .SelectMany(file => file.GameVersions.Where(v => GameVersion == "全部" || v == GameVersion).Select(v => (file, version: v, title: "Minecraft " + v + (file.Environment == null ? "" : " / " + file.Environment))));
-        foreach (var group in rows.OrderByDescending(row => row.version, MinecraftVersionOrder.Instance).ThenBy(row => row.file.Environment).GroupBy(row => row.title))
-            Groups.Add(new(group.Key, group.Select(row => new ResourceFileRowViewModel(this, row.file, _preview)), _groupExpansion.GetValueOrDefault(group.Key, false)));
-        if (SelectedFile == null || !Groups.SelectMany(g => g.Files).Any(row => ReferenceEquals(row.File, SelectedFile)))
+        var files = Project.Files.Where(file => MatchesLoader(file)
+            && (GameVersion == "全部" || file.GameVersions.Contains(GameVersion, StringComparer.OrdinalIgnoreCase)));
+        var rows = files.SelectMany(file => (GameVersion == "全部" ? file.GameVersions : [GameVersion])
+            .Select(MinecraftVersionOrder.Series).DefaultIfEmpty("未提供").Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(series => (File: file, Series: series)));
+        foreach (var group in rows.OrderByDescending(row => row.Series, MinecraftVersionOrder.Instance).GroupBy(row => row.Series))
+        {
+            var key = SelectedLoader + "|" + group.Key;
+            var title = GameVersion != "全部" ? "Minecraft " + GameVersion : group.Key switch
+            { "其他" => "其他版本", "未提供" => "兼容版本未提供", _ => "Minecraft " + group.Key + " 系列" };
+            var items = group.Select(row => row.File).DistinctBy(file => file.Id).OrderByDescending(file => file.Date).ThenBy(file => file.FileName)
+                .Select(file => new ResourceFileRowViewModel(this, file, _preview));
+            Groups.Add(new(key, title, items, _groupExpansion.GetValueOrDefault(key, false)));
+        }
+        if (SelectedFile == null || !Groups.SelectMany(group => group.Files).Any(row => ReferenceEquals(row.File, SelectedFile)))
             SelectedFile = Groups.FirstOrDefault()?.Files.FirstOrDefault()?.File;
         Changed(nameof(HasFiles)); Changed(nameof(AvailableFiles)); FileScroll.Reset();
     }
+    private bool MatchesLoader(ResourceFileItem file) => SelectedLoader.Length == 0
+        || FileLoaders(file).Contains(SelectedLoader, StringComparer.OrdinalIgnoreCase);
+    private static IEnumerable<string> FileLoaders(ResourceFileItem file) => file.Loaders.Length > 0 ? file.Loaders
+        : file.Environment?.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [];
+    private static int LoaderOrder(string loader) => loader.ToLowerInvariant() switch
+    { "fabric" => 0, "forge" => 1, "neoforge" => 2, "quilt" => 3, "iris" => 4, "optifine" => 5, _ => 6 };
+    private static string LoaderTitle(string loader) => loader.ToLowerInvariant() switch
+    { "fabric" => "Fabric", "forge" => "Forge", "neoforge" => "NeoForge", "quilt" => "Quilt", "iris" => "Iris", "optifine" => "OptiFine", "liteloader" => "LiteLoader", _ => loader };
     private void RefreshDependencies()
     {
         Changed(nameof(DependencyStatus)); Changed(nameof(HasDependencies));

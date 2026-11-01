@@ -17,14 +17,13 @@
         <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TreeViewItem">
             <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                 <ToggleButton x:Name="Expand" Focusable="False" IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" VerticalAlignment="Top" Margin="0,10,0,0">
-                    <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border Background="Transparent" Width="20" Height="20"><Path x:Name="Arrow" Data="M1,0 L5,4 1,8" Stroke="{DynamicResource MutedText}" StrokeThickness="1.5" Width="6" Height="8" VerticalAlignment="Center" HorizontalAlignment="Center" RenderTransformOrigin="0.5,0.5"/></Border><ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Arrow" Property="RenderTransform"><Setter.Value><RotateTransform Angle="90"/></Setter.Value></Setter></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template>
+                    <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border Background="Transparent" Width="20" Height="20"><ui:DisclosureArrow IsExpanded="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=ToggleButton}}" ExpandedAngle="90" x:Name="Arrow" Data="M1,0 L5,4 1,8" Stroke="{DynamicResource MutedText}" StrokeThickness="1.5" Width="6" Height="8" VerticalAlignment="Center" HorizontalAlignment="Center" RenderTransformOrigin="0.5,0.5"/></Border></ControlTemplate></ToggleButton.Template>
                 </ToggleButton>
                 <Border x:Name="HeaderFrame" Grid.Column="1" Background="Transparent" CornerRadius="{DynamicResource Radius6}" Padding="4,4"><ContentPresenter x:Name="PART_Header" ContentSource="Header"/></Border>
-                <ItemsPresenter x:Name="ChildrenHost" Grid.Row="1" Grid.Column="1"/>
+                <ui:RevealDecorator Grid.Row="1" Grid.Column="1" IsRevealed="{TemplateBinding IsExpanded}"><ItemsPresenter x:Name="ChildrenHost"/></ui:RevealDecorator>
             </Grid>
             <ControlTemplate.Triggers>
                 <Trigger Property="HasItems" Value="False"><Setter TargetName="Expand" Property="Visibility" Value="Hidden"/></Trigger>
-                <Trigger Property="IsExpanded" Value="False"><Setter TargetName="ChildrenHost" Property="Visibility" Value="Collapsed"/></Trigger>
                 <Trigger Property="IsSelected" Value="True"><Setter TargetName="HeaderFrame" Property="Background" Value="{DynamicResource SelectionBackground}"/></Trigger>
             </ControlTemplate.Triggers>
         </ControlTemplate></Setter.Value></Setter>
@@ -44,7 +43,7 @@
             <ui:SettingRow Title="整合包版本"><StackPanel><fluent:TextBox Text="{Binding Version, UpdateSourceTrigger=PropertyChanged}" MaxLength="64" AutomationProperties.Name="整合包版本"/><TextBlock Text="{Binding VersionError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/></StackPanel></ui:SettingRow>
             <ui:SettingRow Title="作者"><fluent:TextBox Text="{Binding Author, UpdateSourceTrigger=PropertyChanged}" MaxLength="128" AutomationProperties.Name="整合包作者"/></ui:SettingRow>
             <ui:SettingRow Title="说明"><fluent:TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" AutomationProperties.Name="整合包说明"/></ui:SettingRow>
-            <ui:SettingRow Title="导出格式"><TextBlock Text="Modrinth (.mrpack)"/></ui:SettingRow>
+            <ui:SettingRow Title="导出格式"><StackPanel><ui:AnimatedComboBox ItemsSource="{Binding Formats}" SelectedItem="{Binding SelectedFormat, Mode=TwoWay}" AutomationProperties.Name="整合包导出格式"/><TextBlock Text="{Binding FormatHint}" Style="{StaticResource Caption}" Margin="0,8,0,0"/></StackPanel></ui:SettingRow>
             <TextBlock Text="导出内容" Style="{StaticResource SectionTitle}" Margin="0,32,0,12"/>
             <WrapPanel><fluent:Button Content="全选可选内容" Command="{Binding SelectAll}" Style="{StaticResource QuietButton}" Margin="-10,0,8,0"/><fluent:Button Content="取消全选" Command="{Binding SelectNone}" Style="{StaticResource QuietButton}"/></WrapPanel>
             <TreeView ItemsSource="{Binding Content}" ItemContainerStyle="{StaticResource ExportTreeItem}" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource AppText}" Padding="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled" AutomationProperties.Name="整合包导出内容">

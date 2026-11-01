@@ -22,44 +22,12 @@
                     <fluent:Button Grid.Column="1" Content="浏览" Command="{Binding BrowseJava}" Margin="8,0,0,0"/>
                 </Grid>
                 <TextBlock Text="{Binding JavaError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
-                <WrapPanel Margin="0,8,0,0">
-                    <fluent:Button Content="检测本机 Java" Command="{Binding JavaDetection.Detect}" Margin="0,0,8,0"/>
-                    <fluent:Button Content="恢复自动选择" Command="{Binding ClearJava}" Style="{StaticResource QuietButton}"
-                                   Visibility="{Binding IsJavaAutoSelected, Converter={StaticResource NotVisibility}}"/>
-                </WrapPanel>
-                <StackPanel DataContext="{Binding JavaDetection}" Margin="0,12,0,0">
-                    <ProgressBar IsIndeterminate="True" Visibility="{Binding IsBusy, Converter={StaticResource BoolVisibility}}"
-                                 Margin="0,0,0,8" AutomationProperties.Name="Java 检测状态"/>
-                    <TextBlock Text="{Binding StatusText}" AutomationProperties.LiveSetting="Polite">
-                        <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource Caption}">
-                            <Style.Triggers><DataTrigger Binding="{Binding HasFailed}" Value="True"><Setter Property="Foreground" Value="{DynamicResource ErrorText}"/></DataTrigger></Style.Triggers>
-                        </Style></TextBlock.Style>
-                    </TextBlock>
-                    <ItemsControl ItemsSource="{Binding Results}" Visibility="{Binding HasResults, Converter={StaticResource BoolVisibility}}" Margin="0,8,0,0">
-                        <ItemsControl.ItemTemplate><DataTemplate>
-                            <Border BorderBrush="{DynamicResource SubtleBorder}" BorderThickness="0,1,0,0" Padding="0,12">
-                                <Grid>
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <StackPanel Margin="0,0,12,0">
-                                        <WrapPanel><TextBlock Text="{Binding Version}" FontWeight="SemiBold" Margin="0,0,12,0"/><TextBlock Text="{Binding Distribution}"/></WrapPanel>
-                                        <TextBlock Text="{Binding Path}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
-                                        <TextBlock Text="{Binding Architecture}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock Text="当前选择" Foreground="{DynamicResource AccentText}" Visibility="{Binding IsSelected, Converter={StaticResource BoolVisibility}}"/>
-                                        <fluent:Button Content="选择" Command="{Binding DataContext.Select, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                       CommandParameter="{Binding}" Visibility="{Binding IsSelected, Converter={StaticResource NotVisibility}}"/>
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-                        </DataTemplate></ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
+                <ui:JavaRuntimeSelector DataContext="{Binding JavaDetection}" Margin="0,8,0,0"/>
             </StackPanel>
         </ui:SettingRow>
         <ui:SettingRow Title="内存分配"><ui:MemoryAllocationPanel DataContext="{Binding MemoryAllocation}"/></ui:SettingRow>
-        <ui:SettingRow Title="游戏目录">
-            <StackPanel><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><fluent:TextBox Text="{Binding GameDirectory, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="游戏根目录" ToolTip="{Binding GameDirectory}"/><fluent:Button Grid.Column="1" Content="浏览" Command="{Binding BrowseDirectory}" Margin="8,0,0,0"/></Grid><TextBlock Text="{Binding DirectoryError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/></StackPanel>
+        <ui:SettingRow Title="版本隔离" Description="切换目录，不移动已有存档或 Mod">
+            <ui:AnimatedComboBox ItemsSource="{Binding IsolationOptions}" DisplayMemberPath="Name" SelectedValuePath="Mode" SelectedValue="{Binding VersionIsolation, Mode=TwoWay}" AutomationProperties.Name="游戏目录隔离方式"/>
         </ui:SettingRow>
         <Expander Header="高级启动选项" Margin="0,8,0,0"><ui:SettingRow Title="JVM 参数"><fluent:TextBox Text="{Binding JvmArguments, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="附加 JVM 参数" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="72" VerticalContentAlignment="Top"/></ui:SettingRow></Expander>
         <WrapPanel Margin="0,16,0,0"><fluent:Button Content="保存游戏设置" Command="{Binding Save}" Style="{StaticResource PrimaryButton}" Margin="0,0,12,12"/><fluent:Button Content="恢复已保存的值" Command="{Binding Restore}" Margin="0,0,0,12"/></WrapPanel>

@@ -48,8 +48,8 @@
             </StackPanel>
         </ScrollViewer>
         <!-- 字节和速度来自核心回调；未知总量时保留不确定进度。 -->
-        <TextBlock Text="{Binding Session.LaunchTask.DownloadLabel}" Style="{StaticResource Caption}" Margin="0,8,0,0"/><TextBlock Text="{Binding Session.LaunchTask.Speed}" Style="{StaticResource Caption}"/><ProgressBar Value="{Binding Session.LaunchTask.Percent, Mode=OneWay}" IsIndeterminate="{Binding Session.LaunchTask.IsIndeterminate, Mode=OneWay}" Margin="0,8,0,0" Visibility="{Binding ShowTask, Converter={StaticResource BoolVisibility}}" AutomationProperties.Name="游戏启动进行中"/>
-        <fluent:Button Content="取消启动" Command="{Binding Session.CancelTask}" CommandParameter="{Binding Session.LaunchTask}" Margin="0,8,0,0"
+        <TextBlock Text="{Binding Session.LaunchTask.DownloadLabel}" Style="{StaticResource Caption}" Margin="0,8,0,0"/><TextBlock Text="{Binding Session.LaunchTask.Speed}" Style="{StaticResource Caption}"/><ProgressBar Value="{Binding Session.LaunchTask.Percent, Mode=OneWay}" IsIndeterminate="{Binding Session.LaunchTask.IsIndeterminate, Mode=OneWay}" Margin="0,8,0,0" Visibility="{Binding Session.LaunchTask.ShowProgress, Converter={StaticResource BoolVisibility}, FallbackValue=Collapsed}" AutomationProperties.Name="游戏启动进行中"/>
+        <fluent:Button Content="{Binding Session.LaunchTask.CancelText}" Command="{Binding Session.CancelTask}" CommandParameter="{Binding Session.LaunchTask}" Margin="0,8,0,0"
                        Style="{StaticResource QuietButton}" Visibility="{Binding ShowTask, Converter={StaticResource BoolVisibility}}"/>
         <fluent:Button Content="重试" Command="{Binding Session.RetryTask}" CommandParameter="{Binding Session.LaunchTask}" Margin="0,8,0,0"
                        Style="{StaticResource QuietButton}" Visibility="{Binding CanRetryLaunch, Converter={StaticResource BoolVisibility}}"/>

@@ -24,8 +24,10 @@ public static class RuntimeSupport
     {
         if (!string.IsNullOrWhiteSpace(preferred)) return (await JavaReader.GetJavaInfoAsync(preferred, token)).Executable;
         var candidates = await JavaReader.GetJavasAsync([Path.Combine(AppContext.BaseDirectory, "FMLauncher", "Java")], cancellationToken: token);
-        var java = candidates.Where(j => !required.HasValue || j.MajorVersion == required).OrderByDescending(j => j.MajorVersion).FirstOrDefault();
-        return java?.Executable ?? throw new InvalidOperationException(required.HasValue ? $"未找到 Java {required}，请在设置中选择对应的 Java。" : "未找到可用的 Java，请先安装 Java 并在设置中选择。");
+        // 缺少目标版本时优先落到更高的版本上：精确版本排在前面，其余按版本从高到低尝试。
+        var java = candidates.Where(j => !required.HasValue || j.MajorVersion >= required)
+            .OrderBy(j => j.MajorVersion == required ? 0 : 1).ThenByDescending(j => j.MajorVersion).FirstOrDefault();
+        return java?.Executable ?? throw new InvalidOperationException(required.HasValue ? $"未找到 Java {required} 或更高版本，请在设置中选择可用的 Java。" : "未找到可用的 Java，请先安装 Java 并在设置中选择。");
     }
     /// <summary>自动选择逐个调用核心的公开配置检查，不复制核心的 Java 兼容性规则。</summary>
     public static async Task<(FMCore.Launch.MinecraftLauncher Launcher,string JavaPath)> SelectCheckedLauncherAsync(PreviewInstance instance,FMCore.Accounts.IMinecraftAccount account,InstanceOptions settings,PreviewSettings global,CancellationToken token,IReadOnlyList<JavaInfo>? javaCandidates=null)
@@ -33,14 +35,15 @@ public static class RuntimeSupport
         var ordered=javaCandidates??await ReadLaunchJavaCandidatesAsync(instance,settings,global,token);
         string reason="";
         var memory=MemoryMb(settings.GlobalMemory?global.AutomaticMemory:settings.AutomaticMemory,settings.GlobalMemory?global.MemoryMb:settings.MemoryMb);
+        var jvmArguments = LaunchJvmArguments(instance, account, settings.GlobalArguments ? global.JvmArguments : settings.JvmArguments);
         foreach(var java in ordered)
         {
             token.ThrowIfCancellationRequested();
             var launcher=new FMCore.Launch.MinecraftLauncher(new()
             {
                 Account=account,
-                GameCoreConfig=new(){Root=instance.Root,Version=instance.Id,GameDirectory=instance.Folder,GameArguments=Arguments(settings.GlobalArguments?"":settings.GameArguments)},
-                JavaConfig=new(){JavaPath=java.Executable,MaxMemoryMb=memory,JvmArguments=Arguments(settings.GlobalArguments?global.JvmArguments:settings.JvmArguments)},
+                GameCoreConfig=new(){Root=instance.Root,Version=instance.Id,GameDirectory=instance.GameDirectory,GameArguments=Arguments(settings.GlobalArguments?"":settings.GameArguments)},
+                JavaConfig=new(){JavaPath=java.Executable,MaxMemoryMb=memory,JvmArguments=jvmArguments},
                 GameWindowConfig=settings.GlobalWindow?null:new(){Width=settings.Width,Height=settings.Height,Fullscreen=settings.Fullscreen}
             });
             var check=await launcher.CheckAsync(cancellationToken:token);
@@ -49,6 +52,24 @@ public static class RuntimeSupport
         }
         throw new InvalidOperationException("启动配置检查未通过："+reason);
     }
+    /// <summary>仅为 1.16.4、1.16.5 的离线身份启用旧 Authlib 的离线回退，保留正版和自定义认证配置。</summary>
+    private static string[] LaunchJvmArguments(PreviewInstance instance, FMCore.Accounts.IMinecraftAccount account, string configuredArguments)
+    {
+        var arguments = Arguments(configuredArguments);
+        if (account is not FMCore.Accounts.OfflineAccount || instance.Version is not ("1.16.4" or "1.16.5")) return arguments;
+        if (arguments.Any(argument => argument.StartsWith("-Dminecraft.api.", StringComparison.OrdinalIgnoreCase)
+            || argument.StartsWith("-javaagent:", StringComparison.OrdinalIgnoreCase)
+                && argument.Contains("authlib-injector", StringComparison.OrdinalIgnoreCase))) return arguments;
+
+        // 旧 Authlib 将未认证的权限响应误读为禁止多人游戏。不可解析的保留域名让它进入内置离线回退；
+        // 三个基础 host 必须同时设置，services host 单独设置会被忽略。只传给本次游戏进程，不写入配置。
+        // 参考：https://github.com/FabricMC/fabric-loom/issues/915
+        return [.. arguments,
+            "-Dminecraft.api.auth.host=https://offline.invalid",
+            "-Dminecraft.api.account.host=https://offline.invalid",
+            "-Dminecraft.api.session.host=https://offline.invalid",
+            "-Dminecraft.api.services.host=https://offline.invalid"];
+    }
     /// <summary>补全游戏文件前先检查本机 Java；兼容性最终交给核心配置检查，不复制版本兼容规则。</summary>
     public static async Task<IReadOnlyList<JavaInfo>> ReadLaunchJavaCandidatesAsync(PreviewInstance instance,InstanceOptions settings,PreviewSettings global,CancellationToken token)
     {
@@ -56,9 +77,12 @@ public static class RuntimeSupport
         var candidates=string.IsNullOrWhiteSpace(preferred)
             ?await JavaReader.GetJavasAsync([Path.Combine(AppContext.BaseDirectory,"FMLauncher","Java")],cancellationToken:token)
             :new[]{await JavaReader.GetJavaInfoAsync(preferred,token)};
-        var result=candidates.Where(java=>!string.IsNullOrWhiteSpace(preferred)||!instance.RequiredJava.HasValue||java.MajorVersion==instance.RequiredJava)
-            .OrderByDescending(java=>java.MajorVersion).ToArray();
-        if(result.Length==0)throw new InvalidOperationException(instance.RequiredJava.HasValue?$"未找到 Java {instance.RequiredJava}，请在设置中选择 Java。":"未找到可用的 Java，请先安装并选择 Java。");
+        // 手动指定时尊重用户选择；自动检测缺少目标版本时回退到更高版本，再把兼容性交给核心配置检查。
+        var target = instance.RequiredJava;
+        var result=candidates.Where(java=>!string.IsNullOrWhiteSpace(preferred)||!target.HasValue||java.MajorVersion>=target.Value)
+            .OrderBy(java=>string.IsNullOrWhiteSpace(preferred)&&target.HasValue&&java.MajorVersion!=target.Value?1:0)
+            .ThenByDescending(java=>java.MajorVersion).ToArray();
+        if(result.Length==0)throw new InvalidOperationException(target.HasValue?$"未找到 Java {target} 或更高版本，请安装并选择可用的 Java。":"未找到可用的 Java，请先安装并选择 Java。");
         return result;
     }
     public static void OpenFolder(string folder)

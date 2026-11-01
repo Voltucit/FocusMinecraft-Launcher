@@ -16,7 +16,7 @@ public static class ResourceFileInstaller
 {
     public static async Task<ResourceInstallPlan> PlanAsync(PreviewInstance instance,IReadOnlyList<ResourceInstallFile> files,CancellationToken token)
     {
-        ModpackArchive.EnsureInstanceWritePath(instance);
+        ModpackArchive.EnsureGameDirectoryWritePath(instance);
         var options=InstanceStore.Read(instance);
         var targets=new List<ResourceInstallFile>();var replacements=new Dictionary<string,ResourceReplacement>(StringComparer.OrdinalIgnoreCase);
         foreach(var requested in files)
@@ -24,13 +24,13 @@ public static class ResourceFileInstaller
             token.ThrowIfCancellationRequested();
             var item=requested;
             // 同一文件已存在时沿用其文件名，切换命名选项不会安装第二份相同的 Mod。
-            foreach(var old in options.Resources.Where(pair=>pair.Value.ProjectId==item.ProjectId&&SameContainer(pair.Key,item.RelativePath)&&!Disabled(pair.Key)&&pair.Value.Sha1.Equals(item.File.Hashes.Sha1,StringComparison.OrdinalIgnoreCase)))
-                if(await MatchesAsync(ModpackArchive.SafePath(instance.Folder,old.Key),item.File.Size,item.File.Hashes.Sha1,token))
+            foreach(var old in options.ResourcesFor(instance).Where(pair=>pair.Value.ProjectId==item.ProjectId&&SameContainer(pair.Key,item.RelativePath)&&!Disabled(pair.Key)&&pair.Value.Sha1.Equals(item.File.Hashes.Sha1,StringComparison.OrdinalIgnoreCase)))
+                if(await MatchesAsync(ModpackArchive.SafePath(instance.GameDirectory,old.Key),item.File.Size,item.File.Hashes.Sha1,token))
                 {item=item with{RelativePath=old.Key};break;}
-            var target=ModpackArchive.SafePath(instance.Folder,item.RelativePath);
-            foreach(var old in options.Resources.Where(pair=>pair.Value.ProjectId==item.ProjectId&&SameContainer(pair.Key,item.RelativePath)&&!Disabled(pair.Key)))
+            var target=ModpackArchive.SafePath(instance.GameDirectory,item.RelativePath);
+            foreach(var old in options.ResourcesFor(instance).Where(pair=>pair.Value.ProjectId==item.ProjectId&&SameContainer(pair.Key,item.RelativePath)&&!Disabled(pair.Key)))
             {
-                var oldPath=ModpackArchive.SafePath(instance.Folder,old.Key);
+                var oldPath=ModpackArchive.SafePath(instance.GameDirectory,old.Key);
                 if(!File.Exists(oldPath))continue;
                 if(string.Equals(old.Key,item.RelativePath,StringComparison.OrdinalIgnoreCase)&&await MatchesAsync(oldPath,item.File.Size,item.File.Hashes.Sha1,token))continue;
                 if(!await MatchesAsync(oldPath,old.Value.Size,old.Value.Sha1,token))throw new IOException("已有资源已被修改，未自动替换："+Path.GetFileName(old.Key));
@@ -56,18 +56,18 @@ public static class ResourceFileInstaller
         {
             foreach(var item in plan.Files)
             {
-                var target=ModpackArchive.SafePath(instance.Folder,item.RelativePath);
+                var target=ModpackArchive.SafePath(instance.GameDirectory,item.RelativePath);
                 if(await MatchesAsync(target,item.File.Size,item.File.Hashes.Sha1,token))continue;
                 var temporary=Path.Combine(staging,staged.Count+".bin");staged[item.RelativePath]=temporary;
                 await client.DownloadAsync(item.File,temporary,progress=>report("下载 "+item.Name,progress),token);
             }
             token.ThrowIfCancellationRequested();report("准备应用资源",null);
             foreach(var old in plan.Replacements)
-                if(!await MatchesAsync(ModpackArchive.SafePath(instance.Folder,old.RelativePath),old.Origin.Size,old.Origin.Sha1,token))
+                if(!await MatchesAsync(ModpackArchive.SafePath(instance.GameDirectory,old.RelativePath),old.Origin.Size,old.Origin.Sha1,token))
                     throw new IOException("下载期间原文件发生变化，未继续替换："+Path.GetFileName(old.RelativePath));
             foreach(var item in plan.Files)
             {
-                var target=ModpackArchive.SafePath(instance.Folder,item.RelativePath);
+                var target=ModpackArchive.SafePath(instance.GameDirectory,item.RelativePath);
                 if(!staged.ContainsKey(item.RelativePath)&&!await MatchesAsync(target,item.File.Size,item.File.Hashes.Sha1,token))
                     throw new IOException("已安装资源在下载期间发生变化："+Path.GetFileName(target));
                 if(!plan.Replacements.Any(old=>string.Equals(old.RelativePath,item.RelativePath,StringComparison.OrdinalIgnoreCase))
@@ -82,7 +82,7 @@ public static class ResourceFileInstaller
                 foreach(var old in plan.Replacements)
                 {
                     token.ThrowIfCancellationRequested();
-                    var original=ModpackArchive.SafePath(instance.Folder,old.RelativePath);var backup=ModpackArchive.SafePath(backupRoot,old.RelativePath);
+                    var original=ModpackArchive.SafePath(instance.GameDirectory,old.RelativePath);var backup=ModpackArchive.SafePath(backupRoot,old.RelativePath);
                     Directory.CreateDirectory(Path.GetDirectoryName(backup)!);File.Move(original,backup,false);moved.Add((original,backup));
                 }
             }
@@ -90,7 +90,7 @@ public static class ResourceFileInstaller
             {
                 token.ThrowIfCancellationRequested();
                 if(!staged.TryGetValue(item.RelativePath,out var temporary))continue;
-                var target=ModpackArchive.SafePath(instance.Folder,item.RelativePath);
+                var target=ModpackArchive.SafePath(instance.GameDirectory,item.RelativePath);
                 if(File.Exists(target))
                 {
                     if(!await MatchesAsync(target,item.File.Size,item.File.Hashes.Sha1,token))throw new IOException("目标文件发生变化，未覆盖："+Path.GetFileName(target));
@@ -101,8 +101,8 @@ public static class ResourceFileInstaller
             token.ThrowIfCancellationRequested();
             instance.Options=await InstanceStore.UpdateAsync(instance,options=>
             {
-                foreach(var old in plan.Replacements)options.Resources.Remove(old.RelativePath);
-                foreach(var item in plan.Files)options.Resources[item.RelativePath]=new(item.ProjectId,item.VersionId,item.File.Url,item.File.Hashes.Sha1??"",item.File.Hashes.Sha512??"",item.File.Size,item.Name);
+                foreach(var old in plan.Replacements)options.ResourcesFor(instance).Remove(old.RelativePath);
+                foreach(var item in plan.Files)options.ResourcesFor(instance)[item.RelativePath]=new(item.ProjectId,item.VersionId,item.File.Url,item.File.Hashes.Sha1??"",item.File.Hashes.Sha512??"",item.File.Size,item.Name);
             });
         }
         catch(Exception failure)

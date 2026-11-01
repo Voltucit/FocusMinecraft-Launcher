@@ -62,7 +62,7 @@ public sealed partial class PreviewSession : ObservableObject, IDisposable
     public PreviewTask? ActiveTask => Tasks.FirstOrDefault(task=>task.IsActive) ?? _active;
     public PreviewTask? LaunchTask => _launch;
     public bool HasTask => Tasks.Count > 0;
-    public bool IsBusy => Tasks.Any(task => task.IsActive);
+    public bool IsBusy => IsApplyingIsolation || Tasks.Any(task => task.IsActive);
     public bool IsLaunching => _launch?.IsActive == true;
     public bool HasInstances => Instances.Count > 0;
     public bool HasAccounts => Accounts.Count > 0;
@@ -142,6 +142,7 @@ public sealed partial class PreviewSession : ObservableObject, IDisposable
 }
 public sealed class PreviewSettings
 {
+    public Features.Home.Models.VersionIsolationMode VersionIsolation { get; set; } = Features.Home.Models.VersionIsolationMode.All;
     public string JavaPath { get; set; } = "";
     public string GameDirectory { get; set; } = System.IO.Path.Combine(AppContext.BaseDirectory, ".minecraft");
     public int MemoryMb { get; set; } = 4096;

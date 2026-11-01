@@ -80,6 +80,7 @@ public sealed partial class PreviewSession
         RestoreSoftAppearance(root);
         SavedSettings = new PreviewSettings
         {
+            VersionIsolation = Enum.TryParse<VersionIsolationMode>(LauncherConfiguration.Text(root["global"]?["versionIsolation"]), out var isolation) && Enum.IsDefined(isolation) ? isolation : VersionIsolationMode.All,
             JavaPath = LauncherConfiguration.Text(root["global"]?["javaPath"]),
             GameDirectory = LauncherConfiguration.Text(root["global"]?["gameDirectory"], _configuration.MinecraftDirectory),
             MemoryMb = Math.Max(512, (int)LauncherConfiguration.Number(root["global"]?["memoryMb"], 4096)),
@@ -167,20 +168,33 @@ public sealed partial class PreviewSession
         if (_lifetime.IsCancellationRequested) return;
         Application.Current.Dispatcher.InvokeAsync(() => { if (!_lifetime.IsCancellationRequested) action(); });
     }
+    /// <summary>保存全局草稿；隔离方式仅切换读取目录，不迁移文件，写入或游戏任务进行时禁止切换。</summary>
     public async Task<bool> SaveGlobalSettingsAsync(PreviewSettings settings)
     {
-        _configuration.ChangeLauncher(root =>
+        var changingIsolation = settings.VersionIsolation != SavedSettings.VersionIsolation;
+        var changingRoot = !string.Equals(settings.GameDirectory, SavedSettings.GameDirectory, StringComparison.OrdinalIgnoreCase);
+        if (changingIsolation && (IsBusy || Instances.Any(instance => instance.IsEditingContent)))
+            throw new InvalidOperationException("请等待游戏和文件操作结束后再更改版本隔离。");
+        if (changingIsolation) { _applyingIsolation = true; Signal(); }
+        try
         {
-            var global = LauncherConfiguration.Object(root, "global");
-            global["javaPath"] = settings.JavaPath; global["memoryMb"] = settings.MemoryMb;
-            global["gameDirectory"] = settings.GameDirectory; global["jvmArguments"] = settings.JvmArguments;
-            global["automaticMemory"] = settings.AutomaticMemory; global["optimizeMemory"] = settings.OptimizeMemory;
-        });
-        if (!await _configuration.FlushAsync()) return false;
-        SavedSettings = settings.Copy();
-        await SelectRootAsync(settings.GameDirectory);
-        Signal();
-        return true;
+            _configuration.ChangeLauncher(root =>
+            {
+                var global = LauncherConfiguration.Object(root, "global");
+                global["javaPath"] = settings.JavaPath; global["memoryMb"] = settings.MemoryMb;
+                global["gameDirectory"] = settings.GameDirectory; global["jvmArguments"] = settings.JvmArguments;
+                global["automaticMemory"] = settings.AutomaticMemory; global["optimizeMemory"] = settings.OptimizeMemory;
+                global["versionIsolation"] = settings.VersionIsolation.ToString();
+            });
+            if (!await _configuration.FlushAsync()) return false;
+            SavedSettings = settings.Copy();
+            foreach (var instance in Instances) instance.IsolationMode = SavedSettings.VersionIsolation;
+            if (changingRoot) await SelectRootAsync(settings.GameDirectory);
+            if (changingIsolation)
+                foreach (var instance in Instances) NotifyInstanceContentChanged(instance.Root, instance.Id);
+            Signal(); return true;
+        }
+        finally { if (changingIsolation) { _applyingIsolation = false; Signal(); } }
     }
 
     public PreviewAccount AddOfflineAccount(string name)

@@ -11,6 +11,10 @@ public enum JavaDetectionState { NotStarted, Detecting, Succeeded, Empty, Failed
 public sealed class JavaDetectionViewModel : ObservableObject
 {
     private JavaDetectionState _state;
+    private bool _expanded;
+    public bool IsExpanded { get => _expanded; set => Set(ref _expanded, value); }
+    public string SelectionText => _selectedPath.Length == 0 ? "自动选择" : Results.FirstOrDefault(item => item.IsSelected) is { } selected ? "Java " + selected.Version + " / " + selected.Architecture : "自定义 Java";
+    public string SelectedPath => _selectedPath;
     private string _error = "", _selectedPath = "";
     public ObservableCollection<JavaRuntimeOption> Results { get; } = [];
     public JavaDetectionState State
@@ -32,23 +36,28 @@ public sealed class JavaDetectionViewModel : ObservableObject
     };
     public UiCommand Detect { get; }
     public UiCommand Select { get; }
+    public UiCommand SelectAutomatic { get; }
 
     public JavaDetectionViewModel(Action<string> selectPath)
     {
-        Detect = new(async _ =>
-        {
-            State=JavaDetectionState.Detecting;Error="";
-            try
-            {
-                var javas=await FMCore.Java.JavaReader.GetJavasAsync([System.IO.Path.Combine(AppContext.BaseDirectory,"FMLauncher","Java")]);
-                Results.Clear();foreach(var java in javas)Results.Add(new(java.Version,"Java",java.Executable,java.Architecture??"架构未提供"));
-                State=Results.Count>0?JavaDetectionState.Succeeded:JavaDetectionState.Empty;
-            }
-            catch(Exception error){Error=Infrastructure.Runtime.RuntimeSupport.Error(error);State=JavaDetectionState.Failed;}
-        }, _ => !IsBusy);
-        Select = new(value => { if (value is JavaRuntimeOption result) selectPath(result.Path); },
+        Detect = new(async _ => { IsExpanded = true; await RunAsync(); }, _ => !IsBusy);
+        Select = new(value => { if (value is JavaRuntimeOption result) { selectPath(result.Path); IsExpanded = false; } },
             value => HasResults && value is JavaRuntimeOption result && !string.IsNullOrWhiteSpace(result.Path));
+        SelectAutomatic = new(_ => { selectPath(""); IsExpanded = false; });
         Results.CollectionChanged += ResultsChanged;
+    }
+    /// <summary>启动器打开时预热一次检测，结果保留在选择列表中；已有检测进行时不重复执行。</summary>
+    public Task DetectOnceAsync() => IsBusy ? Task.CompletedTask : RunAsync();
+    private async Task RunAsync()
+    {
+        State = JavaDetectionState.Detecting; Error = "";
+        try
+        {
+            var javas = await FMCore.Java.JavaReader.GetJavasAsync([System.IO.Path.Combine(AppContext.BaseDirectory, "FMLauncher", "Java")]);
+            Results.Clear(); foreach (var java in javas) Results.Add(new(java.Version, "Java", java.Executable, java.Architecture ?? "架构未提供"));
+            State = Results.Count > 0 ? JavaDetectionState.Succeeded : JavaDetectionState.Empty;
+        }
+        catch (Exception error) { Error = Infrastructure.Runtime.RuntimeSupport.Error(error); State = JavaDetectionState.Failed; }
     }
 
     /// <summary>路径变化时同步列表的当前选择标记，结果列表本身不决定保存时机。</summary>
@@ -56,6 +65,7 @@ public sealed class JavaDetectionViewModel : ObservableObject
     {
         _selectedPath = path.Trim();
         foreach (var item in Results) item.IsSelected = string.Equals(item.Path, _selectedPath, StringComparison.OrdinalIgnoreCase);
+        Changed(nameof(SelectionText)); Changed(nameof(SelectedPath));
     }
     private void ResultsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     { UpdateSelection(_selectedPath); RefreshState(); CommandManager.InvalidateRequerySuggested(); }

@@ -43,7 +43,7 @@ public sealed class InstanceOverviewViewModel : ObservableObject
         CancelRemove=new(_=>ConfirmRemove=false);
         OpenFolder=new(p=>
         {
-            try {Infrastructure.Runtime.RuntimeSupport.OpenFolder(p is string folder&&folder.Length>0?Path.Combine(instance.Folder,folder):instance.Folder);}
+            try {Infrastructure.Runtime.RuntimeSupport.OpenFolder(p is string folder&&folder.Length>0?Path.Combine(instance.GameDirectory,folder):instance.GameDirectory);}
             catch(Exception error){Notice=Infrastructure.Runtime.RuntimeSupport.Error(error);}
         });
         Repair=new(_=>session.Enqueue(PreviewTaskKind.Repair,instance.Name+"文件检查",instance.Version,instance.Root,instance.Id,(task,token)=>session.EnsureFilesAsync(instance,task,token)),_=>!session.IsBusy);
@@ -67,7 +67,7 @@ public sealed class InstanceOverviewViewModel : ObservableObject
                 var folder=Path.GetFullPath(instance.Folder);var versions=Path.GetFullPath(Path.Combine(instance.Root,"versions"));
                 if(!string.Equals(Path.GetDirectoryName(folder),versions,StringComparison.OrdinalIgnoreCase)||File.GetAttributes(folder).HasFlag(FileAttributes.ReparsePoint))throw new IOException("实例目录不符合安全删除范围。");
                 var reader=new FMCore.Versions.MinecraftVersionReader();var all=await reader.GetVersionsAsync(instance.Root);
-                if(all.Any(v=>v.Id!=instance.Id&&reader.GetInheritanceChain(v,all).Any(parent=>parent.Id==instance.Id)))throw new InvalidOperationException("其他实例依赖此版本，请先处理这些实例后再删除。");
+                if(all.Any(v=>v.Id!=instance.Id&&reader.GetInheritanceChain(v,all).Any(parent=>parent.Id==instance.Id)))throw new InvalidOperationException("其他实例仍依赖此版本，请先在这些实例中执行“检查并补全文件”，完成独立转换后再删除。");
                 await Task.Run(()=>Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(folder,Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin));
                 await session.RefreshInstancesAsync();ConfirmRemove=false;back();
             }

@@ -4,84 +4,91 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
-using System.Windows.Shapes;
 
 namespace FocusMinecraftLauncher.Presentation.Controls;
 
-/// <summary>原生 Expander 的局部展开过渡；关闭动效时立即呈现最终状态。</summary>
+/// <summary>沿用原生折叠框语义，使用项目统一的标题与展开动画。</summary>
 public sealed class AnimatedExpander : Expander
 {
-    private RevealDecorator? _body;
-    private ToggleButton? _header;
-    private RotateTransform? _arrow;
-    public AnimatedExpander()
+    public AnimatedExpander() => SetResourceReference(StyleProperty, typeof(AnimatedExpander));
+}
+
+/// <summary>共享的折叠箭头；旋转可中断，并遵循应用及 Windows 动画偏好。</summary>
+public sealed class DisclosureArrow : System.Windows.Shapes.Shape
+{
+    private readonly RotateTransform _rotation = new();
+    public static readonly DependencyProperty DataProperty = DependencyProperty.Register(nameof(Data), typeof(Geometry), typeof(DisclosureArrow), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender));
+    public Geometry? Data { get => (Geometry?)GetValue(DataProperty); set => SetValue(DataProperty, value); }
+    protected override Geometry DefiningGeometry => Data ?? Geometry.Empty;
+    public static readonly DependencyProperty IsExpandedProperty = DependencyProperty.Register(nameof(IsExpanded), typeof(bool), typeof(DisclosureArrow), new PropertyMetadata(false, Changed));
+    public static readonly DependencyProperty ExpandedAngleProperty = DependencyProperty.Register(nameof(ExpandedAngle), typeof(double), typeof(DisclosureArrow), new PropertyMetadata(180d, Changed));
+    public bool IsExpanded { get => (bool)GetValue(IsExpandedProperty); set => SetValue(IsExpandedProperty, value); }
+    public double ExpandedAngle { get => (double)GetValue(ExpandedAngleProperty); set => SetValue(ExpandedAngleProperty, value); }
+    public DisclosureArrow()
     {
-        SetResourceReference(StyleProperty, typeof(AnimatedExpander));
-        Unloaded += (_, _) => Snap();
+        RenderTransform = _rotation; RenderTransformOrigin = new Point(.5, .5); IsHitTestVisible = false;
+        Loaded += (_, _) => Update(false); Unloaded += (_, _) => Update(false);
     }
-    public override void OnApplyTemplate()
+    private static void Changed(DependencyObject sender, DependencyPropertyChangedEventArgs e) => ((DisclosureArrow)sender).Update(true);
+    protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
     {
-        base.OnApplyTemplate();
-        _body = GetTemplateChild("PART_Reveal") as RevealDecorator;
-        _header = GetTemplateChild("PART_Header") as ToggleButton;
-        if (GetTemplateChild("PART_Arrow") is Path path)
-        { _arrow = new RotateTransform(); path.RenderTransform = _arrow; }
-        Snap();
+        base.OnPropertyChanged(e);
+        if (e.Property == ThemeVisuals.MotionAllowedProperty && e.NewValue is false) Update(false);
+    }
+    private void Update(bool animate)
+    {
+        var from = _rotation.Angle; var target = IsExpanded ? ExpandedAngle : 0;
+        _rotation.BeginAnimation(RotateTransform.AngleProperty, null); _rotation.Angle = target;
+        if (animate && IsLoaded && ThemeVisuals.GetMotionAllowed(this) && SystemParameters.ClientAreaAnimation)
+            _rotation.BeginAnimation(RotateTransform.AngleProperty, RevealDecorator.Animation(from, target, IsExpanded), HandoffBehavior.SnapshotAndReplace);
+    }
+}
+
+/// <summary>以可见高度和透明度收纳内容，不缩放文字；快速反向操作从当前进度继续。</summary>
+public sealed class RevealDecorator : Decorator
+{
+    public static readonly DependencyProperty IsRevealedProperty = DependencyProperty.Register(nameof(IsRevealed), typeof(bool), typeof(RevealDecorator), new PropertyMetadata(false, (sender, _) => ((RevealDecorator)sender).Transition()));
+    public static readonly DependencyProperty ProgressProperty = DependencyProperty.Register(nameof(Progress), typeof(double), typeof(RevealDecorator),
+        new FrameworkPropertyMetadata(0d, FrameworkPropertyMetadataOptions.AffectsMeasure, (sender, e) => ((RevealDecorator)sender).Opacity = Math.Clamp((double)e.NewValue, 0, 1)));
+    public bool IsRevealed { get => (bool)GetValue(IsRevealedProperty); set => SetValue(IsRevealedProperty, value); }
+    public double Progress { get => (double)GetValue(ProgressProperty); set => SetValue(ProgressProperty, value); }
+    public RevealDecorator()
+    {
+        ClipToBounds = true; Opacity = 0; Visibility = Visibility.Collapsed;
+        Loaded += (_, _) => Snap(); Unloaded += (_, _) => Snap();
     }
     protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
-        if (e.Property == IsExpandedProperty) Transition();
-        if ((e.Property == ThemeVisuals.MotionAllowedProperty && e.NewValue is false) || e.Property == ThemeVisuals.IsFlatProperty) Snap();
+        if (e.Property == ThemeVisuals.MotionAllowedProperty && e.NewValue is false) Snap();
+    }
+    private void InputState()
+    {
+        if (!IsRevealed && IsKeyboardFocusWithin)
+            for (var parent = VisualTreeHelper.GetParent(this); parent != null; parent = VisualTreeHelper.GetParent(parent))
+            {
+                if (parent is Expander expander) { (expander.Template?.FindName("PART_Header", expander) as Control)?.Focus(); break; }
+                if (parent is TreeViewItem item) { item.Focus(); break; }
+            }
+        IsHitTestVisible = IsRevealed;
+        KeyboardNavigation.SetTabNavigation(this, IsRevealed ? KeyboardNavigationMode.Continue : KeyboardNavigationMode.None);
     }
     private void Snap()
     {
-        if (_body == null) return;
-        _body.BeginAnimation(RevealDecorator.ProgressProperty, null);
-        _body.Progress = IsExpanded ? 1 : 0;
-        _body.Visibility = IsExpanded ? Visibility.Visible : Visibility.Collapsed;
-        SetInputState();
-        if (_arrow != null) { _arrow.BeginAnimation(RotateTransform.AngleProperty, null); _arrow.Angle = IsExpanded ? 180 : 0; }
-    }
-    private void SetInputState()
-    {
-        if (_body == null) return;
-        if (!IsExpanded && _body.IsKeyboardFocusWithin) _header?.Focus();
-        _body.IsHitTestVisible = IsExpanded;
-        KeyboardNavigation.SetTabNavigation(_body, IsExpanded ? KeyboardNavigationMode.Continue : KeyboardNavigationMode.None);
+        BeginAnimation(ProgressProperty, null); Progress = IsRevealed ? 1 : 0;
+        Visibility = IsRevealed ? Visibility.Visible : Visibility.Collapsed; InputState();
     }
     private void Transition()
     {
-        if (_body == null) return;
-        if (!IsLoaded || ThemeVisuals.GetIsFlat(this) || !ThemeVisuals.GetMotionAllowed(this) || !SystemParameters.ClientAreaAnimation) { Snap(); return; }
-        var from = _body.Progress;
-        var target = IsExpanded ? 1d : 0d;
-        _body.BeginAnimation(RevealDecorator.ProgressProperty, null);
-        _body.Visibility = Visibility.Visible;
-        _body.Progress = target;
-        SetInputState();
-        var animation = Ease(from, target);
-        animation.Completed += (_, _) =>
-        { if (_body != null && !IsExpanded && _body.Progress < 0.001) _body.Visibility = Visibility.Collapsed; };
-        _body.BeginAnimation(RevealDecorator.ProgressProperty, animation, HandoffBehavior.SnapshotAndReplace);
-        if (_arrow != null)
-        {
-            var angle = _arrow.Angle;
-            _arrow.BeginAnimation(RotateTransform.AngleProperty, null); _arrow.Angle = target * 180;
-            _arrow.BeginAnimation(RotateTransform.AngleProperty, Ease(angle, target * 180), HandoffBehavior.SnapshotAndReplace);
-        }
+        if (!IsLoaded || !ThemeVisuals.GetMotionAllowed(this) || !SystemParameters.ClientAreaAnimation) { Snap(); return; }
+        var from = Progress; var target = IsRevealed ? 1d : 0d;
+        BeginAnimation(ProgressProperty, null); Progress = target; Visibility = Visibility.Visible; InputState();
+        var animation = Animation(from, target, IsRevealed);
+        animation.Completed += (_, _) => { if (!IsRevealed && Progress < .001) Visibility = Visibility.Collapsed; };
+        BeginAnimation(ProgressProperty, animation, HandoffBehavior.SnapshotAndReplace);
     }
-    private DoubleAnimation Ease(double from, double to) => new(from, to, TimeSpan.FromMilliseconds(IsExpanded ? 250 : 200))
-    { EasingFunction = new CubicEase { EasingMode = IsExpanded ? EasingMode.EaseOut : EasingMode.EaseIn }, FillBehavior = FillBehavior.Stop };
-}
-
-/// <summary>保持内容自身的排版尺寸，通过可见比例收纳空间，避免缩放文字与控件。</summary>
-public sealed class RevealDecorator : Decorator
-{
-    public static readonly DependencyProperty ProgressProperty = DependencyProperty.Register(nameof(Progress), typeof(double), typeof(RevealDecorator),
-        new FrameworkPropertyMetadata(0d, FrameworkPropertyMetadataOptions.AffectsMeasure, (target, e) => ((RevealDecorator)target).Opacity = (double)e.NewValue));
-    public double Progress { get => (double)GetValue(ProgressProperty); set => SetValue(ProgressProperty, value); }
-    public RevealDecorator() { ClipToBounds = true; Opacity = 0; }
+    internal static DoubleAnimation Animation(double from, double to, bool opening) => new(from, to, TimeSpan.FromMilliseconds(opening ? 220 : 180))
+    { EasingFunction = new CubicEase { EasingMode = opening ? EasingMode.EaseOut : EasingMode.EaseIn }, FillBehavior = FillBehavior.Stop };
     protected override Size MeasureOverride(Size constraint)
     {
         if (Child == null) return new Size();

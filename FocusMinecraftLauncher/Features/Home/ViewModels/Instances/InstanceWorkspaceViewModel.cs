@@ -8,6 +8,7 @@ public sealed class InstanceWorkspaceViewModel : ObservableObject, IDisposable
 {
     private readonly PreviewSession _session;
     private int _tab;
+    private string _gameDirectory = "";
     public PreviewInstance Instance { get; }
     public InstanceOverviewViewModel Overview { get; }
     public InstanceLaunchSettingsViewModel Settings { get; }
@@ -28,13 +29,15 @@ public sealed class InstanceWorkspaceViewModel : ObservableObject, IDisposable
     public string Metadata => Instance.VersionText + " / " + Instance.ComponentsText;
     public InstanceWorkspaceViewModel(PreviewSession session, PreviewInstance instance, Action back)
     {
-        _session=session;Instance=instance;ReturnHome=new(_=>back());
+        _session=session;Instance=instance;_gameDirectory=instance.GameDirectory;ReturnHome=new(_=>back());
         Overview=new(session,instance,back);Settings=new(session,instance);Mods=new(session,instance);
         Export=new(session,instance,Mods);session.PropertyChanged+=SessionChanged;
     }
     private void SessionChanged(object? sender,PropertyChangedEventArgs e)
     {
         Changed(nameof(IsAvailable));Changed(nameof(Metadata));
+        if (!_gameDirectory.Equals(Instance.GameDirectory, StringComparison.OrdinalIgnoreCase))
+        { _gameDirectory = Instance.GameDirectory; _ = Export.RefreshFilesAsync(); }
         if(!IsAvailable && Export.IsBusy)Export.Cancel.Execute(null);
     }
     public void Dispose()

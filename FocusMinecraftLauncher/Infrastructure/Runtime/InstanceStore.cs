@@ -20,7 +20,21 @@ public static class InstanceStore
         // Windows 路径不区分大小写；反序列化后仍按相同规则识别来源，防止把同一文件当成未知资源。
         var resources=new Dictionary<string,ResourceOrigin>(StringComparer.OrdinalIgnoreCase);
         foreach(var item in options.Resources)resources[item.Key.Replace('\\','/')]=item.Value;
-        options.Resources=resources;return options;
+        options.Resources=resources;
+        var shared = new Dictionary<string, ResourceOrigin>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in options.SharedResources) shared[item.Key.Replace('\\', '/')] = item.Value;
+        if (!instance.UsesGameIsolation)
+        {
+            var pathShared = ModpackArchive.SafePath(instance.Root, ".fmlauncher/shared-resource-sources.json");
+            if (File.Exists(pathShared))
+            {
+                var saved = JsonSerializer.Deserialize<Dictionary<string, ResourceOrigin>>(File.ReadAllText(pathShared), Options) ?? new();
+                foreach (var item in saved) shared[item.Key.Replace('\\', '/')] = item.Value;
+            }
+        }
+        options.SharedResources = shared;
+        options.SharedResourceSnapshot = new(shared, StringComparer.OrdinalIgnoreCase);
+        return options;
     }
     /// <summary>同目录临时文件替换，不改写 Minecraft 的版本 JSON，不移动用户文件。</summary>
     public static async Task SaveAsync(PreviewInstance instance, InstanceOptions options)
@@ -49,6 +63,26 @@ public static class InstanceStore
             ModpackArchive.EnsureInstanceWritePath(instance);
             await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(options, Options));
             File.Move(temporary, path, true);
+            if (!instance.UsesGameIsolation) await SaveSharedSourcesAsync(instance, options);
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+    /// <summary>共享目录只有一份来源索引；仅合并本次变更，保留其他实例的记录与仍可用于识别的历史来源。</summary>
+    private static async Task SaveSharedSourcesAsync(PreviewInstance instance, InstanceOptions options)
+    {
+        ModpackArchive.EnsureGameDirectoryWritePath(instance);
+        var path = ModpackArchive.SafePath(instance.Root, ".fmlauncher/shared-resource-sources.json");
+        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            var saved = File.Exists(path) ? JsonSerializer.Deserialize<Dictionary<string, ResourceOrigin>>(await File.ReadAllTextAsync(path), Options) ?? new() : new();
+            var sources = new Dictionary<string, ResourceOrigin>(saved, StringComparer.OrdinalIgnoreCase);
+            foreach (var item in options.SharedResources)
+                if (!options.SharedResourceSnapshot.TryGetValue(item.Key, out var previous) || previous != item.Value || !sources.ContainsKey(item.Key)) sources[item.Key] = item.Value;
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(sources, Options));
+            File.Move(temporary, path, true);
+            options.SharedResourceSnapshot = new(options.SharedResources, StringComparer.OrdinalIgnoreCase);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
@@ -61,7 +95,17 @@ public static class InstanceStore
         foreach (var version in versions)
         {
             token.ThrowIfCancellationRequested();
-            var chain = reader.GetInheritanceChain(version, versions);
+            result.Add(await ReadVersionAsync(version, versions, root, token));
+        }
+        return result;
+    }
+    /// <summary>单个实例的父版本缺失不阻止其他实例展示；修复仍使用核心的公开安装及转换接口。</summary>
+    public static async Task<PreviewInstance> ReadVersionAsync(MinecraftVersion version, IReadOnlyList<MinecraftVersion> versions, string root, CancellationToken token)
+    {
+            IReadOnlyList<MinecraftVersion> chain;
+            var issue = "";
+            try { chain = new MinecraftVersionReader().GetInheritanceChain(version, versions); }
+            catch (KeyNotFoundException error) { chain = [version]; issue = RuntimeSupport.Error(error) + "。启动时将尝试修复。"; }
             var libraries = new List<string>();
             int? java = null;
             foreach (var part in chain)
@@ -82,16 +126,16 @@ public static class InstanceStore
             var loaderVersion=coordinates?.Split(':').ElementAtOrDefault(2)??"";
             if(loader is "Forge" or "NeoForge"&&loaderVersion.StartsWith(gameVersion+"-"))loaderVersion=loaderVersion[(gameVersion.Length+1)..];
             var instance = new PreviewInstance(version.Id, version.Id, gameVersion, loader, version.VersionType ?? "release")
-            { Root = Path.GetFullPath(root), DirectoryPath = version.Directory, RequiredJava = java, LoaderVersion = loaderVersion };
+            { Root = Path.GetFullPath(root), DirectoryPath = version.Directory, RequiredJava = java, LoaderVersion = loaderVersion, MetadataIssue = issue };
             var settings = Read(instance);
+            if (!string.IsNullOrWhiteSpace(settings.GameVersion)) instance.Version = settings.GameVersion;
+            if (loader is "Forge" or "NeoForge" && instance.LoaderVersion.StartsWith(instance.Version + "-")) instance.LoaderVersion = instance.LoaderVersion[(instance.Version.Length + 1)..];
             instance.Name = settings.Name.Length > 0 ? settings.Name : version.Id;
             instance.Description = settings.Description; instance.Category = settings.Category; instance.IsFavorite = settings.Favorite;
             instance.Options = settings;
             instance.RefreshOptiFineState();
             RefreshIcons(instance, settings);
-            result.Add(instance);
-        }
-        return result;
+            return instance;
     }
     /// <summary>自定义、整合包原图与默认图分别管理；兼容旧配置中的在线整合包图标文件。</summary>
     public static void RefreshIcons(PreviewInstance instance,InstanceOptions options)
@@ -115,6 +159,8 @@ public static class InstanceStore
 
 public sealed class InstanceOptions
 {
+    /// <summary>安装或转换时记录真实游戏版本，避免独立配置的自定义 ID 被误当成 Minecraft 版本。</summary>
+    public string GameVersion { get; set; } = "";
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
     public string Category { get; set; } = "";
@@ -139,6 +185,11 @@ public sealed class InstanceOptions
     public string JvmArguments { get; set; } = "";
     public string GameArguments { get; set; } = "";
     public Dictionary<string, ResourceOrigin> Resources { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, ResourceOrigin> SharedResources { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    internal Dictionary<string, ResourceOrigin> SharedResourceSnapshot { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>分开保留独立目录和共享目录的来源记录，切换隔离方式不会覆盖另一目录的记录。</summary>
+    public Dictionary<string, ResourceOrigin> ResourcesFor(PreviewInstance instance) => instance.UsesGameIsolation ? Resources : SharedResources;
+
     [System.Text.Json.Serialization.JsonExtensionData]
     public Dictionary<string, JsonElement>? AdditionalFields { get; set; }
 }

@@ -72,6 +72,12 @@
         <Style x:Key="MenuHeading" TargetType="MenuItem" BasedOn="{StaticResource AccountMenuItem}">
             <Setter Property="IsEnabled" Value="False"/><Setter Property="FontSize" Value="12"/><Setter Property="MinHeight" Value="28"/>
         </Style>
+        <Style x:Key="CapeMenuItem" TargetType="MenuItem" BasedOn="{StaticResource AccountMenuItem}">
+            <Setter Property="Header" Value="{Binding Alias}"/><Setter Property="IsCheckable" Value="True"/><Setter Property="IsChecked" Value="{Binding IsActive, Mode=OneWay}"/>
+            <Setter Property="Command" Value="{Binding Command}"/><Setter Property="CommandParameter" Value="{Binding}"/>
+            <Setter Property="AutomationProperties.Name" Value="{Binding Alias}"/>
+            <Style.Triggers><DataTrigger Binding="{Binding Id}" Value=""><Setter Property="IsEnabled" Value="False"/></DataTrigger></Style.Triggers>
+        </Style>
         <Style x:Key="SwitchMenuItem" TargetType="MenuItem" BasedOn="{StaticResource AccountMenuItem}">
             <Setter Property="Header" Value="{Binding Title}"/><Setter Property="Command" Value="{Binding Command}"/><Setter Property="CommandParameter" Value="{Binding Parameter}"/>
             <Setter Property="IsCheckable" Value="{Binding IsAccount}"/><Setter Property="IsChecked" Value="{Binding Account.IsCurrent, Mode=OneWay, FallbackValue=False}"/>
@@ -127,15 +133,13 @@
                                     <StackPanel><Path Style="{StaticResource ActionIcon}" Data="M6,2 L3,4 1,8 5,10 5,18 15,18 15,10 19,8 17,4 14,2 C13,6 7,6 6,2 Z"/><TextBlock Text="皮肤披风" FontSize="12" TextAlignment="Center" Margin="0,8,0,0"/></StackPanel>
                                     <fluent:Button.ContextMenu><ContextMenu Style="{StaticResource AccountMenu}" ItemContainerStyle="{StaticResource AccountMenuItem}">
                                         <MenuItem Header="皮肤" Style="{StaticResource MenuHeading}"/>
-                                        <MenuItem Header="修改皮肤（前往官网）" Command="{Binding OpenProfile}" Visibility="{Binding Session.MicrosoftMode, Converter={StaticResource BoolVisibility}}"/>
                                         <MenuItem Header="刷新皮肤" Command="{Binding RefreshSkin}" ToolTip="{Binding SkinRefreshHint}"/>
                                         <MenuItem Header="保存皮肤文件" Command="{Binding SaveSkin}" ToolTip="保存已获取的官方皮肤图片"/>
+                                        <MenuItem Header="上传本地皮肤" Command="{Binding UploadLocalSkin}" ToolTip="把 PNG 存成 CustomSkinLoader 的本地皮肤，离线账号也能在游戏中显示"/>
+                                        <MenuItem Header="移除本地皮肤" Command="{Binding RemoveLocalSkin}" ToolTip="删除已保存的本地皮肤文件"/>
                                         <Separator Style="{StaticResource MenuSeparator}"/>
-                                        <MenuItem Header="披风" Style="{StaticResource MenuHeading}"/>
-                                        <MenuItem Header="修改披风（前往官网）" Command="{Binding OpenProfile}" Visibility="{Binding Session.MicrosoftMode, Converter={StaticResource BoolVisibility}}"/>
-                                        <MenuItem Header="刷新披风列表" Command="{Binding RefreshCapes}" Visibility="{Binding Session.MicrosoftMode, Converter={StaticResource BoolVisibility}}"/>
-                                        <MenuItem Style="{StaticResource MenuHeading}" Visibility="{Binding Session.MicrosoftMode, Converter={StaticResource BoolVisibility}}"><MenuItem.Header><ItemsControl ItemsSource="{Binding CapeNames}"><ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Foreground="{DynamicResource MutedText}" Margin="0,2"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></MenuItem.Header></MenuItem>
-                                        
+                                        <MenuItem Header="披风" Style="{StaticResource MenuHeading}" Visibility="{Binding Session.MicrosoftMode, Converter={StaticResource BoolVisibility}}"/>
+                                        <MenuItem x:Name="RefreshCapesItem" Header="刷新披风列表" Command="{Binding RefreshCapes}" Visibility="{Binding Session.MicrosoftMode, Converter={StaticResource BoolVisibility}}" ToolTip="重新读取账号当前拥有的披风"/>
                                     </ContextMenu></fluent:Button.ContextMenu>
                                 </fluent:Button>
                                 <fluent:Button x:Name="ProfileButton" Style="{StaticResource AccountAction}" Click="OpenMenu" ToolTip="账号资料" AutomationProperties.Name="账号资料菜单" IsEnabled="{Binding HasCurrentAccount}">
@@ -152,6 +156,7 @@
                                 </fluent:Button>
                             </UniformGrid>
                             <TextBlock Text="{Binding SkinStatus}" Style="{StaticResource Caption}" TextAlignment="Center" Margin="0,8,0,0" Visibility="{Binding SkinStatus, Converter={StaticResource TextVisibility}}" AutomationProperties.LiveSetting="Polite"/>
+                            <TextBlock Text="{Binding LocalSkinStatus}" Style="{StaticResource Caption}" TextAlignment="Center" Margin="0,2,0,0" Visibility="{Binding LocalSkinStatus, Converter={StaticResource TextVisibility}}" AutomationProperties.LiveSetting="Polite"/>
                             <TextBlock Text="{Binding Notice}" Style="{StaticResource Muted}" Margin="0,12,0,0" MaxHeight="64" ToolTip="{Binding Notice}" AutomationProperties.LiveSetting="Polite" Visibility="{Binding Notice, Converter={StaticResource TextVisibility}}"/>
                         </StackPanel>
                     </ScrollViewer>

@@ -101,9 +101,18 @@ public sealed class HomeViewModel : ObservableObject, IDisposable
     public UiCommand RefreshSkin { get; }
     public UiCommand SaveSkin { get; }
     public UiCommand RefreshCapes { get; }
-    public ObservableCollection<string> CapeNames { get; } = [];
+    public UiCommand SetCape { get; }
+    public UiCommand UploadLocalSkin { get; }
+    public UiCommand RemoveLocalSkin { get; }
+    /// <summary>离线本地皮肤按玩家名写进每个游戏目录，这里给出当前账号是否已有可用的皮肤文件。</summary>
+    public string LocalSkinStatus => Session.CurrentAccount is not { } account || account.Name.Length == 0 ? ""
+        : LocalSkinTargets().Any(directory => File.Exists(Infrastructure.Authentication.LocalSkinStore.FileFor(directory, account.Name)))
+            ? "本地皮肤 " + account.Name + ".png"
+            : account.IsMicrosoft ? "" : "本地皮肤未设置";
+    public ObservableCollection<CapeChoice> CapeOptions { get; } = [];
     public bool CanRefreshSkin => Session.CurrentAccount is { IsMicrosoft: true, IsValid: true, IsSkinLoading: false };
     public bool CanSaveSkin => Session.CurrentAccount?.SkinPng != null;
+    public bool CanEditLocalSkin => CanChangeIdentity && Session.CurrentAccount is { } account && account.Name.Length > 0;
     public string SkinStatus => Session.CurrentAccount?.SkinMessage ?? "";
     public string SkinRefreshHint => Session.CurrentAccount?.IsMicrosoft == true ? "重新读取官方皮肤与头像" : "离线账号没有官方皮肤";
 
@@ -127,19 +136,22 @@ public sealed class HomeViewModel : ObservableObject, IDisposable
             else session.Launch.Execute(null);
         }, _ => CanChangeIdentity && session.CurrentAccount?.IsRestoring != true && (!HasInstance || !HasCurrentAccount || NeedsLogin || session.CanLaunch));
         RefreshSkin = new(async _ => { if (session.CurrentAccount is { } account) await session.RefreshSkinAsync(account); }, _ => CanRefreshSkin);
-        RefreshCapes = new(async _ =>
+        RefreshCapes = new(async _ => await RefreshCapesAsync(), _ => CanEditCapes);
+        SetCape = new(async parameter =>
         {
-            if(session.CurrentAccount?.RuntimeAccount is not FMCore.Accounts.MicrosoftAccount account)return;
+            if (parameter is not CapeChoice choice || choice.Id.Length == 0) return;
+            if (session.CurrentAccount?.RuntimeAccount is not FMCore.Accounts.MicrosoftAccount account) return;
             try
             {
-                var service=new Infrastructure.Authentication.OfficialSkinService(((App)System.Windows.Application.Current).Configuration.ConfigDirectory);
-                var capes=await service.GetCapesAsync(account,CancellationToken.None);
-                if(session.CurrentAccount?.Uuid!=account.Uuid)return;
-                CapeNames.Clear();foreach(var cape in capes)CapeNames.Add(cape);if(CapeNames.Count==0)CapeNames.Add("没有可用披风");
-                Notice="披风列表已刷新。";
+                // 再次点击当前披风即取消披风，与官方档案的切换语义保持一致。
+                var removing = choice.IsActive;
+                await Capes().SetCapeAsync(account, removing ? null : choice.Id, CancellationToken.None);
+                if (session.CurrentAccount?.Uuid != account.Uuid) return;
+                session.NotifyTask(removing ? $"披风（{choice.Alias}）已取消" : $"披风（{choice.Alias}）修改成功", false);
+                await LoadCapesAsync(account);
             }
-            catch(Exception error){Notice=Infrastructure.Runtime.RuntimeSupport.Error(error);}
-        },_=>session.CurrentAccount is {IsMicrosoft:true,IsValid:true}&&!session.IsBusy);
+            catch (Exception error) { session.NotifyTask(Infrastructure.Runtime.RuntimeSupport.Error(error), true); }
+        }, parameter => parameter is CapeChoice { Id.Length: > 0 } && CanEditCapes);
         SaveSkin = new(async _ =>
         {
             if (session.CurrentAccount?.SkinPng is not { } png) return;
@@ -149,6 +161,14 @@ public sealed class HomeViewModel : ObservableObject, IDisposable
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             { Notice = "皮肤文件保存失败，请检查所选位置的写入权限。"; }
         }, _ => CanSaveSkin);
+        UploadLocalSkin = new(async _ => await UploadLocalSkinAsync(), _ => CanEditLocalSkin);
+        RemoveLocalSkin = new(_ =>
+        {
+            if (Session.CurrentAccount is not { } account || account.Name.Length == 0) return;
+            var removed = Infrastructure.Authentication.LocalSkinStore.Remove(LocalSkinTargets(), account.Name);
+            Session.NotifyTask(removed > 0 ? "本地皮肤已移除" : "没有可移除的本地皮肤", removed == 0);
+            Refresh();
+        }, _ => CanEditLocalSkin);
         OpenNews = new(_ => OpenExternal("https://www.minecraft.net/en-us/updates"));
         OpenLauncherUpdates = new(_=>OpenExternal("https://github.com/Voltucit/FocusMinecraft-Launcher/releases"));
         OpenProfile = new(_ => OpenExternal("https://www.minecraft.net/en-us/msaprofile"), _ => session.CurrentAccount?.IsMicrosoft == true);
@@ -159,6 +179,65 @@ public sealed class HomeViewModel : ObservableObject, IDisposable
         session.Accounts.CollectionChanged += AccountsChanged;
         UpdateAccountMenu();
         LoadSelectedUpdates();
+        // 提前读一次披风，外观菜单展开时才能直接列出可选项。
+        EnsureCapesLoaded();
+    }
+    private bool CanEditCapes => Session.CurrentAccount is { IsMicrosoft: true, IsValid: true } && !Session.IsBusy;
+    private static Infrastructure.Authentication.OfficialSkinService Capes() =>
+        new(((App)System.Windows.Application.Current).Configuration.ConfigDirectory);
+    private async Task RefreshCapesAsync()
+    {
+        if (Session.CurrentAccount?.RuntimeAccount is not FMCore.Accounts.MicrosoftAccount account) return;
+        try { await LoadCapesAsync(account); Notice = "披风列表已刷新。"; }
+        catch (Exception error)
+        {
+            Notice = Infrastructure.Runtime.RuntimeSupport.Error(error);
+            CapeOptions.Clear();
+            CapeOptions.Add(new("", "读取披风失败", false, SetCape));
+        }
+    }
+    private async Task LoadCapesAsync(FMCore.Accounts.MicrosoftAccount account)
+    {
+        var capes = await Capes().GetCapesAsync(account, CancellationToken.None);
+        if (Session.CurrentAccount?.Uuid != account.Uuid) return;
+        CapeOptions.Clear();
+        // 每项自带命令，避免子菜单弹出层里拿不到 ContextMenu 的 DataContext。
+        foreach (var cape in capes) CapeOptions.Add(new(cape.Id, cape.Alias, cape.IsActive, SetCape));
+        // 子菜单为空时无法展开，用一个不可点击的占位项说明当前账号没有披风。
+        if (CapeOptions.Count == 0) CapeOptions.Add(new("", "没有可用披风", false, SetCape));
+    }
+    /// <summary>打开外观菜单时补一次披风列表，用户不必先手动刷新就能直接切换披风。</summary>
+    public void EnsureCapesLoaded()
+    {
+        if (!RefreshCapes.CanExecute(null) || CapeOptions.Count > 0) return;
+        CapeOptions.Add(new("", "正在读取披风", false, SetCape));
+        RefreshCapes.Execute(null);
+    }
+    /// <summary>共享目录加每个实例的实际游戏目录，覆盖版本隔离与非隔离两种情况。</summary>
+    private IReadOnlyList<string> LocalSkinTargets()
+    {
+        var targets = new List<string> { Session.SavedSettings.GameDirectory };
+        foreach (var instance in Session.Instances) targets.Add(instance.GameDirectory);
+        return targets;
+    }
+    private async Task UploadLocalSkinAsync()
+    {
+        if (Session.CurrentAccount is not { } account || account.Name.Length == 0) return;
+        var dialog = new OpenFileDialog { Title = "选择皮肤文件", Filter = "PNG 图片|*.png", CheckFileExists = true };
+        if (dialog.ShowDialog(System.Windows.Application.Current.MainWindow) != true) return;
+        var targets = LocalSkinTargets();
+        try
+        {
+            var png = await File.ReadAllBytesAsync(dialog.FileName);
+            Infrastructure.Authentication.LocalSkinStore.Validate(png);
+            var saved = await Infrastructure.Authentication.LocalSkinStore.SaveAsync(targets, account.Name, png, CancellationToken.None);
+            Session.NotifyTask($"本地皮肤已保存到 {saved} 个游戏目录", false);
+            if (targets.Any(directory => !Infrastructure.Authentication.LocalSkinStore.HasLoader(directory)))
+                Session.NotifyTask("未检测到 CustomSkinLoader，游戏内不会显示本地皮肤，请先给实例安装该 Mod。", true);
+            Refresh();
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException)
+        { Session.NotifyTask(Infrastructure.Runtime.RuntimeSupport.Error(error), true); }
     }
     /// <summary>按实例缓存子页草稿；重新载入后的新实例对象不会误用旧上下文。</summary>
     private void OpenWorkspace()
@@ -186,7 +265,7 @@ public sealed class HomeViewModel : ObservableObject, IDisposable
     private void SessionChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(PreviewSession.ShowLauncherUpdates) or nameof(PreviewSession.ShowGameUpdates)) LoadSelectedUpdates();
-        if(e.PropertyName==nameof(PreviewSession.CurrentAccount))CapeNames.Clear();
+        if(e.PropertyName==nameof(PreviewSession.CurrentAccount)){CapeOptions.Clear();EnsureCapesLoaded();}
         if (e.PropertyName == nameof(PreviewSession.HomeLayout))
         { IsSelectingInstance = false; IsManagingInstance = false; }
         UpdateAccountMenu(); Refresh();
@@ -298,3 +377,6 @@ public sealed class HomeNewsItem : ObservableObject
         finally{_loading=false;}
     }
 }
+
+/// <summary>外观菜单里的一个披风选项；自带命令，子菜单弹出后不依赖祖先的 DataContext。</summary>
+public sealed record CapeChoice(string Id, string Alias, bool IsActive, Common.UiCommand Command);

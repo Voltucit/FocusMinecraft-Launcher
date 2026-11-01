@@ -9,7 +9,7 @@ namespace FocusMinecraftLauncher.Features.Settings.ViewModels;
 /// <summary>管理全局设置的编辑、校验与程序目录配置保存。</summary>
 public sealed class SettingsViewModel : ObservableObject
 {
-    private string _java, _directory, _jvm, _javaError = "", _directoryError = "", _notice = "";
+    private string _java, _jvm, _javaError = "", _notice = "";
     private bool _saving, _importingBackground;
     public string BackgroundActionText => _importingBackground ? "正在读取…" : "选择图片";
     private bool _themeSettingsExpanded;
@@ -27,6 +27,10 @@ public sealed class SettingsViewModel : ObservableObject
         new(HomeLayout.Minimal, "留白布局", "头像在左下，启动操作在右下"),
         new(HomeLayout.Centered, "居中启动", "头像与启动操作集中显示")
     ];
+    private VersionIsolationMode _isolation;
+    public VersionIsolationMode VersionIsolation { get => _isolation; set { if (Set(ref _isolation, value)) Notice = ""; } }
+    public IReadOnlyList<VersionIsolationOption> IsolationOptions { get; } =
+    [new(VersionIsolationMode.All, "全部隔离"), new(VersionIsolationMode.ModdedOnly, "仅 Mod 版本隔离"), new(VersionIsolationMode.None, "不隔离")];
     public string JavaPath
     {
         get => _java;
@@ -44,10 +48,8 @@ public sealed class SettingsViewModel : ObservableObject
     public string JavaDisplayText => IsJavaAutoSelected ? "自动选择" : JavaPath;
     public MemoryAllocationViewModel MemoryAllocation { get; } = new();
     public JavaDetectionViewModel JavaDetection { get; }
-    public string GameDirectory { get => _directory; set { if (Set(ref _directory, value)) { DirectoryError = ""; Notice = ""; } } }
     public string JvmArguments { get => _jvm; set { if (Set(ref _jvm, value)) Notice = ""; } }
     public string JavaError { get => _javaError; private set => Set(ref _javaError, value); }
-    public string DirectoryError { get => _directoryError; private set => Set(ref _directoryError, value); }
     public string Notice { get => _notice; private set => Set(ref _notice, value); }
     public IReadOnlyList<Presentation.ThemeColorPreset> FlatColorPresets => Presentation.UiTheme.FlatColorPresets;
     public IReadOnlyList<Presentation.ThemeColorPreset> SoftColorPresets => Presentation.UiTheme.SoftColorPresets;
@@ -55,15 +57,14 @@ public sealed class SettingsViewModel : ObservableObject
     public UiCommand Restore { get; }
     public UiCommand BrowseJava { get; }
     public UiCommand ClearJava { get; }
-    public UiCommand BrowseDirectory { get; }
     public UiCommand BrowseBackground { get; }
     public UiCommand ResetBackground { get; }
     public SettingsViewModel(PreviewSession session)
     {
         JavaDetection = new(path => JavaPath = path);
         Session = session;
+        _isolation = session.SavedSettings.VersionIsolation;
         _java = string.IsNullOrWhiteSpace(session.SavedSettings.JavaPath) || session.SavedSettings.JavaPath.Trim() == "自动选择" ? "" : session.SavedSettings.JavaPath;
-        _directory = session.SavedSettings.GameDirectory;
         MemoryAllocation.LoadMemoryMb(session.SavedSettings.MemoryMb);
         MemoryAllocation.IsAutomatic = session.SavedSettings.AutomaticMemory; MemoryAllocation.OptimizeBeforeLaunch = session.SavedSettings.OptimizeMemory; _jvm = session.SavedSettings.JvmArguments;
         MemoryAllocation.PropertyChanged += (_, e) =>
@@ -74,15 +75,14 @@ public sealed class SettingsViewModel : ObservableObject
         Save = new(async _ => await SaveEditedAsync(), _ => !_saving);
         Restore = new(_ =>
         {
-            JavaPath = session.SavedSettings.JavaPath; GameDirectory = session.SavedSettings.GameDirectory;
+            JavaPath = session.SavedSettings.JavaPath; VersionIsolation = session.SavedSettings.VersionIsolation;
             MemoryAllocation.LoadMemoryMb(session.SavedSettings.MemoryMb);
         MemoryAllocation.IsAutomatic = session.SavedSettings.AutomaticMemory; MemoryAllocation.OptimizeBeforeLaunch = session.SavedSettings.OptimizeMemory;
             MemoryAllocation.IsAutomatic = session.SavedSettings.AutomaticMemory; MemoryAllocation.OptimizeBeforeLaunch = session.SavedSettings.OptimizeMemory;
-            JvmArguments = session.SavedSettings.JvmArguments; JavaError = DirectoryError = ""; Notice = "已恢复已保存的设置。";
+            JvmArguments = session.SavedSettings.JvmArguments; JavaError = ""; Notice = "已恢复已保存的设置。";
         });
         BrowseJava = new(_ => { var dialog = new OpenFileDialog { Filter = "Java|java.exe;javaw.exe" }; if (dialog.ShowDialog() == true) JavaPath = dialog.FileName; });
         ClearJava = new(_ => JavaPath = "", _ => !IsJavaAutoSelected);
-        BrowseDirectory = new(_ => { var dialog = new OpenFolderDialog(); if (dialog.ShowDialog() == true) GameDirectory = dialog.FolderName; });
         BrowseBackground = new(async _ =>
         {
             var dialog = new OpenFileDialog { Title = "选择背景图片", Filter = "图片|*.png;*.jpg;*.jpeg;*.bmp", CheckFileExists = true, Multiselect = false };
@@ -107,15 +107,14 @@ public sealed class SettingsViewModel : ObservableObject
             System.Windows.Input.CommandManager.InvalidateRequerySuggested();
         }
     }
-    /// <summary>验证目录格式和实际 Java 可执行文件后保存；错误保留在对应字段旁。</summary>
+    /// <summary>验证实际 Java 可执行文件后保存；错误保留在对应字段旁。</summary>
     private async Task SaveEditedAsync()
     {
         // 自动内存由启动时的实际可用内存决定，保留手动值供切换模式时使用。
         var memory = MemoryAllocation.IsAutomatic ? Session.SavedSettings.MemoryMb : MemoryAllocation.MemoryMb;
-        DirectoryError = !Path.IsPathFullyQualified(GameDirectory.Trim()) ? "请输入完整的游戏目录路径。" : "";
         JavaError = !string.IsNullOrWhiteSpace(JavaPath) && !Path.IsPathFullyQualified(JavaPath.Trim()) ? "请输入完整路径，也可以留空。" : "";
         Notice = "";
-        if (DirectoryError.Length + JavaError.Length > 0) return;
+        if (JavaError.Length > 0) return;
         _saving = true;
         System.Windows.Input.CommandManager.InvalidateRequerySuggested();
         try
@@ -125,10 +124,7 @@ public sealed class SettingsViewModel : ObservableObject
                 try { await FMCore.Java.JavaReader.GetJavaInfoAsync(JavaPath.Trim()); }
                 catch(Exception error){JavaError=Infrastructure.Runtime.RuntimeSupport.Error(error);return;}
             }
-            try { _ = Path.GetFullPath(GameDirectory.Trim()); }
-            catch(Exception error) when(error is ArgumentException or NotSupportedException or PathTooLongException)
-            {DirectoryError="游戏目录路径无效，请重新选择。";return;}
-            var saved = await Session.SaveGlobalSettingsAsync(new() { JavaPath = JavaPath.Trim(), GameDirectory = GameDirectory.Trim(), MemoryMb = memory, AutomaticMemory = MemoryAllocation.IsAutomatic, OptimizeMemory = MemoryAllocation.OptimizeBeforeLaunch, JvmArguments = JvmArguments });
+            var saved = await Session.SaveGlobalSettingsAsync(new() { VersionIsolation = VersionIsolation, JavaPath = JavaPath.Trim(), GameDirectory = Session.SavedSettings.GameDirectory, MemoryMb = memory, AutomaticMemory = MemoryAllocation.IsAutomatic, OptimizeMemory = MemoryAllocation.OptimizeBeforeLaunch, JvmArguments = JvmArguments });
             Notice = !saved ? "设置未保存，请检查程序目录的写入权限后重试。" : "已保存全局设置。";
         }
         catch(Exception error){Notice=Infrastructure.Runtime.RuntimeSupport.Error(error);}

@@ -19,6 +19,8 @@ public partial class MainWindow : FluentWindow
 {
     private readonly NavigationViewModel _navigation = new();
     private readonly Dictionary<MainPage, UserControl> _pages = [];
+    // 设置页的视图模型提前创建，启动时就能预热一次 Java 检测并让结果直接显示在设置页。
+    private readonly Features.Settings.ViewModels.SettingsViewModel _settings;
     private bool _restoringAccountsStarted;
     private bool _isExiting,_stoppingBackend,_backendStopped;
     private bool _exitAnimationFinished;
@@ -29,6 +31,7 @@ public partial class MainWindow : FluentWindow
     public MainWindow()
     {
         InitializeComponent();
+        _settings = new(_navigation.Session);
         AppTitleBar.WndProcInvoked += FixedWindowHitTest;
         UiTheme.Apply(_navigation.Session.Theme, _navigation.Session.GlassTransparency, _navigation.Session.HasCustomBackgroundImage);
         _navigation.PropertyChanged += NavigationChanged;
@@ -87,6 +90,7 @@ public partial class MainWindow : FluentWindow
         try
         {
             await _navigation.Session.InitializeRuntimeAsync();
+            _ = _settings.JavaDetection.DetectOnceAsync();
             await _navigation.Session.RestoreMicrosoftAccountsAsync();
             if(((App)Application.Current).RequestedLaunchId is {Length:>0} id)
             {
@@ -193,13 +197,15 @@ public partial class MainWindow : FluentWindow
                 MainPage.Home => new Features.Home.Views.HomePage { DataContext = new Features.Home.ViewModels.HomeViewModel(session, OpenAccountAdder, OpenOfflineAccountRename) },
                 MainPage.Accounts => new Features.Accounts.Views.AccountsPage { DataContext = new Features.Accounts.ViewModels.AccountsViewModel(session) },
                 MainPage.Downloads => new Features.Downloads.Views.DownloadsPage { DataContext = new Features.Downloads.ViewModels.DownloadsViewModel(session) },
-                MainPage.Settings => new Features.Settings.Views.SettingsPage { DataContext = new Features.Settings.ViewModels.SettingsViewModel(session) },
+                MainPage.Settings => new Features.Settings.Views.SettingsPage { DataContext = _settings },
                 MainPage.More => new Features.More.Views.MorePage { DataContext = new Features.More.ViewModels.MoreViewModel(session) },
                 _ => throw new ArgumentOutOfRangeException(nameof(selected.Page))
             };
             _pages.Add(selected.Page, page);
         }
+        var previous = PageContent.Content;
         PageContent.Content = page;
+        AnimatePageChange(page, previous != null && !ReferenceEquals(previous, page));
         // 直接使用当前页面的 ViewModel 作为来源，不从内容模板内部回查附加属性。
         // 重新绑定会释放上一个来源，页面切换不增加事件订阅。
         if (page.DataContext is Features.Home.ViewModels.HomeViewModel home)
@@ -207,6 +213,24 @@ public partial class MainWindow : FluentWindow
             { Source = home, Mode = BindingMode.OneWay });
         else
             ThemeVisuals.SetPageSurfaceVisible(InformationPanel, true);
+    }
+    /// <summary>换页时让新页面淡入并轻微上移收位；首次呈现和关闭动画时直接切换。</summary>
+    private void AnimatePageChange(UserControl page, bool animate)
+    {
+        if (!animate || !_navigation.Session.MotionAllowed) return;
+        if (page.RenderTransform is not TranslateTransform shift)
+        {
+            if (page.RenderTransform is not null && page.RenderTransform != Transform.Identity) return;
+            shift = new TranslateTransform();
+            page.RenderTransform = shift;
+        }
+        var duration = TimeSpan.FromMilliseconds(190);
+        var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
+        page.Opacity = 1; shift.Y = 0;
+        page.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration)
+        { EasingFunction = easing, FillBehavior = FillBehavior.Stop });
+        shift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(12, 0, duration)
+        { EasingFunction = easing, FillBehavior = FillBehavior.Stop });
     }
     protected override void OnKeyDown(KeyEventArgs e)
     {

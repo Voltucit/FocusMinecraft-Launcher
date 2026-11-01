@@ -15,7 +15,7 @@ public sealed class AnimatedComboBox : ComboBox
     private RotateTransform? _arrow;
     // 与 WPF 原生 Popup 淡出关闭的 150ms 生命周期保持一致。
     private static readonly TimeSpan Duration = TimeSpan.FromMilliseconds(150);
-    private bool MotionAllowed => !ThemeVisuals.GetIsFlat(this) && ThemeVisuals.GetMotionAllowed(this) && SystemParameters.ClientAreaAnimation;
+    private bool MotionAllowed => ThemeVisuals.GetMotionAllowed(this) && SystemParameters.ClientAreaAnimation;
     public AnimatedComboBox()
     {
         SetResourceReference(StyleProperty, typeof(AnimatedComboBox));

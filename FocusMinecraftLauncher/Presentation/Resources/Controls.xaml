@@ -331,54 +331,8 @@
         </ControlTemplate></Setter.Value></Setter>
     </Style>
     <Style TargetType="Expander">
-        <Setter Property="Foreground" Value="{DynamicResource AppText}"/><Setter Property="FontSize" Value="14"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppText}"/><Setter Property="FontSize" Value="14"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/>
         <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Expander">
-            <StackPanel>
-                <ToggleButton Content="{TemplateBinding Header}" IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" HorizontalContentAlignment="Stretch" FocusVisualStyle="{StaticResource FocusVisual}">
-                    <ToggleButton.Template><ControlTemplate TargetType="ToggleButton">
-                        <Border Padding="0,12" Background="Transparent">
-                            <DockPanel><Path x:Name="Arrow" Data="M0,0 L4,4 8,0" Stroke="{DynamicResource MutedText}" StrokeThickness="1.5" Width="8" Height="4" Margin="0,0,12,0" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5"/><ContentPresenter VerticalAlignment="Center"/></DockPanel>
-                        </Border>
-                        <ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Arrow" Property="RenderTransform"><Setter.Value><RotateTransform Angle="180"/></Setter.Value></Setter></Trigger></ControlTemplate.Triggers>
-                    </ControlTemplate></ToggleButton.Template>
-                </ToggleButton>
-                <ContentPresenter x:Name="Body" ContentSource="Content" Visibility="Collapsed"/>
-            </StackPanel>
-            <ControlTemplate.Triggers><Trigger Property="IsExpanded" Value="True"><Setter TargetName="Body" Property="Visibility" Value="Visible"/></Trigger></ControlTemplate.Triggers>
-        </ControlTemplate></Setter.Value></Setter>
-    </Style>
-    <DataTemplate x:Key="InstanceRow">
-        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-            <Border Width="32" Height="32" Background="{DynamicResource Surface}" CornerRadius="{DynamicResource ControlCornerRadius}" VerticalAlignment="Center">
-                <Image Source="{Binding DisplayIcon}" Stretch="Uniform" Margin="4" RenderOptions.BitmapScalingMode="HighQuality"/>
-            </Border>
-            <StackPanel Grid.Column="1">
-                <TextBlock Text="{Binding Name}" FontWeight="Medium" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
-                <StackPanel Orientation="Horizontal" Margin="0,4,0,0"><TextBlock Text="{Binding Version}" Style="{StaticResource Caption}"/><TextBlock Text="{Binding Loader}" Style="{StaticResource Caption}" Margin="12,0,0,0"/></StackPanel>
-            </StackPanel>
-        </Grid>
-    </DataTemplate>
-    <DataTemplate x:Key="TaskRow">
-        <Border Padding="0,20" BorderBrush="{DynamicResource SubtleBorder}" BorderThickness="0,0,0,1">
-            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <StackPanel Margin="0,0,24,0">
-                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                    <TextBlock Text="{Binding State}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
-                    <TextBlock Text="{Binding Stage}" Style="{StaticResource Muted}" Margin="0,12,0,0" AutomationProperties.LiveSetting="Polite"/>
-                    <ProgressBar Value="{Binding Percent, Mode=OneWay}" IsIndeterminate="{Binding IsIndeterminate, Mode=OneWay}" Margin="0,12,0,0" Visibility="{Binding IsActive, Converter={StaticResource BoolVisibility}}" AutomationProperties.Name="任务进度"/>
-                    <WrapPanel Margin="0,8,0,0" Visibility="{Binding HasBytes, Converter={StaticResource BoolVisibility}}"><TextBlock Text="{Binding DownloadLabel}" Style="{StaticResource Caption}" Margin="0,0,16,0"/><TextBlock Text="{Binding Speed}" Style="{StaticResource Caption}"/></WrapPanel>
-                    <TextBlock Text="{Binding Error}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
-                </StackPanel>
-                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                    <fluent:Button Content="取消" Command="{Binding DataContext.Session.CancelTask, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Visibility="{Binding IsActive, Converter={StaticResource BoolVisibility}}"/>
-                    <fluent:Button Content="重试" Command="{Binding DataContext.Session.RetryTask, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Visibility="{Binding CanRetry, Converter={StaticResource BoolVisibility}}"/>
-                </StackPanel>
-            </Grid>
-        </Border>
-    </DataTemplate>
-    <!-- 界面主题和主页布局共用折叠区；其他页面的原生展开器保持原样。 -->
-    <Style TargetType="visual:AnimatedExpander" BasedOn="{StaticResource {x:Type Expander}}">
-        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="visual:AnimatedExpander">
             <StackPanel>
                 <ToggleButton x:Name="PART_Header" IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
                               HorizontalAlignment="Stretch" VerticalAlignment="Stretch" HorizontalContentAlignment="Stretch" FocusVisualStyle="{StaticResource FocusVisual}" AutomationProperties.Name="{Binding (AutomationProperties.Name), RelativeSource={RelativeSource TemplatedParent}}">
@@ -392,14 +346,46 @@
                         </ControlTemplate.Triggers>
                     </ControlTemplate></ToggleButton.Template>
                     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                        <Path x:Name="PART_Arrow" Data="M0,0 L4,4 8,0" Width="8" Height="4" Stretch="Uniform" Stroke="{DynamicResource MutedText}" StrokeThickness="1.5" VerticalAlignment="Center" HorizontalAlignment="Left" RenderTransformOrigin="0.5,0.5"/>
+                        <visual:DisclosureArrow IsExpanded="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=ToggleButton}}" x:Name="PART_Arrow" Data="M0,0 L4,4 8,0" Width="8" Height="4" Stretch="Uniform" Stroke="{DynamicResource MutedText}" StrokeThickness="1.5" VerticalAlignment="Center" HorizontalAlignment="Left" RenderTransformOrigin="0.5,0.5"/>
                         <ContentPresenter Grid.Column="1" Content="{TemplateBinding Header}" ContentTemplate="{TemplateBinding HeaderTemplate}"/>
                     </Grid>
                 </ToggleButton>
-                <visual:RevealDecorator x:Name="PART_Reveal" Visibility="Collapsed"><ContentPresenter ContentSource="Content"/></visual:RevealDecorator>
+                <visual:RevealDecorator x:Name="PART_Reveal" IsRevealed="{TemplateBinding IsExpanded}"><ContentPresenter ContentSource="Content"/></visual:RevealDecorator>
             </StackPanel>
         </ControlTemplate></Setter.Value></Setter>
     </Style>
+    <DataTemplate x:Key="InstanceRow">
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Border Width="32" Height="32" Background="{DynamicResource Surface}" CornerRadius="{DynamicResource ControlCornerRadius}" VerticalAlignment="Center">
+                <Image Source="{Binding DisplayIcon}" Stretch="Uniform" Margin="4" RenderOptions.BitmapScalingMode="HighQuality"/>
+            </Border>
+            <StackPanel Grid.Column="1">
+                <TextBlock Text="{Binding Name}" FontWeight="Medium" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0"><TextBlock Text="{Binding Version}" Style="{StaticResource Caption}"/><TextBlock Text="{Binding Loader}" Style="{StaticResource Caption}" Margin="12,0,0,0"/></StackPanel>
+                <TextBlock Text="{Binding MetadataIssue}" Foreground="{DynamicResource ErrorText}" TextTrimming="CharacterEllipsis" ToolTip="{Binding MetadataIssue}" Visibility="{Binding MetadataIssue, Converter={StaticResource TextVisibility}}" Margin="0,4,0,0"/>
+            </StackPanel>
+        </Grid>
+    </DataTemplate>
+    <DataTemplate x:Key="TaskRow">
+        <Border Padding="0,20" BorderBrush="{DynamicResource SubtleBorder}" BorderThickness="0,0,0,1">
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel Margin="0,0,24,0">
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding State}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                    <TextBlock Text="{Binding Stage}" Style="{StaticResource Muted}" Margin="0,12,0,0" AutomationProperties.LiveSetting="Polite"/>
+                    <ProgressBar Value="{Binding Percent, Mode=OneWay}" IsIndeterminate="{Binding IsIndeterminate, Mode=OneWay}" Margin="0,12,0,0" Visibility="{Binding ShowProgress, Converter={StaticResource BoolVisibility}}" AutomationProperties.Name="任务进度"/>
+                    <WrapPanel Margin="0,8,0,0" Visibility="{Binding HasBytes, Converter={StaticResource BoolVisibility}}"><TextBlock Text="{Binding DownloadLabel}" Style="{StaticResource Caption}" Margin="0,0,16,0"/><TextBlock Text="{Binding Speed}" Style="{StaticResource Caption}"/></WrapPanel>
+                    <TextBlock Text="{Binding Error}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <fluent:Button Content="{Binding CancelText}" Command="{Binding DataContext.Session.CancelTask, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Visibility="{Binding IsActive, Converter={StaticResource BoolVisibility}}"/>
+                    <fluent:Button Content="重试" Command="{Binding DataContext.Session.RetryTask, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Visibility="{Binding CanRetry, Converter={StaticResource BoolVisibility}}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </DataTemplate>
+    <!-- 原生与自定义折叠框共用动画模板，所有主题遵循同一动画偏好。 -->
+    <Style TargetType="visual:AnimatedExpander" BasedOn="{StaticResource {x:Type Expander}}"/>
     <Style TargetType="ToolTip" BasedOn="{StaticResource {x:Type ToolTip}}">
         
         <Setter Property="visual:ThemeVisuals.IsSoft" Value="{DynamicResource SoftEnabled}"/>

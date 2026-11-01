@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
@@ -9,12 +10,14 @@ using FMCore.Accounts;
 
 namespace FocusMinecraftLauncher.Infrastructure.Authentication;
 
-/// <summary>只从 Minecraft 官方档案与纹理服务读取皮肤，在本机合成头像；不修改账号皮肤。</summary>
+/// <summary>只从 Minecraft 官方档案与纹理服务读取皮肤与披风，并支持切换当前披风；纹理请求不携带授权。</summary>
 public sealed class OfficialSkinService(string configurationDirectory)
 {
     private readonly string _cacheDirectory = Path.Combine(configurationDirectory, "Skins");
     private static readonly HttpClient Client = new(new HttpClientHandler { AllowAutoRedirect = false });
     public sealed record SkinImage(BitmapSource Head, byte[] Png, bool CacheSaved = true);
+    /// <summary>官方档案返回的披风条目；IsActive 表示当前正在使用的披风。</summary>
+    public sealed record CapeEntry(string Id, string Alias, bool IsActive);
 
     /// <summary>加载 UUID 对应的本机缓存，读取完成后不占用文件句柄。</summary>
     public Task<SkinImage?> ReadCacheAsync(Guid uuid, CancellationToken cancellationToken) => Task.Run<SkinImage?>(async () =>
@@ -80,7 +83,7 @@ public sealed class OfficialSkinService(string configurationDirectory)
     }
 
     /// <summary>读取当前正版账号拥有的披风，仅向 Minecraft 官方档案发送授权。</summary>
-    public async Task<IReadOnlyList<string>> GetCapesAsync(MicrosoftAccount account,CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<CapeEntry>> GetCapesAsync(MicrosoftAccount account,CancellationToken cancellationToken)
     {
         using var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);timeout.CancelAfter(TimeSpan.FromSeconds(20));
         using var request=new HttpRequestMessage(HttpMethod.Get,"https://api.minecraftservices.com/minecraft/profile");
@@ -89,7 +92,35 @@ public sealed class OfficialSkinService(string configurationDirectory)
         using var json=JsonDocument.Parse(data);
         if(!json.RootElement.TryGetProperty("id",out var id)||!Guid.TryParse(id.GetString(),out var uuid)||uuid!=account.Uuid)throw new InvalidDataException("披风档案与当前账号不一致。");
         if(!json.RootElement.TryGetProperty("capes",out var capes)||capes.ValueKind!=JsonValueKind.Array)throw new InvalidDataException("披风档案格式无效。");
-        return capes.EnumerateArray().Select(cape=>(cape.TryGetProperty("alias",out var alias)?alias.GetString():null)??"未命名披风").ToArray();
+        var result=new List<CapeEntry>();
+        foreach(var cape in capes.EnumerateArray())
+        {
+            var capeId=cape.TryGetProperty("id",out var value)?value.GetString():null;
+            if(string.IsNullOrWhiteSpace(capeId))continue;
+            var alias=(cape.TryGetProperty("alias",out var name)?name.GetString():null)??"未命名披风";
+            var active=cape.TryGetProperty("state",out var state)&&state.GetString()=="ACTIVE";
+            result.Add(new(capeId,alias,active));
+        }
+        return result;
+    }
+
+    /// <summary>切换当前披风；传 null 表示取消披风。请求只发往官方档案，并带上账号授权。</summary>
+    public async Task SetCapeAsync(MicrosoftAccount account,string? capeId,CancellationToken cancellationToken)
+    {
+        using var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);timeout.CancelAfter(TimeSpan.FromSeconds(20));
+        const string address="https://api.minecraftservices.com/minecraft/profile/capes/active";
+        using var request=capeId is null
+            ? new HttpRequestMessage(HttpMethod.Delete,address)
+            : new HttpRequestMessage(HttpMethod.Put,address){Content=new StringContent(JsonSerializer.Serialize(new{capeId}),Encoding.UTF8,"application/json")};
+        request.Headers.Authorization=new AuthenticationHeaderValue("Bearer",account.AccessToken);
+        using var response=await Client.SendAsync(request,timeout.Token).ConfigureAwait(false);
+        if(response.IsSuccessStatusCode)return;
+        throw response.StatusCode switch
+        {
+            System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden=>new InvalidOperationException("登录已过期，请重新登录。"),
+            System.Net.HttpStatusCode.TooManyRequests=>new InvalidOperationException("请求过于频繁，请稍后重试。"),
+            _=>new InvalidOperationException("披风修改未通过，请稍后重试。")
+        };
     }
     private string CachePath(Guid uuid) => Path.Combine(_cacheDirectory, uuid.ToString("N") + ".png");
     private static async Task<byte[]> ReadResponseAsync(HttpRequestMessage request, int maximumBytes, CancellationToken cancellationToken)

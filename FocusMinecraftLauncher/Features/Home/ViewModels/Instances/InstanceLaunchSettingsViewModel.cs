@@ -31,10 +31,11 @@ public sealed class InstanceLaunchSettingsViewModel : ObservableObject, IDisposa
         set
         {
             var path = string.IsNullOrWhiteSpace(value) || value.Trim() == "自动选择" ? "" : value;
-            if (Set(ref _java, path)) { JavaError = ""; Notice = ""; RefreshJavaDisplay(); }
+            if (Set(ref _java, path)) { JavaError = ""; Notice = ""; JavaDetection.UpdateSelection(path); RefreshJavaDisplay(); }
         }
     }
     public MemoryAllocationViewModel MemoryAllocation { get; } = new();
+    public Features.Settings.ViewModels.JavaDetectionViewModel JavaDetection { get; }
     public string MinecraftVersion => Instance.Version;
     public string SelectedJavaPath => UseGlobalJava
         ? (string.IsNullOrWhiteSpace(_session.SavedSettings.JavaPath) ? "" : _session.SavedSettings.JavaPath) : JavaPath;
@@ -57,7 +58,8 @@ public sealed class InstanceLaunchSettingsViewModel : ObservableObject, IDisposa
     public string JavaError { get=>_javaError;private set=>Set(ref _javaError,value); }
     public string WindowError { get=>_windowError;private set=>Set(ref _windowError,value); }
     public string GlobalMemory => $"{_session.SavedSettings.MemoryMb / 1024d:0.0} GB";
-    public string Directory => Instance.Folder;
+    public string Directory => Instance.GameDirectory;
+    public string IsolationText => Instance.IsolationText;
     public UiCommand BrowseJava { get; }
     public UiCommand ClearJava { get; }
     public UiCommand Save { get; }
@@ -65,16 +67,17 @@ public sealed class InstanceLaunchSettingsViewModel : ObservableObject, IDisposa
     public InstanceLaunchSettingsViewModel(PreviewSession session,PreviewInstance instance)
     {
         _session=session;Instance=instance;
+        JavaDetection = new(path => JavaPath = path);
         BrowseJava=new(_=>{var d=new OpenFileDialog{Filter="Java|java.exe;javaw.exe"};if(d.ShowDialog()==true)JavaPath=d.FileName;}, _=>!UseGlobalJava);
         ClearJava=new(_=>JavaPath="", _=>!UseGlobalJava && !string.IsNullOrWhiteSpace(JavaPath));
         MemoryAllocation.PropertyChanged += MemoryChanged;
         Save=new(async _=>await SaveDraftAsync(),_=>!_saving);Restore=new(_=>{LoadStored();RestoreSaved();},_=>!_saving);session.PropertyChanged+=GlobalChanged;
         RecommendedJavaVersion = instance.RequiredJava?.ToString();
-        LoadStored(); RestoreSaved(); Notice = "";
+        LoadStored(); RestoreSaved(); JavaDetection.UpdateSelection(JavaPath); Notice = "";
     }
     /// <summary>全局设置变化只更新继承展示，不覆盖实例独立编辑草稿。</summary>
     private void GlobalChanged(object? sender,PropertyChangedEventArgs e)
-    { RefreshJavaDisplay();Changed(nameof(GlobalMemory));Changed(nameof(Directory)); }
+    { RefreshJavaDisplay();Changed(nameof(GlobalMemory));Changed(nameof(Directory)); Changed(nameof(IsolationText)); }
     private void RefreshJavaDisplay()
     {
         Changed(nameof(IsUsingGlobalJavaSettings)); Changed(nameof(SelectedJavaPath)); Changed(nameof(IsJavaAutoSelected));

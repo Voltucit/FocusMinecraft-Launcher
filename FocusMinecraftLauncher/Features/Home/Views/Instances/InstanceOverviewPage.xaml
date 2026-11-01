@@ -12,7 +12,7 @@
         <ui:SettingRow Title="Minecraft"><TextBlock Text="{Binding Instance.Version}"/></ui:SettingRow>
         <ui:SettingRow Title="加载器"><TextBlock Text="{Binding Instance.Loader}"/></ui:SettingRow>
         <ui:SettingRow Title="加载器版本" Visibility="{Binding HasLoaderVersion, Converter={StaticResource BoolVisibility}}"><TextBlock Text="{Binding Instance.LoaderVersion}" Style="{StaticResource Muted}"/></ui:SettingRow>
-        <ui:SettingRow Title="游戏状态"><TextBlock Text="已在本机发现，启动前将检查完整性" Style="{StaticResource Muted}"/></ui:SettingRow>
+        <ui:SettingRow Title="游戏状态"><TextBlock Text="{Binding Instance.ReadinessText}" Style="{StaticResource Muted}" TextWrapping="Wrap"/></ui:SettingRow>
         <TextBlock Text="个性化" Style="{StaticResource SectionTitle}" Margin="0,32,0,0"/>
         <ui:SettingRow Title="游戏图标">
             <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="72"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>

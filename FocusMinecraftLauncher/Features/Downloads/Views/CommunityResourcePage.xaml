@@ -22,15 +22,17 @@
                     <StackPanel Width="160" Margin="0,0,8,8"><TextBlock Text="类型" Style="{StaticResource CommunityFilterLabel}"/><ui:AnimatedComboBox Style="{StaticResource CommunityCombo}" ItemsSource="{Binding Tags}" SelectedItem="{Binding Tag, Mode=TwoWay}" AutomationProperties.Name="资源类型筛选"/></StackPanel>
                     <StackPanel Width="160" Margin="0,0,8,8" Visibility="{Binding UsesEnvironment, Converter={StaticResource BoolVisibility}}"><TextBlock Text="{Binding EnvironmentTitle}" Style="{StaticResource CommunityFilterLabel}"/><ui:AnimatedComboBox Style="{StaticResource CommunityCombo}" ItemsSource="{Binding Environments}" SelectedItem="{Binding Environment, Mode=TwoWay}" AutomationProperties.Name="加载器或运行环境筛选"/></StackPanel>
                 </WrapPanel>
-                <local:GameVersionFilterBody DataContext="{Binding VersionFilter}"/>
             </StackPanel>
         </StackPanel>
         <!-- 每页六项；所有条目展开内容共用一个主滚动区，不创建行内滚动条。 -->
         <Grid Grid.Row="1">
             <ScrollViewer Style="{StaticResource CommunityScroll}" local:ScrollRetention.Position="{Binding Scroll}" Padding="0,0,6,0">
-                <ItemsControl ItemsSource="{Binding PageItems}"><ItemsControl.ItemTemplate><DataTemplate><local:ResourceEntryView/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                <StackPanel>
+                    <Border Visibility="{Binding IsSearchExpanded, Converter={StaticResource BoolVisibility}}"><local:GameVersionFilterBody DataContext="{Binding VersionFilter}"/></Border>
+                    <TextBlock Text="没有匹配的资源，请调整筛选条件。" Style="{StaticResource ResourceDescription}" Margin="12,24" Visibility="{Binding IsEmpty, Converter={StaticResource BoolVisibility}}"/>
+                    <ItemsControl ItemsSource="{Binding PageItems}"><ItemsControl.ItemTemplate><DataTemplate><local:ResourceEntryView/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                </StackPanel>
             </ScrollViewer>
-            <TextBlock Text="没有匹配的资源，请调整筛选条件。" Style="{StaticResource ResourceDescription}" Margin="12,24" Visibility="{Binding IsEmpty, Converter={StaticResource BoolVisibility}}"/>
         </Grid>
         <Grid Grid.Row="2" Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <TextBlock Text="{Binding PageText}" Style="{StaticResource ResourceBody}" VerticalAlignment="Center"/>
