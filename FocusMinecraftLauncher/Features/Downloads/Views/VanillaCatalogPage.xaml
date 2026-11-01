@@ -1,0 +1,20 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.Downloads.Views.VanillaCatalogPage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:ui="clr-namespace:FocusMinecraftLauncher.Presentation.Controls" xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml" xmlns:local="clr-namespace:FocusMinecraftLauncher.Features.Downloads.Views" Focusable="False">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" local:ScrollRetention.Position="{Binding Scroll}" Padding="0,0,8,0">
+        <StackPanel>
+            <ItemsControl ItemsSource="{Binding Groups}"><ItemsControl.ItemTemplate><DataTemplate>
+                <ui:AnimatedExpander IsExpanded="{Binding IsExpanded, Mode=TwoWay}" Margin="0,0,0,12" AutomationProperties.Name="{Binding Title}">
+                    <ui:AnimatedExpander.Header><DockPanel><TextBlock DockPanel.Dock="Right" Text="{Binding Count}" Foreground="{DynamicResource MutedText}" Margin="16,0,0,0"/><TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold"/></DockPanel></ui:AnimatedExpander.Header>
+                    <ItemsControl ItemsSource="{Binding Rows}"><ItemsControl.ItemTemplate><DataTemplate>
+                        <fluent:Button Command="{Binding Configure}" Style="{StaticResource QuietButton}" Padding="12,10" HorizontalContentAlignment="Stretch" AutomationProperties.Name="{Binding AccessibleName}">
+                            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <Image Source="{Binding Game.Image}" Width="32" Height="32" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                                <StackPanel Grid.Column="1" Margin="0,0,12,0"><TextBlock Text="{Binding Game.Number}" FontWeight="Medium" TextTrimming="CharacterEllipsis" ToolTip="{Binding Game.Number}"/><WrapPanel Margin="0,4,0,0"><TextBlock Text="{Binding Game.Kind}" FontSize="12" Foreground="{DynamicResource MutedText}" Margin="0,0,16,0"/><TextBlock Text="{Binding Game.DateText}" FontSize="12" Foreground="{DynamicResource MutedText}"/></WrapPanel></StackPanel>
+                                <TextBlock Grid.Column="2" Text="{Binding ActionText}" VerticalAlignment="Center" Margin="12,0,0,0"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Foreground" Value="{DynamicResource AccentText}"/><Style.Triggers><DataTrigger Binding="{Binding IsInstalled}" Value="True"><Setter Property="Foreground" Value="{DynamicResource MutedText}"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
+                            </Grid>
+                        </fluent:Button>
+                    </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                </ui:AnimatedExpander>
+            </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

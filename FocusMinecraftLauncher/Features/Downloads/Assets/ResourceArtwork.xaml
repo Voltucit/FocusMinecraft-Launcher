@@ -1,0 +1,6 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <DrawingImage x:Key="Fallback"><DrawingImage.Drawing><DrawingGroup>
+        <GeometryDrawing Brush="{DynamicResource Surface}" Geometry="M0,0 H64 V64 H0 Z"/>
+        <GeometryDrawing Brush="{DynamicResource MutedText}" Geometry="M12,44 L27,26 37,37 45,29 54,44 Z M46,15 A5,5 0 1 1 36,15 A5,5 0 1 1 46,15"/>
+    </DrawingGroup></DrawingImage.Drawing></DrawingImage>
+</ResourceDictionary>

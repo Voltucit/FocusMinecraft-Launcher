@@ -1,0 +1,20 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.More.Views.MorePage"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:ui="clr-namespace:FocusMinecraftLauncher.Presentation.Controls" SizeChanged="ResizePage" Focusable="False">
+ 
+ 
+<ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="32,24,32,24">
+    <StackPanel HorizontalAlignment="Stretch">
+        <TextBlock Text="更多" Style="{StaticResource PageTitle}" Margin="0,0,0,32"/>
+        <TextBlock Text="关于" Style="{StaticResource SectionTitle}"/>
+        <ui:SettingRow Title="FMLauncher"><TextBlock Text="{Binding Version}" Style="{StaticResource Muted}"/></ui:SettingRow>
+        <ui:SettingRow Title="应用框架"><TextBlock Text="WPF / .NET 10" Style="{StaticResource Muted}"/></ui:SettingRow>
+        <Expander Header="键盘操作" Margin="0,12,0,0"><StackPanel Margin="0,8,0,16"><TextBlock Text="Tab 切换控件，方向键选择列表项，Enter 或空格执行操作。" Style="{StaticResource Muted}"/><TextBlock Text="Esc 收起侧栏。" Style="{StaticResource Muted}" Margin="0,8,0,0"/></StackPanel></Expander>
+        <Expander Header="本次日志" Margin="0,8,0,0"><Grid Margin="0,8,0,16"><ListBox ItemsSource="{Binding Session.Logs}" MaxHeight="240" AutomationProperties.Name="启动器事件日志"><ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap" Style="{StaticResource Caption}"/></DataTemplate></ListBox.ItemTemplate></ListBox><TextBlock Text="暂无日志" Style="{StaticResource Muted}" Visibility="{Binding Session.Logs.Count, Converter={StaticResource ZeroVisibility}}"/></Grid></Expander>
+        <WrapPanel Margin="0,24,0,0"><fluent:Button Content="导出日志" Command="{Binding ExportLog}"/><TextBlock Text="{Binding Notice}" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="16,0,0,0"/></WrapPanel>
+
+    </StackPanel>
+</ScrollViewer>
+
+</UserControl>

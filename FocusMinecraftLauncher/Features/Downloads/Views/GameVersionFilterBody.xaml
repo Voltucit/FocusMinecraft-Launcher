@@ -1,0 +1,20 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.Downloads.Views.GameVersionFilterBody"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:ui="clr-namespace:FocusMinecraftLauncher.Presentation.Controls" Focusable="False">
+    <UserControl.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="DownloadResources.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></UserControl.Resources>
+    <ui:AnimatedExpander Style="{StaticResource CommunityRevealOnly}" IsExpanded="{Binding IsExpanded, Mode=TwoWay}">
+        <Border Background="{DynamicResource Surface}" CornerRadius="{DynamicResource ControlCornerRadius}" Padding="8" Margin="0,0,0,8">
+            <StackPanel>
+                <RadioButton Content="全部版本" Style="{StaticResource DownloadChoice}" IsChecked="{Binding IsAllSelected, Mode=OneWay}" Command="{Binding SelectAll}" AutomationProperties.Name="全部兼容游戏版本"/>
+                <ItemsControl ItemsSource="{Binding Series}"><ItemsControl.ItemTemplate><DataTemplate>
+                    <ui:AnimatedExpander Style="{StaticResource CommunityExpander}" IsExpanded="{Binding IsExpanded, Mode=TwoWay}" AutomationProperties.Name="{Binding Title}">
+                        <ui:AnimatedExpander.Header><TextBlock Text="{Binding Title}" Style="{StaticResource ResourceBody}" FontWeight="SemiBold"/></ui:AnimatedExpander.Header>
+                        <ItemsControl ItemsSource="{Binding Versions}"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel><ItemsControl.ItemTemplate><DataTemplate>
+                            <RadioButton Content="{Binding Number}" IsChecked="{Binding IsSelected, Mode=OneWay}" Command="{Binding Select}" Style="{StaticResource DownloadChoice}" Margin="0,0,8,4" MinWidth="100" AutomationProperties.Name="{Binding Number}"/>
+                        </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                    </ui:AnimatedExpander>
+                </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+            </StackPanel>
+        </Border>
+    </ui:AnimatedExpander>
+</UserControl>

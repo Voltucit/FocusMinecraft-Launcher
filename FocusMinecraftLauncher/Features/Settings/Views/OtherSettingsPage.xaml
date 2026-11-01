@@ -1,0 +1,57 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.Settings.Views.OtherSettingsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:FocusMinecraftLauncher.Presentation.Controls"
+             Focusable="False">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,24">
+        <StackPanel>
+            <Border Style="{StaticResource GlassCard}" VerticalAlignment="Top">
+                <StackPanel>
+                    <TextBlock Text="下载" Style="{StaticResource SectionTitle}" Margin="0,0,0,4"/>
+                    <ui:SettingRow Title="文件下载源" Description="镜像服务由 BMCLAPI 提供">
+                        <ui:AnimatedComboBox ItemsSource="{Binding DownloadSources}"
+                                             SelectedItem="{Binding FileDownloadSource, Mode=TwoWay}"
+                                             AutomationProperties.Name="文件下载源"/>
+                    </ui:SettingRow>
+                    <ui:SettingRow Title="加载器列表源" Description="原版版本列表使用官方源">
+                        <ui:AnimatedComboBox ItemsSource="{Binding DownloadSources}"
+                                             SelectedItem="{Binding VersionListSource, Mode=TwoWay}"
+                                             AutomationProperties.Name="加载器版本列表源"/>
+                    </ui:SettingRow>
+                    <ui:SettingRow Title="最大线程数">
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="96"/></Grid.ColumnDefinitions>
+                            <Slider Minimum="1" Maximum="64" TickFrequency="1" SmallChange="1" LargeChange="8"
+                                    IsSnapToTickEnabled="True" IsMoveToPointEnabled="True" MinHeight="32"
+                                    Value="{Binding MaximumThreads, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                    FocusVisualStyle="{StaticResource FocusVisual}" AutomationProperties.Name="最大下载线程数"
+                                    ToolTip="{Binding MaximumThreads}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding MaximumThreads}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="16,0,0,0"/>
+                        </Grid>
+                    </ui:SettingRow>
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource GlassCard}" VerticalAlignment="Top" Margin="0,16,0,0">
+                <StackPanel>
+                    <TextBlock Text="社区资源" Style="{StaticResource SectionTitle}" Margin="0,0,0,4"/>
+                    <ui:SettingRow Title="来源"><TextBlock Text="Modrinth 官方服务"/></ui:SettingRow>
+                    <ui:SettingRow Title="文件名格式">
+                        <StackPanel>
+                            <ui:AnimatedComboBox ItemsSource="{Binding FileNameFormats}"
+                                                 SelectedItem="{Binding FileNameFormat, Mode=TwoWay}"
+                                                 AutomationProperties.Name="社区资源文件名格式"/>
+                            <TextBlock Text="{Binding FileNamePreview}" Style="{StaticResource Caption}" Margin="0,8,0,0"
+                                       TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" ToolTip="{Binding FileNamePreview}"
+                                       AutomationProperties.Name="文件名示例"/>
+                        </StackPanel>
+                    </ui:SettingRow>
+                    <ui:SettingRow Title="Mod 管理样式">
+                        <ui:AnimatedComboBox ItemsSource="{Binding ModManagementStyles}"
+                                             SelectedItem="{Binding ModManagementStyle, Mode=TwoWay}"
+                                             AutomationProperties.Name="Mod 管理显示样式"/>
+                    </ui:SettingRow>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

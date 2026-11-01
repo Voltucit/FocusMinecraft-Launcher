@@ -1,0 +1,95 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.Settings.Views.ThemeSettingsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:FocusMinecraftLauncher.Presentation.Controls"
+             xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:local="clr-namespace:FocusMinecraftLauncher.Features.Settings.Views" Focusable="False">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,24">
+        <Border Style="{StaticResource GlassCard}" VerticalAlignment="Top">
+            <StackPanel>
+                <ui:AnimatedExpander IsExpanded="{Binding IsThemeSettingsExpanded, Mode=TwoWay}" AutomationProperties.Name="界面主题">
+                    <ui:AnimatedExpander.Header>
+                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="界面主题" Style="{StaticResource SectionTitle}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Session.Theme}" Foreground="{DynamicResource MutedText}" Margin="16,0,0,0" VerticalAlignment="Center"/>
+                        </Grid>
+                    </ui:AnimatedExpander.Header>
+                    <StackPanel Margin="0,8,0,0">
+                        <ui:SettingRow Title="主题">
+                            <ui:AnimatedComboBox ItemsSource="{Binding Themes}" SelectedItem="{Binding Session.Theme, Mode=TwoWay}" AutomationProperties.Name="界面主题"/>
+                        </ui:SettingRow>
+                        <ui:SettingRow Title="背景图片">
+                            <StackPanel>
+                                <TextBlock Text="{Binding Session.BackgroundImageName}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Session.BackgroundImageName}" Margin="0,0,0,8"/>
+                                <WrapPanel>
+                                    <fluent:Button Content="{Binding BackgroundActionText}" Command="{Binding BrowseBackground}" Margin="0,0,8,0" AutomationProperties.Name="选择当前主题背景图片"/>
+                                    <fluent:Button Content="恢复默认" Command="{Binding ResetBackground}" Style="{StaticResource QuietButton}"/>
+                                </WrapPanel>
+                                <TextBlock Text="{Binding Session.BackgroundError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </ui:SettingRow>
+                            <ui:SettingRow Title="模糊度" Description="{Binding Session.BackgroundBlurHint}" IsEnabled="{Binding Session.CanAdjustBackgroundBlur}"
+                                           ToolTip="调整自定义背景图片的模糊程度" ToolTipService.ShowOnDisabled="True">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="56"/></Grid.ColumnDefinitions>
+                                    <Slider Minimum="0" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True"
+                                            SmallChange="1" LargeChange="10" IsMoveToPointEnabled="True" MinHeight="32"
+                                            Value="{Binding Session.BackgroundBlur, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                            FocusVisualStyle="{StaticResource FocusVisual}" AutomationProperties.Name="背景模糊度"
+                                            AutomationProperties.HelpText="0 为清晰，100 为最模糊；只影响背景图片"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Session.BackgroundBlur, StringFormat={}{0:0}%}"
+                                               HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                </Grid>
+                            </ui:SettingRow>
+                            <ui:SettingRow Title="动态模糊" Description="{Binding Session.DynamicBlurHint}" IsEnabled="{Binding Session.ShowCustomBackgroundImage}"
+                                           Visibility="{Binding Session.IsBlurTheme, Converter={StaticResource BoolVisibility}}"
+                                           ToolTip="选择背景图片后，模糊强度围绕滑块值缓慢变化" ToolTipService.ShowOnDisabled="True">
+                                <CheckBox Content="启用动态模糊" IsChecked="{Binding Session.DynamicBlurEnabled, Mode=TwoWay}"
+                                          AutomationProperties.Name="启用背景动态模糊"/>
+                            </ui:SettingRow>
+                        <ui:SettingRow Title="配色预设" Visibility="{Binding Session.IsFlatTheme, Converter={StaticResource BoolVisibility}}">
+                            <ui:AnimatedComboBox ItemsSource="{Binding FlatColorPresets}" DisplayMemberPath="Name" SelectedValuePath="Id"
+                                                 SelectedValue="{Binding Session.FlatColorPresetId, Mode=TwoWay}"
+                                                 AutomationProperties.Name="极简主题配色预设"/>
+                        </ui:SettingRow>
+                        <ui:SettingRow Title="夜间模式" Visibility="{Binding Session.IsFlatTheme, Converter={StaticResource BoolVisibility}}">
+                            <fluent:ToggleSwitch IsChecked="{Binding Session.FlatNightMode, Mode=TwoWay}" OnContent="已开启" OffContent="已关闭"
+                                                 HorizontalAlignment="Left" Foreground="{DynamicResource AppText}"
+                                                 FocusVisualStyle="{StaticResource FocusVisual}" AutomationProperties.Name="极简主题夜间模式"/>
+                        </ui:SettingRow>
+                        <ui:SettingRow Title="配色预设" Visibility="{Binding Session.IsSoftTheme, Converter={StaticResource BoolVisibility}}">
+                            <ui:AnimatedComboBox ItemsSource="{Binding SoftColorPresets}" DisplayMemberPath="Name" SelectedValuePath="Id"
+                                                 SelectedValue="{Binding Session.SoftColorPresetId, Mode=TwoWay}"
+                                                 AutomationProperties.Name="柔和主题配色预设"/>
+                        </ui:SettingRow>
+                        <ui:SettingRow Title="夜间模式" Visibility="{Binding Session.IsSoftTheme, Converter={StaticResource BoolVisibility}}">
+                            <fluent:ToggleSwitch IsChecked="{Binding Session.SoftNightMode, Mode=TwoWay}" OnContent="已开启" OffContent="已关闭"
+                                                 HorizontalAlignment="Left" Foreground="{DynamicResource AppText}"
+                                                 FocusVisualStyle="{StaticResource FocusVisual}" AutomationProperties.Name="柔和主题夜间模式"/>
+                        </ui:SettingRow>
+                        <ui:SettingRow Title="界面动画" Description="遵循 Windows 动画偏好">
+                            <CheckBox Content="启用动画" IsChecked="{Binding Session.AnimationsEnabled, Mode=TwoWay}" AutomationProperties.Name="启用界面动画"/>
+                        </ui:SettingRow>
+                    </StackPanel>
+                </ui:AnimatedExpander>
+                <ui:AnimatedExpander Margin="0,16,0,0" IsExpanded="{Binding IsHomeLayoutsExpanded, Mode=TwoWay}" AutomationProperties.Name="主页布局">
+                    <ui:AnimatedExpander.Header>
+                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="主页布局" Style="{StaticResource SectionTitle}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Session.HomeLayoutName}" Foreground="{DynamicResource MutedText}" Margin="16,0,0,0" VerticalAlignment="Center"/>
+                        </Grid>
+                    </ui:AnimatedExpander.Header>
+                    <StackPanel>
+                        <local:HomeLayoutSelector Margin="0,12,-12,12"/>
+                        <ui:SettingRow Title="主页内容" Description="仅经典布局显示">
+                            <WrapPanel>
+                                <CheckBox Content="启动器更新记录" IsChecked="{Binding Session.ShowLauncherUpdates, Mode=TwoWay}" AutomationProperties.Name="显示启动器更新记录" Margin="0,0,24,0"/>
+                                <CheckBox Content="游戏更新记录" IsChecked="{Binding Session.ShowGameUpdates, Mode=TwoWay}" AutomationProperties.Name="显示游戏更新记录"/>
+                            </WrapPanel>
+                        </ui:SettingRow>
+                    </StackPanel>
+                </ui:AnimatedExpander>
+            </StackPanel>
+        </Border>
+    </ScrollViewer>
+</UserControl>

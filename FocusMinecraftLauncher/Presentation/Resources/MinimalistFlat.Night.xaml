@@ -1,0 +1,45 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- 极简夜间：Gray 1/2 表面、11/12 文字，保留直角、实线和无阴影的原有语言。 -->
+    <SolidColorBrush x:Key="AppBackground" Color="#111113"/>
+    <SolidColorBrush x:Key="SidebarBackground" Color="#111113"/>
+    <SolidColorBrush x:Key="TitleBarBackground" Color="#111113"/>
+    <SolidColorBrush x:Key="ContentScrim" Color="#111113"/>
+    <SolidColorBrush x:Key="Surface" Color="#18191B"/>
+    <SolidColorBrush x:Key="PopupSurface" Color="#18191B"/>
+    <SolidColorBrush x:Key="AppText" Color="#EEEEF0"/>
+    <SolidColorBrush x:Key="MutedText" Color="#B0B4BA"/>
+    <SolidColorBrush x:Key="CaptionText" Color="#B0B4BA"/>
+    <SolidColorBrush x:Key="BorderBrush" Color="#8B8D98"/>
+    <SolidColorBrush x:Key="SubtleBorder" Color="#3A3C42"/>
+    <SolidColorBrush x:Key="ControlHover" Color="#222325"/>
+    <SolidColorBrush x:Key="ControlPressed" Color="#2A2B2F"/>
+    <SolidColorBrush x:Key="SelectionBackground" Color="#EEEEF0"/>
+    <SolidColorBrush x:Key="SelectedText" Color="#111113"/>
+    <SolidColorBrush x:Key="NavigationSelectedBackground" Color="#EEEEF0"/>
+    <SolidColorBrush x:Key="NavigationSelectedText" Color="#111113"/>
+    <SolidColorBrush x:Key="AccentText" Color="#EEEEF0"/>
+    <SolidColorBrush x:Key="ErrorText" Color="#EEEEF0"/>
+    <!-- 原模板中的 Black / White 是墨色与纸色角色；夜间保留相同的正反色交互。 -->
+    <SolidColorBrush x:Key="FlatBlack" Color="#EEEEF0"/>
+    <SolidColorBrush x:Key="FlatWhite" Color="#111113"/>
+    <SolidColorBrush x:Key="PrimaryHover" Color="#18191B"/>
+    <SolidColorBrush x:Key="PrimaryPressed" Color="#EEEEF0"/>
+    <SolidColorBrush x:Key="CaptionDangerHover" Color="#EEEEF0"/>
+    <SolidColorBrush x:Key="CaptionDangerPressed" Color="#B0B4BA"/>
+    <SolidColorBrush x:Key="CaptionDangerForeground" Color="#111113"/>
+    <SolidColorBrush x:Key="InfoBarTitleForeground" Color="#EEEEF0"/>
+    <SolidColorBrush x:Key="InfoBarBorderBrush" Color="#8B8D98"/>
+    <SolidColorBrush x:Key="InfoBarInformationalSeverityBackgroundBrush" Color="#18191B"/>
+    <SolidColorBrush x:Key="InfoBarInformationalSeverityBorderBrush" Color="#8B8D98"/>
+    <SolidColorBrush x:Key="InfoBarSuccessSeverityBackgroundBrush" Color="#18191B"/>
+    <SolidColorBrush x:Key="InfoBarSuccessSeverityBorderBrush" Color="#8B8D98"/>
+    <SolidColorBrush x:Key="InfoBarSuccessSeverityIconBackground" Color="#EEEEF0"/>
+    <SolidColorBrush x:Key="InfoBarWarningSeverityBackgroundBrush" Color="#18191B"/>
+    <SolidColorBrush x:Key="InfoBarWarningSeverityBorderBrush" Color="#8B8D98"/>
+    <SolidColorBrush x:Key="InfoBarWarningSeverityIconBackground" Color="#EEEEF0"/>
+    <SolidColorBrush x:Key="InfoBarErrorSeverityBackgroundBrush" Color="#18191B"/>
+    <SolidColorBrush x:Key="InfoBarErrorSeverityBorderBrush" Color="#8B8D98"/>
+    <SolidColorBrush x:Key="InfoBarErrorSeverityIconBackground" Color="#EEEEF0"/>
+    <Color x:Key="SystemAccentColorSecondary">#EEEEF0</Color>
+</ResourceDictionary>

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
@@ -6,6 +6,49 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <UseWPF>true</UseWPF>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
     </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="FocusMinecraftCore" Version="2.0.2" />
+      <PackageReference Include="WPF-UI" Version="4.3.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Resource Include="Presentation\Assets\DefaultPlayerHead.png" />
+      <Resource Include="Assets\GamesIcon\*.png" />
+      <Resource Include="Assets\DownloadAssets\*.png" />
+    </ItemGroup>
+
+
+    <PropertyGroup>
+        <!-- Windows 文件属性中的文件描述 -->
+        <AssemblyTitle>Focus!Minecraft Launcher</AssemblyTitle>
+
+        <!-- 产品名称 -->
+        <Product>Focus!Minecraft Launcher</Product>
+
+        <!-- 程序描述 -->
+        <Description>Minecraft 启动器</Description>
+
+        <!-- 软件版本号 -->
+        <Version>1.0.0</Version>
+
+        <!-- 程序集版本 -->
+        <AssemblyVersion>1.0.0.0</AssemblyVersion>
+
+        <!-- Windows 文件版本 -->
+        <FileVersion>1.0.0.0</FileVersion>
+
+        <!-- Windows 产品版本 -->
+        <InformationalVersion>1.0.0</InformationalVersion>
+
+        <!-- 避免产品版本自动附带 Git 提交哈希 -->
+        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+
+        <!-- EXE 图标 -->
+<!--        <ApplicationIcon>Assets\FMLauncher.ico</ApplicationIcon>-->
+    </PropertyGroup>
+
 
 </Project>

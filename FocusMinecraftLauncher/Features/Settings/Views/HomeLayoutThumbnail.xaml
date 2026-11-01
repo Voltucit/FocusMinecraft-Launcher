@@ -1,0 +1,36 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.Settings.Views.HomeLayoutThumbnail"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:models="clr-namespace:FocusMinecraftLauncher.Features.Home.Models" x:Name="Root" Focusable="False" IsHitTestVisible="False">
+    <UserControl.Resources>
+        <Style x:Key="PreviewAvatar" TargetType="Border"><Setter Property="Width" Value="24"/><Setter Property="Height" Value="24"/><Setter Property="CornerRadius" Value="{DynamicResource Radius4}"/><Setter Property="Background" Value="{DynamicResource MutedText}"/></Style>
+        <Style x:Key="PreviewAction" TargetType="Border"><Setter Property="Height" Value="16"/><Setter Property="CornerRadius" Value="{DynamicResource Radius4}"/><Setter Property="Background" Value="{DynamicResource PrimaryBackground}"/></Style>
+        <Style x:Key="PreviewSecondary" TargetType="Border"><Setter Property="Height" Value="10"/><Setter Property="CornerRadius" Value="{DynamicResource Radius3}"/><Setter Property="Background" Value="{DynamicResource ControlHover}"/><Setter Property="BorderBrush" Value="{DynamicResource SubtleBorder}"/><Setter Property="BorderThickness" Value="{DynamicResource OutlineThickness}"/></Style>
+    </UserControl.Resources>
+    <Viewbox Stretch="Uniform" Height="130">
+        <Border Width="240" Height="130" Background="{DynamicResource SidebarBackground}" CornerRadius="{DynamicResource Radius8}" BorderThickness="{DynamicResource OutlineThickness}" BorderBrush="{DynamicResource SubtleBorder}" Padding="10">
+            <Grid>
+                <Grid>
+                    <Grid.Style><Style TargetType="Grid"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Layout, ElementName=Root}" Value="{x:Static models:HomeLayout.Classic}"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Grid.Style>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="76"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Grid><Grid.RowDefinitions><RowDefinition Height="12"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                        <UniformGrid Columns="2"><Border Background="{DynamicResource SelectionBackground}" CornerRadius="{DynamicResource Radius3}" Margin="0,0,2,0"/><Border Background="{DynamicResource ControlHover}" CornerRadius="{DynamicResource Radius3}"/></UniformGrid>
+                        <StackPanel Grid.Row="1" VerticalAlignment="Center"><Border Style="{StaticResource PreviewAvatar}"/><Border Height="3" Width="32" Background="{DynamicResource MutedText}" Margin="0,6,0,0"/><UniformGrid Columns="3" Margin="12,6"><Border Style="{StaticResource PreviewSecondary}" Margin="1,0"/><Border Style="{StaticResource PreviewSecondary}" Margin="1,0"/><Border Style="{StaticResource PreviewSecondary}" Margin="1,0"/></UniformGrid></StackPanel>
+                        <StackPanel Grid.Row="2"><Border Style="{StaticResource PreviewAction}"/><UniformGrid Columns="2" Margin="0,4,0,0"><Border Style="{StaticResource PreviewSecondary}" Margin="0,0,2,0"/><Border Style="{StaticResource PreviewSecondary}" Margin="2,0,0,0"/></UniformGrid></StackPanel>
+                    </Grid>
+                    <StackPanel Grid.Column="2"><Border Width="60" Height="5" Background="{DynamicResource MutedText}" HorizontalAlignment="Left"/><Border Height="36" Background="{DynamicResource ControlHover}" CornerRadius="{DynamicResource Radius4}" Margin="0,10,0,8"/><Border Height="3" Background="{DynamicResource SubtleBorder}" Margin="0,0,16,5"/><Border Height="3" Background="{DynamicResource SubtleBorder}" Margin="0,0,30,5"/></StackPanel>
+                </Grid>
+                <Grid>
+                    <Grid.Style><Style TargetType="Grid"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Layout, ElementName=Root}" Value="{x:Static models:HomeLayout.Minimal}"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Grid.Style>
+                    <Border Width="76" Height="5" Background="{DynamicResource MutedText}" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                    <Border Style="{StaticResource PreviewAvatar}" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
+                    <StackPanel Width="90" HorizontalAlignment="Right" VerticalAlignment="Bottom"><Border Style="{StaticResource PreviewAction}"/><UniformGrid Columns="2" Margin="0,4,0,0"><Border Style="{StaticResource PreviewSecondary}" Margin="0,0,2,0"/><Border Style="{StaticResource PreviewSecondary}" Margin="2,0,0,0"/></UniformGrid></StackPanel>
+                </Grid>
+                <StackPanel Width="96" VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Layout, ElementName=Root}" Value="{x:Static models:HomeLayout.Centered}"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></StackPanel.Style>
+                    <Border Style="{StaticResource PreviewAvatar}"/><Border Width="70" Height="5" Background="{DynamicResource MutedText}" Margin="0,8,0,10"/>
+                    <Border Style="{StaticResource PreviewAction}"/><UniformGrid Columns="2" Margin="0,4,0,0"><Border Style="{StaticResource PreviewSecondary}" Margin="0,0,2,0"/><Border Style="{StaticResource PreviewSecondary}" Margin="2,0,0,0"/></UniformGrid>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Viewbox>
+</UserControl>

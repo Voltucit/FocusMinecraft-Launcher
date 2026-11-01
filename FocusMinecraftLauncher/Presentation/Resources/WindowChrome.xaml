@@ -1,0 +1,85 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                    xmlns:chrome="clr-namespace:FocusMinecraftLauncher.Presentation.Controls">
+    <DrawingImage x:Key="LauncherIcon">
+        <DrawingImage.Drawing>
+            <GeometryDrawing Geometry="M10,1 L18,5.5 V14.5 L10,19 2,14.5 V5.5 Z M2,5.5 L10,10 18,5.5 M10,10 V19">
+                <GeometryDrawing.Pen><Pen Brush="{DynamicResource AppText}" Thickness="1.5" LineJoin="Round"/></GeometryDrawing.Pen>
+            </GeometryDrawing>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+    <Style x:Key="CaptionButton" TargetType="ui:TitleBarButton"
+           BasedOn="{StaticResource {x:Type ui:TitleBarButton}}">
+        <Setter Property="Width" Value="46"/>
+        <Setter Property="Height" Value="40"/>
+        <Setter Property="Focusable" Value="True"/>
+        <Setter Property="IsTabStop" Value="True"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="MouseOverButtonsForeground" Value="{DynamicResource AppText}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ui:TitleBarButton">
+                    <Grid x:Name="CaptionSurface" Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+                        <Border x:Name="PressFeedback" Background="{DynamicResource ControlPressed}" Opacity="0"/>
+                        <Viewbox Width="12" Height="12" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Canvas Width="12" Height="12">
+                                <Path x:Name="Glyph" Stroke="{TemplateBinding RenderButtonsForeground}" StrokeThickness="1"
+                                      Data="M1,6 H11"/>
+                            </Canvas>
+                        </Viewbox>
+                        <Border x:Name="FocusFrame" Margin="4" BorderThickness="2" CornerRadius="{DynamicResource Radius4}" BorderBrush="Transparent"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="ButtonType" Value="Minimize">
+                            <Setter Property="CommandParameter" Value="{x:Static ui:TitleBarButtonType.Minimize}"/>
+                            <Setter Property="ToolTip" Value="最小化"/>
+                            <Setter Property="AutomationProperties.Name" Value="最小化"/>
+                        </Trigger>
+                        <Trigger Property="ButtonType" Value="Maximize">
+                            <Setter TargetName="Glyph" Property="Data" Value="M1.5,1.5 H10.5 V10.5 H1.5 Z"/>
+                            <Setter Property="CommandParameter" Value="{x:Static ui:TitleBarButtonType.Maximize}"/>
+                            <Setter Property="ToolTip" Value="最大化"/>
+                            <Setter Property="AutomationProperties.Name" Value="最大化"/>
+                        </Trigger>
+                        <Trigger Property="ButtonType" Value="Restore">
+                            <Setter TargetName="Glyph" Property="Data" Value="M3.5,1.5 H10.5 V8.5 H8.5 M1.5,3.5 H8.5 V10.5 H1.5 Z"/>
+                            <Setter Property="CommandParameter" Value="{x:Static ui:TitleBarButtonType.Restore}"/>
+                            <Setter Property="ToolTip" Value="还原"/>
+                            <Setter Property="AutomationProperties.Name" Value="还原"/>
+                        </Trigger>
+                        <Trigger Property="ButtonType" Value="Close">
+                            <Setter TargetName="Glyph" Property="Data" Value="M1.5,1.5 L10.5,10.5 M10.5,1.5 L1.5,10.5"/>
+                            <Setter TargetName="PressFeedback" Property="Background" Value="{DynamicResource CaptionDangerPressed}"/>
+                            <Setter Property="CommandParameter" Value="{x:Static ui:TitleBarButtonType.Close}"/>
+                            <Setter Property="ToolTip" Value="关闭"/>
+                            <Setter Property="AutomationProperties.Name" Value="关闭"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="PressFeedback" Property="Opacity" Value="1"/>
+                        </Trigger>
+                        <Trigger Property="chrome:CaptionButtonFeedback.IsNativePressed" Value="True">
+                            <Setter TargetName="PressFeedback" Property="Opacity" Value="1"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="FocusFrame" Property="BorderBrush" Value="{DynamicResource FocusRing}"/>
+                        </Trigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions><Condition Property="ButtonType" Value="Close"/><Condition Property="chrome:CaptionButtonFeedback.IsNativePressed" Value="True"/></MultiTrigger.Conditions>
+                            <Setter TargetName="Glyph" Property="Stroke" Value="{DynamicResource CaptionDangerForeground}"/>
+                        </MultiTrigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions><Condition Property="ButtonType" Value="Close"/><Condition Property="IsPressed" Value="True"/></MultiTrigger.Conditions>
+                            <Setter TargetName="Glyph" Property="Stroke" Value="{DynamicResource CaptionDangerForeground}"/>
+                        </MultiTrigger>
+                        <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4"/></Trigger>
+                        <MultiDataTrigger><MultiDataTrigger.Conditions>
+                            <Condition Binding="{Binding Path=(chrome:ThemeVisuals.IsFlat), RelativeSource={RelativeSource Self}}" Value="True"/>
+                            <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="True"/>
+                        </MultiDataTrigger.Conditions><Setter TargetName="CaptionSurface" Property="Background" Value="{DynamicResource FlatBlack}"/><Setter TargetName="Glyph" Property="Stroke" Value="{DynamicResource FlatWhite}"/></MultiDataTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>

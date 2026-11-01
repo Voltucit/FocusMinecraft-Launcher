@@ -1,0 +1,40 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.Downloads.Views.CommunityResourcePage"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:ui="clr-namespace:FocusMinecraftLauncher.Presentation.Controls" xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+ xmlns:local="clr-namespace:FocusMinecraftLauncher.Features.Downloads.Views" SizeChanged="ResizeFilters" Loaded="UpdateFilterWidth" Focusable="False" Foreground="{DynamicResource AppText}">
+    <UserControl.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="DownloadResources.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></UserControl.Resources>
+    <UserControl.InputBindings><KeyBinding Key="Enter" Command="{Binding Search}"/></UserControl.InputBindings>
+    <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel Margin="0,0,0,8"><TextBlock Text="{Binding Notice}" Style="{StaticResource Muted}" Visibility="{Binding Notice, Converter={StaticResource TextVisibility}}" Margin="0,0,0,8"/>
+            <WrapPanel Margin="0,0,-8,0">
+                <StackPanel Width="{Binding NameFieldWidth}" Margin="0,0,8,8"><TextBlock Text="名称" Style="{StaticResource CommunityFilterLabel}"/><fluent:TextBox Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}" Tag="名称、英文名或别名" Height="48" AutomationProperties.Name="资源名称搜索"/></StackPanel>
+                <StackPanel Width="150" Margin="0,0,8,8" Visibility="{Binding IsSearchExpanded, Converter={StaticResource BoolVisibility}}"><TextBlock Text="来源" Style="{StaticResource CommunityFilterLabel}"/><ui:AnimatedComboBox Style="{StaticResource CommunityCombo}" ItemsSource="{Binding Sources}" SelectedItem="{Binding Source, Mode=TwoWay}" AutomationProperties.Name="资源来源筛选"/></StackPanel>
+                <fluent:Button Content="搜索" Command="{Binding Search}" Style="{StaticResource PrimaryButton}" MinWidth="80" Height="48" Margin="0,20,8,8"/>
+                <fluent:Button Content="重置条件" Command="{Binding Reset}" MinWidth="88" Height="48" Margin="0,20,8,8" Visibility="{Binding IsSearchExpanded, Converter={StaticResource BoolVisibility}}"/>
+                <fluent:Button Content="{Binding FilterToggleText}" Command="{Binding ToggleFilters}" Style="{StaticResource QuietButton}" MinWidth="96" Height="48" Margin="0,20,8,8"/>
+            </WrapPanel>
+            <TextBlock Text="{Binding SearchSummary}" Style="{StaticResource DownloadMeta}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" ToolTip="{Binding SearchSummary}" Margin="0,0,0,8" Visibility="{Binding IsSearchExpanded, Converter={StaticResource NotVisibility}}"/>
+            <StackPanel Visibility="{Binding IsSearchExpanded, Converter={StaticResource BoolVisibility}}">
+                <WrapPanel Margin="0,0,-8,0">
+                    <ToggleButton Width="240" Height="48" Margin="0,20,8,8" Style="{StaticResource CommunityDisclosureToggle}" IsChecked="{Binding VersionFilter.IsExpanded, Mode=TwoWay}" AutomationProperties.Name="展开或收起游戏版本筛选">
+                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="游戏版本" Style="{StaticResource ResourceBody}" Margin="0,0,12,0"/><TextBlock Grid.Column="1" Text="{Binding VersionFilter.SelectionText}" Style="{StaticResource ResourceBody}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/></Grid>
+                    </ToggleButton>
+                    <StackPanel Width="160" Margin="0,0,8,8"><TextBlock Text="类型" Style="{StaticResource CommunityFilterLabel}"/><ui:AnimatedComboBox Style="{StaticResource CommunityCombo}" ItemsSource="{Binding Tags}" SelectedItem="{Binding Tag, Mode=TwoWay}" AutomationProperties.Name="资源类型筛选"/></StackPanel>
+                    <StackPanel Width="160" Margin="0,0,8,8" Visibility="{Binding UsesEnvironment, Converter={StaticResource BoolVisibility}}"><TextBlock Text="{Binding EnvironmentTitle}" Style="{StaticResource CommunityFilterLabel}"/><ui:AnimatedComboBox Style="{StaticResource CommunityCombo}" ItemsSource="{Binding Environments}" SelectedItem="{Binding Environment, Mode=TwoWay}" AutomationProperties.Name="加载器或运行环境筛选"/></StackPanel>
+                </WrapPanel>
+                <local:GameVersionFilterBody DataContext="{Binding VersionFilter}"/>
+            </StackPanel>
+        </StackPanel>
+        <!-- 每页六项；所有条目展开内容共用一个主滚动区，不创建行内滚动条。 -->
+        <Grid Grid.Row="1">
+            <ScrollViewer Style="{StaticResource CommunityScroll}" local:ScrollRetention.Position="{Binding Scroll}" Padding="0,0,6,0">
+                <ItemsControl ItemsSource="{Binding PageItems}"><ItemsControl.ItemTemplate><DataTemplate><local:ResourceEntryView/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+            </ScrollViewer>
+            <TextBlock Text="没有匹配的资源，请调整筛选条件。" Style="{StaticResource ResourceDescription}" Margin="12,24" Visibility="{Binding IsEmpty, Converter={StaticResource BoolVisibility}}"/>
+        </Grid>
+        <Grid Grid.Row="2" Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <TextBlock Text="{Binding PageText}" Style="{StaticResource ResourceBody}" VerticalAlignment="Center"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal"><fluent:Button Content="上一页" Command="{Binding PreviousPage}" MinWidth="88" Margin="0,0,8,0"/><fluent:Button Content="下一页" Command="{Binding NextPage}" MinWidth="88"/></StackPanel>
+        </Grid>
+    </Grid>
+</UserControl>

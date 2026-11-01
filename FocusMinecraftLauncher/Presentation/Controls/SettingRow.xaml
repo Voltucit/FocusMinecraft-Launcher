@@ -1,0 +1,14 @@
+<UserControl x:Class="FocusMinecraftLauncher.Presentation.Controls.SettingRow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Name="Root" SizeChanged="ResizeRow" Focusable="False">
+    <Border BorderBrush="{DynamicResource SubtleBorder}" BorderThickness="0,0,0,1" Padding="0,16">
+        <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition x:Name="LabelColumn" Width="220"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <StackPanel x:Name="Labels" VerticalAlignment="Center" Margin="0,0,24,0">
+                <TextBlock Text="{Binding Title, ElementName=Root}" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding Description, ElementName=Root}" Style="{StaticResource Caption}" Margin="0,4,0,0" Visibility="{Binding Description, ElementName=Root, Converter={StaticResource TextVisibility}}"/>
+            </StackPanel>
+            <ContentPresenter x:Name="EditorHost" Grid.Column="1" Content="{Binding Editor, ElementName=Root}" VerticalAlignment="Center"/>
+        </Grid>
+    </Border>
+</UserControl>

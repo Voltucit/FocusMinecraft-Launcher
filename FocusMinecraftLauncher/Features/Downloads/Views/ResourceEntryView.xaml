@@ -1,0 +1,32 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.Downloads.Views.ResourceEntryView"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:ui="clr-namespace:FocusMinecraftLauncher.Presentation.Controls" xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+ xmlns:local="clr-namespace:FocusMinecraftLauncher.Features.Downloads.Views" Focusable="False" Foreground="{DynamicResource AppText}">
+    <UserControl.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="DownloadResources.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></UserControl.Resources>
+    <Border BorderBrush="{DynamicResource SubtleBorder}" BorderThickness="0,0,0,1" Margin="0,0,0,8">
+        <ui:AnimatedExpander Style="{StaticResource CommunityExpander}" IsExpanded="{Binding IsExpanded, Mode=TwoWay}" AutomationProperties.Name="{Binding Project.Name}">
+            <ui:AnimatedExpander.Header>
+                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="76"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Border Width="60" Height="60" CornerRadius="{DynamicResource ControlCornerRadius}" VerticalAlignment="Top" HorizontalAlignment="Left"><Border.Background><ImageBrush ImageSource="{Binding Project.Image}" Stretch="UniformToFill"/></Border.Background></Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="{Binding Project.Name}" Style="{StaticResource ResourceTitle}" ToolTip="{Binding Project.Name}"/>
+                        <TextBlock Text="{Binding Project.Description}" Style="{StaticResource ResourceDescription}" TextTrimming="CharacterEllipsis" MaxHeight="40" ToolTip="{Binding Project.Description}" Margin="0,4,0,4"/>
+                        <local:ResourceMetadata DataContext="{Binding Project}"/>
+                    </StackPanel>
+                </Grid>
+            </ui:AnimatedExpander.Header>
+            <Border Background="{DynamicResource Surface}" CornerRadius="{DynamicResource ControlCornerRadius}" Padding="12">
+                <StackPanel>
+                    <TextBlock Text="{Binding Project.Description}" Style="{StaticResource ResourceDescription}" Margin="0,0,0,12"/>
+                    <TextBlock Text="文件版本" Style="{StaticResource CommunityFilterLabel}"/>
+                    <ui:AnimatedComboBox Style="{StaticResource CommunityCombo}" ItemsSource="{Binding Project.Files}" SelectedItem="{Binding SelectedFile, Mode=TwoWay}" DisplayMemberPath="Label" IsEnabled="{Binding HasFiles}" AutomationProperties.Name="展开内容的文件版本" Margin="0,0,0,8"/>
+                    <TextBlock Text="{Binding DependencySummary}" Style="{StaticResource ResourceBody}" Margin="0,0,0,8"/>
+                    <ui:AnimatedExpander Header="前置资源" Style="{StaticResource CommunityExpander}" IsExpanded="{Binding IsDependenciesExpanded, Mode=TwoWay}" Visibility="{Binding HasDependencies, Converter={StaticResource BoolVisibility}}">
+                        <ItemsControl ItemsSource="{Binding Dependencies}" ItemTemplate="{StaticResource DependencyRow}"/>
+                    </ui:AnimatedExpander>
+                    <WrapPanel Margin="0,12,0,0"><fluent:Button Content="查看详情" Command="{Binding OpenDetails}" Margin="0,0,8,0"/><fluent:Button Content="选择版本" Command="{Binding ChooseVersion}" Style="{StaticResource QuietButton}"/></WrapPanel>
+                </StackPanel>
+            </Border>
+        </ui:AnimatedExpander>
+    </Border>
+</UserControl>

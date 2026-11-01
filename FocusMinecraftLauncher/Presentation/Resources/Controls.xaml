@@ -1,0 +1,420 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+                    xmlns:visual="clr-namespace:FocusMinecraftLauncher.Presentation.Controls"
+                    xmlns:common="clr-namespace:FocusMinecraftLauncher.Common">
+    <!-- Radix Gray 1/2 表面、3/4/5 交互、6/7 边界、11/12 文字；Jade 11 与 Red 11 用于反馈。 -->
+    <SolidColorBrush x:Key="AppBackground" Color="#FCFCFC"/>
+    <SolidColorBrush x:Key="SidebarBackground" Color="#F9F9F9"/>
+    <SolidColorBrush x:Key="Surface" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="ControlHover" Color="#F0F0F0"/>
+    <SolidColorBrush x:Key="ControlPressed" Color="#E0E0E0"/>
+    <SolidColorBrush x:Key="SelectionBackground" Color="#E8E8E8"/>
+    <SolidColorBrush x:Key="AppText" Color="#202020"/>
+    <SolidColorBrush x:Key="SelectedText" Color="#202020"/>
+    <SolidColorBrush x:Key="MutedText" Color="#646464"/>
+    <SolidColorBrush x:Key="BorderBrush" Color="#D9D9D9"/>
+    <SolidColorBrush x:Key="SubtleBorder" Color="#E8E8E8"/>
+    <SolidColorBrush x:Key="FocusRing" Color="#646464"/>
+    <SolidColorBrush x:Key="PrimaryBackground" Color="#202020"/>
+    <SolidColorBrush x:Key="PrimaryForeground" Color="#FCFCFC"/>
+    <SolidColorBrush x:Key="AccentText" Color="#208368"/>
+    <SolidColorBrush x:Key="ErrorText" Color="#CE2C31"/>
+    <BooleanToVisibilityConverter x:Key="BoolVisibility"/>
+    <common:InverseVisibilityConverter x:Key="NotVisibility"/>
+    <common:TextVisibilityConverter x:Key="TextVisibility"/>
+    <common:InverseBooleanConverter x:Key="InverseBoolean"/>
+    <common:ObjectVisibilityConverter x:Key="ObjectVisibility"/>
+    <common:ZeroVisibilityConverter x:Key="ZeroVisibility"/>
+    <Style x:Key="FocusVisual">
+        <Setter Property="Control.Template"><Setter.Value><ControlTemplate>
+            <Rectangle Margin="-3" Stroke="{DynamicResource FocusRing}" StrokeThickness="2" RadiusX="{DynamicResource FocusCornerRadius}" RadiusY="{DynamicResource FocusCornerRadius}"/>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="TextBlock">
+        <Setter Property="FontSize" Value="14"/>
+    </Style>
+    <Style x:Key="PageTitle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="24"/><Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+    <Style x:Key="SectionTitle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="16"/><Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style x:Key="Muted" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource MutedText}"/><Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+    <Style x:Key="Caption" TargetType="TextBlock" BasedOn="{StaticResource Muted}">
+        <Setter Property="FontSize" Value="12"/><Setter Property="Foreground" Value="{DynamicResource CaptionText}"/>
+    </Style>
+    <Style x:Key="FieldLabel" TargetType="TextBlock">
+        <Setter Property="Margin" Value="0,0,0,8"/>
+    </Style>
+    <Style x:Key="ErrorMessage" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource ErrorText}"/><Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="AutomationProperties.LiveSetting" Value="Assertive"/>
+        <Setter Property="Visibility" Value="{Binding Text, RelativeSource={RelativeSource Self}, Converter={StaticResource TextVisibility}}"/>
+    </Style>
+    <Style x:Key="ThemePopupSurface" TargetType="Border">
+        
+        <Setter Property="visual:ThemeVisuals.IsSoft" Value="{DynamicResource SoftEnabled}"/>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsSoft), RelativeSource={RelativeSource Self}}" Value="True"><Setter Property="Effect" Value="{DynamicResource SoftPopupShadow}"/></DataTrigger>
+
+            
+</Style.Triggers>
+    </Style>
+    <!-- 使用 WPF UI 原生模板，保留库中的按键、焦点、禁用和编辑行为。 -->
+    <Style TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+        <Setter Property="Foreground" Value="{DynamicResource AppText}"/>
+        <Setter Property="Background" Value="{DynamicResource Surface}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        <Setter Property="Border.CornerRadius" Value="{DynamicResource Radius12}"/>
+        <Setter Property="Padding" Value="16,9"/><Setter Property="MinHeight" Value="40"/>
+        <Setter Property="FontSize" Value="14"/><Setter Property="FontWeight" Value="Medium"/>
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual}"/>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsFlat), RelativeSource={RelativeSource Self}}" Value="True"><Setter Property="Template" Value="{DynamicResource FlatNativeButtonTemplate}"/><Setter Property="BorderThickness" Value="2"/><Setter Property="Effect" Value="{x:Null}"/></DataTrigger>
+</Style.Triggers>
+    </Style>
+    <Style TargetType="fluent:Button" BasedOn="{StaticResource DefaultUiButtonStyle}">
+        <Setter Property="Foreground" Value="{DynamicResource AppText}"/>
+        <Setter Property="Background" Value="{DynamicResource Surface}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius12}"/>
+        <Setter Property="Padding" Value="16,9"/><Setter Property="MinHeight" Value="40"/>
+        <Setter Property="FontSize" Value="14"/><Setter Property="FontWeight" Value="Medium"/>
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual}"/>
+    <Style.Triggers>
+            
+            
+
+            <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsFlat), RelativeSource={RelativeSource Self}}" Value="True"><Setter Property="Template" Value="{DynamicResource FlatButtonTemplate}"/><Setter Property="BorderThickness" Value="2"/><Setter Property="Effect" Value="{x:Null}"/></DataTrigger>
+
+            <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsSoft), RelativeSource={RelativeSource Self}}" Value="True"><Setter Property="Template" Value="{DynamicResource SoftButtonTemplate}"/><Setter Property="BorderThickness" Value="0"/><Setter Property="visual:SoftMotion.Enabled" Value="True"/><Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual}"/></DataTrigger>
+
+            
+</Style.Triggers>
+    </Style>
+    <Style x:Key="PrimaryButton" TargetType="fluent:Button" BasedOn="{StaticResource {x:Type fluent:Button}}">
+        <Setter Property="Appearance" Value="Primary"/>
+    </Style>
+    <Style x:Key="QuietButton" TargetType="fluent:Button" BasedOn="{StaticResource {x:Type fluent:Button}}">
+        <Setter Property="Appearance" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="10,8"/>
+    </Style>
+    <Style x:Key="DangerButton" TargetType="fluent:Button" BasedOn="{StaticResource QuietButton}">
+        <Setter Property="Foreground" Value="{DynamicResource ErrorText}"/>
+    </Style>
+    <Style TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
+        <Setter Property="SelectionBrush" Value="{DynamicResource SelectionBackground}"/>
+        <Setter Property="Border.CornerRadius" Value="{DynamicResource Radius12}"/>
+        <Setter Property="Padding" Value="12,9"/><Setter Property="MinHeight" Value="40"/>
+        <Setter Property="FontSize" Value="14"/><Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Style.Triggers>
+            
+            
+
+            <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsFlat), RelativeSource={RelativeSource Self}}" Value="True"><Setter Property="Template" Value="{DynamicResource FlatTextBoxTemplate}"/><Setter Property="CaretBrush" Value="{DynamicResource FlatBlack}"/><Setter Property="SelectionBrush" Value="{DynamicResource FlatBlack}"/><Setter Property="SelectionTextBrush" Value="{DynamicResource FlatWhite}"/><Setter Property="SelectionOpacity" Value="1"/><Setter Property="ContextMenu" Value="{DynamicResource FlatEditMenu}"/><Setter Property="Validation.ErrorTemplate" Value="{DynamicResource FlatValidationTemplate}"/><Setter Property="Effect" Value="{x:Null}"/></DataTrigger>
+
+            <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsSoft), RelativeSource={RelativeSource Self}}" Value="True"><Setter Property="Template" Value="{DynamicResource SoftTextBoxTemplate}"/><Setter Property="visual:SoftMotion.Enabled" Value="True"/><Setter Property="SelectionBrush" Value="{DynamicResource PrimaryBackground}"/><Setter Property="SelectionTextBrush" Value="White"/><Setter Property="SelectionOpacity" Value="1"/><Setter Property="ContextMenu" Value="{DynamicResource SoftEditMenu}"/><Setter Property="Validation.ErrorTemplate" Value="{DynamicResource SoftValidationTemplate}"/></DataTrigger>
+
+            
+</Style.Triggers>
+    </Style>
+    <Style TargetType="fluent:TextBox" BasedOn="{StaticResource DefaultUiTextBoxStyle}">
+        <Setter Property="SelectionBrush" Value="{DynamicResource SelectionBackground}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual}"/>
+        <Setter Property="Border.CornerRadius" Value="{DynamicResource Radius12}"/>
+        <Setter Property="Padding" Value="12,9"/><Setter Property="MinHeight" Value="40"/>
+        <Setter Property="FontSize" Value="14"/><Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="PlaceholderText" Value="{Binding Tag, RelativeSource={RelativeSource Self}}"/>
+        <Setter Property="ClearButtonEnabled" Value="False"/>
+        <Style.Triggers><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource FocusRing}"/></Trigger>
+            
+            
+
+            <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsFlat), RelativeSource={RelativeSource Self}}" Value="True"><Setter Property="Template" Value="{DynamicResource FlatTextBoxTemplate}"/><Setter Property="CaretBrush" Value="{DynamicResource FlatBlack}"/><Setter Property="SelectionBrush" Value="{DynamicResource FlatBlack}"/><Setter Property="SelectionTextBrush" Value="{DynamicResource FlatWhite}"/><Setter Property="SelectionOpacity" Value="1"/><Setter Property="ContextMenu" Value="{DynamicResource FlatEditMenu}"/><Setter Property="Validation.ErrorTemplate" Value="{DynamicResource FlatValidationTemplate}"/><Setter Property="Effect" Value="{x:Null}"/></DataTrigger>
+
+            <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsSoft), RelativeSource={RelativeSource Self}}" Value="True"><Setter Property="Template" Value="{DynamicResource SoftTextBoxTemplate}"/><Setter Property="visual:SoftMotion.Enabled" Value="True"/><Setter Property="SelectionBrush" Value="{DynamicResource PrimaryBackground}"/><Setter Property="SelectionTextBrush" Value="White"/><Setter Property="SelectionOpacity" Value="1"/><Setter Property="ContextMenu" Value="{DynamicResource SoftEditMenu}"/><Setter Property="Validation.ErrorTemplate" Value="{DynamicResource SoftValidationTemplate}"/></DataTrigger>
+
+            
+</Style.Triggers>
+    </Style>
+    <Style TargetType="ComboBoxItem">
+        <Setter Property="Foreground" Value="{DynamicResource AppText}"/>
+        <Setter Property="Padding" Value="12,9"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem">
+            <Border x:Name="Frame" Background="Transparent" BorderBrush="Transparent" BorderThickness="2" CornerRadius="{DynamicResource Radius6}" Padding="{TemplateBinding Padding}">
+                <ContentPresenter/>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Frame" Property="Background" Value="{DynamicResource ControlHover}"/></Trigger>
+                <Trigger Property="IsSelected" Value="True"><Setter TargetName="Frame" Property="Background" Value="{DynamicResource SelectionBackground}"/><Setter Property="Foreground" Value="{DynamicResource SelectedText}"/></Trigger>
+                            <MultiDataTrigger><MultiDataTrigger.Conditions>
+                    <Condition Binding="{Binding Path=(visual:ThemeVisuals.IsFlat), RelativeSource={RelativeSource Self}}" Value="True"/>
+                    <Condition Binding="{Binding IsHighlighted, RelativeSource={RelativeSource Self}}" Value="True"/>
+                </MultiDataTrigger.Conditions><Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource FlatBlack}"/><Setter TargetName="Frame" Property="BorderThickness" Value="2"/></MultiDataTrigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="ComboBox">
+        <Setter Property="Foreground" Value="{DynamicResource AppText}"/><Setter Property="Background" Value="{DynamicResource Surface}"/>
+        <Setter Property="FontSize" Value="14"/><Setter Property="MinHeight" Value="40"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual}"/>
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox">
+            <Grid>
+                <ToggleButton x:Name="Toggle" Focusable="False" ClickMode="Press" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                    <ToggleButton.Template><ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Frame" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="{DynamicResource OutlineThickness}" CornerRadius="{DynamicResource ControlCornerRadius}">
+                            <Path Data="M0,0 L4,4 8,0" Stroke="{DynamicResource MutedText}" StrokeThickness="1.5" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                        </Border>
+                        <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource FocusRing}"/></Trigger></ControlTemplate.Triggers>
+                    </ControlTemplate></ToggleButton.Template>
+                </ToggleButton>
+                <ContentPresenter Margin="12,8,36,8" IsHitTestVisible="False" VerticalAlignment="Center" Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"/>
+                <Border x:Name="Focus" BorderBrush="Transparent" BorderThickness="2" CornerRadius="{DynamicResource ControlCornerRadius}" IsHitTestVisible="False"/>
+                <Popup x:Name="PART_Popup" Placement="Bottom" HorizontalOffset="{DynamicResource DropdownHorizontalOffset}" IsOpen="{TemplateBinding IsDropDownOpen}" AllowsTransparency="True" Focusable="False" PopupAnimation="None">
+                    <Border Style="{StaticResource ThemePopupSurface}" Margin="{DynamicResource DropdownPopupMargin}" Padding="4" Background="{DynamicResource PopupSurface}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="{DynamicResource OutlineThickness}" CornerRadius="{DynamicResource DropdownCornerRadius}" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="320">
+                        <ScrollViewer CanContentScroll="True"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/></ScrollViewer>
+                    </Border>
+                </Popup>
+            </Grid>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Focus" Property="BorderBrush" Value="{DynamicResource FocusRing}"/></Trigger>
+                <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="{DynamicResource DisabledOpacity}"/></Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+    <Style.Triggers>
+                        <MultiDataTrigger><MultiDataTrigger.Conditions>
+                <Condition Binding="{Binding Path=(visual:ThemeVisuals.IsFlat), RelativeSource={RelativeSource Self}}" Value="True"/>
+                <Condition Binding="{Binding IsEnabled, RelativeSource={RelativeSource Self}}" Value="False"/>
+            </MultiDataTrigger.Conditions><Setter Property="Foreground" Value="{DynamicResource MutedText}"/></MultiDataTrigger>
+</Style.Triggers>
+    </Style>
+    <!-- 主题选择框使用独立模板；整块按钮接受点击，文字和箭头不拦截输入。 -->
+    <Style TargetType="visual:AnimatedComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+        <Setter Property="MaxDropDownHeight" Value="320"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="visual:AnimatedComboBox">
+            <Grid>
+                <ToggleButton x:Name="Toggle" Style="{x:Null}" Focusable="False" ClickMode="Press"
+                              HorizontalAlignment="Stretch" VerticalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                              IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                    <ToggleButton.Template><ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Frame" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="{DynamicResource OutlineThickness}" CornerRadius="{DynamicResource ControlCornerRadius}"/>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource FocusRing}"/></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Frame" Property="Background" Value="{DynamicResource ControlPressed}"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate></ToggleButton.Template>
+                </ToggleButton>
+                <ContentPresenter Margin="12,8,36,8" IsHitTestVisible="False" VerticalAlignment="Center"
+                                  Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"/>
+                <Path x:Name="PART_Arrow" Data="M0,0 L4,4 8,0" Width="8" Height="4" Stretch="Uniform" IsHitTestVisible="False"
+                      Stroke="{DynamicResource MutedText}" StrokeThickness="1.5" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0" RenderTransformOrigin="0.5,0.5"/>
+                <Border x:Name="Focus" BorderBrush="Transparent" BorderThickness="2" CornerRadius="{DynamicResource ControlCornerRadius}" IsHitTestVisible="False"/>
+                <Popup x:Name="PART_Popup" Placement="Bottom" HorizontalOffset="{DynamicResource DropdownHorizontalOffset}" IsOpen="{TemplateBinding IsDropDownOpen}" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+                    <visual:PopupRevealDecorator x:Name="PART_Reveal" Margin="0,4,0,0">
+                        <Border Style="{StaticResource ThemePopupSurface}" Margin="{DynamicResource AnimatedPopupMargin}" Padding="4" Background="{DynamicResource PopupSurface}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="{DynamicResource OutlineThickness}" CornerRadius="{DynamicResource DropdownCornerRadius}"
+                                MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                            <ScrollViewer CanContentScroll="True" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/></ScrollViewer>
+                        </Border>
+                    </visual:PopupRevealDecorator>
+                </Popup>
+            </Grid>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Focus" Property="BorderBrush" Value="{DynamicResource FocusRing}"/></Trigger>
+                <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="{DynamicResource DisabledOpacity}"/></Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="CheckBox" BasedOn="{StaticResource DefaultCheckBoxStyle}">
+        <Setter Property="Foreground" Value="{DynamicResource AppText}"/><Setter Property="FontSize" Value="14"/>
+        <Setter Property="MinHeight" Value="36"/><Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual}"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Border.CornerRadius" Value="4"/>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsFlat), RelativeSource={RelativeSource Self}}" Value="True">
+                <Setter Property="Border.CornerRadius" Value="0"/>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+    <Style TargetType="ListBox">
+        <Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="{DynamicResource AppText}"/>
+        <Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="0"/>
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+        <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
+        <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True"/>
+        <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling"/>
+    </Style>
+    <Style TargetType="ListBoxItem">
+        <Setter Property="Foreground" Value="{DynamicResource AppText}"/><Setter Property="Padding" Value="12"/>
+        <Setter Property="Margin" Value="0,0,0,4"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual}"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
+            <Border x:Name="Frame" CornerRadius="{DynamicResource ControlCornerRadius}" Background="Transparent" Padding="{TemplateBinding Padding}" BorderThickness="{DynamicResource OutlineThickness}" BorderBrush="Transparent">
+                <ContentPresenter HorizontalAlignment="Stretch"/>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Frame" Property="Background" Value="{DynamicResource ControlHover}"/></Trigger>
+                <Trigger Property="IsSelected" Value="True"><Setter TargetName="Frame" Property="Background" Value="{DynamicResource SelectionBackground}"/><Setter Property="Foreground" Value="{DynamicResource SelectedText}"/></Trigger>
+                <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource FocusRing}"/></Trigger>
+                <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="{DynamicResource DisabledOpacity}"/></Trigger>
+                            <MultiDataTrigger><MultiDataTrigger.Conditions>
+                    <Condition Binding="{Binding Path=(visual:ThemeVisuals.IsFlat), RelativeSource={RelativeSource Self}}" Value="True"/>
+                    <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource Self}}" Value="True"/>
+                </MultiDataTrigger.Conditions><Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource FlatBlack}"/><Setter TargetName="Frame" Property="BorderThickness" Value="2"/></MultiDataTrigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+        <Style.Triggers>            <MultiDataTrigger><MultiDataTrigger.Conditions>
+                <Condition Binding="{Binding Path=(visual:ThemeVisuals.IsFlat), RelativeSource={RelativeSource Self}}" Value="True"/>
+                <Condition Binding="{Binding IsEnabled, RelativeSource={RelativeSource Self}}" Value="False"/>
+            </MultiDataTrigger.Conditions><Setter Property="Foreground" Value="{DynamicResource MutedText}"/></MultiDataTrigger>
+</Style.Triggers>
+    </Style>
+    <!-- 关闭动画时，未知总量保留静态标记及阶段文本，不制造百分比。 -->
+    <ControlTemplate x:Key="StaticIndeterminateProgress" TargetType="ProgressBar">
+        <Border Background="{TemplateBinding Background}" CornerRadius="{DynamicResource Radius2}"><Border Width="48" HorizontalAlignment="Center" Background="{TemplateBinding Foreground}" CornerRadius="{DynamicResource Radius2}"/></Border>
+    </ControlTemplate>
+    <Style TargetType="ScrollBar">
+        <Style.Triggers><Trigger Property="Orientation" Value="Vertical">
+            <Setter Property="Width" Value="14"/>
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollBar">
+                <Track x:Name="PART_Track" IsDirectionReversed="True" Orientation="Vertical">
+                    <Track.DecreaseRepeatButton><RepeatButton Command="ScrollBar.PageUpCommand" Focusable="False"><RepeatButton.Template><ControlTemplate><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template></RepeatButton></Track.DecreaseRepeatButton>
+                    <Track.Thumb><Thumb MinHeight="24"><Thumb.Template><ControlTemplate TargetType="Thumb"><Border x:Name="Bar" Background="{DynamicResource MutedText}" Opacity="{DynamicResource ScrollThumbOpacity}" CornerRadius="{DynamicResource Radius3}" Margin="4,2"/><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bar" Property="Opacity" Value="{DynamicResource ScrollThumbHoverOpacity}"/></Trigger><Trigger Property="IsDragging" Value="True"><Setter TargetName="Bar" Property="Opacity" Value="{DynamicResource ScrollThumbDragOpacity}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Thumb.Template></Thumb></Track.Thumb>
+                    <Track.IncreaseRepeatButton><RepeatButton Command="ScrollBar.PageDownCommand" Focusable="False"><RepeatButton.Template><ControlTemplate><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template></RepeatButton></Track.IncreaseRepeatButton>
+                </Track>
+            </ControlTemplate></Setter.Value></Setter>
+        </Trigger></Style.Triggers>
+    </Style>
+    <Style TargetType="ProgressBar">
+        <Setter Property="Foreground" Value="{DynamicResource AccentText}"/><Setter Property="Background" Value="{DynamicResource ControlHover}"/>
+        <Setter Property="BorderThickness" Value="0"/><Setter Property="Height" Value="4"/>
+        <Style.Triggers><MultiDataTrigger><MultiDataTrigger.Conditions>
+            <Condition Binding="{Binding IsIndeterminate, RelativeSource={RelativeSource Self}}" Value="True"/>
+            <Condition Binding="{Binding DataContext.Session.MotionAllowed, RelativeSource={RelativeSource AncestorType=Window}}" Value="False"/>
+        </MultiDataTrigger.Conditions><Setter Property="Template" Value="{StaticResource StaticIndeterminateProgress}"/></MultiDataTrigger>
+            <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsFlat), RelativeSource={RelativeSource Self}}" Value="True"><Setter Property="Template" Value="{DynamicResource FlatProgressTemplate}"/></DataTrigger>
+</Style.Triggers>
+    </Style>
+    <Style TargetType="TabItem">
+        <Setter Property="Foreground" Value="{DynamicResource MutedText}"/><Setter Property="FontSize" Value="14"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual}"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabItem">
+            <Border x:Name="Frame" Padding="0,8,0,12" Margin="0,0,24,0" BorderThickness="0,0,0,2" BorderBrush="Transparent" Background="Transparent">
+                <ContentPresenter x:Name="HeaderText" ContentSource="Header" RecognizesAccessKey="True"/>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsSelected" Value="True"><Setter Property="Foreground" Value="{DynamicResource AppText}"/><Setter TargetName="HeaderText" Property="TextElement.FontWeight" Value="SemiBold"/><Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource AppText}"/></Trigger>
+                <Trigger Property="IsMouseOver" Value="True"><Setter Property="Foreground" Value="{DynamicResource AppText}"/></Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="TabControl">
+        <Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="{DynamicResource AppText}"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabControl">
+            <Grid KeyboardNavigation.TabNavigation="Local">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                <TabPanel IsItemsHost="True" Background="Transparent" KeyboardNavigation.TabIndex="0"/>
+                <ContentPresenter x:Name="PART_SelectedContentHost" TextElement.FontWeight="Normal" Grid.Row="1" Margin="0,24,0,0" ContentSource="SelectedContent"/>
+            </Grid>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="Expander">
+        <Setter Property="Foreground" Value="{DynamicResource AppText}"/><Setter Property="FontSize" Value="14"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Expander">
+            <StackPanel>
+                <ToggleButton Content="{TemplateBinding Header}" IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" HorizontalContentAlignment="Stretch" FocusVisualStyle="{StaticResource FocusVisual}">
+                    <ToggleButton.Template><ControlTemplate TargetType="ToggleButton">
+                        <Border Padding="0,12" Background="Transparent">
+                            <DockPanel><Path x:Name="Arrow" Data="M0,0 L4,4 8,0" Stroke="{DynamicResource MutedText}" StrokeThickness="1.5" Width="8" Height="4" Margin="0,0,12,0" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5"/><ContentPresenter VerticalAlignment="Center"/></DockPanel>
+                        </Border>
+                        <ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Arrow" Property="RenderTransform"><Setter.Value><RotateTransform Angle="180"/></Setter.Value></Setter></Trigger></ControlTemplate.Triggers>
+                    </ControlTemplate></ToggleButton.Template>
+                </ToggleButton>
+                <ContentPresenter x:Name="Body" ContentSource="Content" Visibility="Collapsed"/>
+            </StackPanel>
+            <ControlTemplate.Triggers><Trigger Property="IsExpanded" Value="True"><Setter TargetName="Body" Property="Visibility" Value="Visible"/></Trigger></ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <DataTemplate x:Key="InstanceRow">
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Border Width="32" Height="32" Background="{DynamicResource Surface}" CornerRadius="{DynamicResource ControlCornerRadius}" VerticalAlignment="Center">
+                <Image Source="{Binding DisplayIcon}" Stretch="Uniform" Margin="4" RenderOptions.BitmapScalingMode="HighQuality"/>
+            </Border>
+            <StackPanel Grid.Column="1">
+                <TextBlock Text="{Binding Name}" FontWeight="Medium" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0"><TextBlock Text="{Binding Version}" Style="{StaticResource Caption}"/><TextBlock Text="{Binding Loader}" Style="{StaticResource Caption}" Margin="12,0,0,0"/></StackPanel>
+            </StackPanel>
+        </Grid>
+    </DataTemplate>
+    <DataTemplate x:Key="TaskRow">
+        <Border Padding="0,20" BorderBrush="{DynamicResource SubtleBorder}" BorderThickness="0,0,0,1">
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel Margin="0,0,24,0">
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding State}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                    <TextBlock Text="{Binding Stage}" Style="{StaticResource Muted}" Margin="0,12,0,0" AutomationProperties.LiveSetting="Polite"/>
+                    <ProgressBar Value="{Binding Percent, Mode=OneWay}" IsIndeterminate="{Binding IsIndeterminate, Mode=OneWay}" Margin="0,12,0,0" Visibility="{Binding IsActive, Converter={StaticResource BoolVisibility}}" AutomationProperties.Name="任务进度"/>
+                    <WrapPanel Margin="0,8,0,0" Visibility="{Binding HasBytes, Converter={StaticResource BoolVisibility}}"><TextBlock Text="{Binding DownloadLabel}" Style="{StaticResource Caption}" Margin="0,0,16,0"/><TextBlock Text="{Binding Speed}" Style="{StaticResource Caption}"/></WrapPanel>
+                    <TextBlock Text="{Binding Error}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <fluent:Button Content="取消" Command="{Binding DataContext.Session.CancelTask, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Visibility="{Binding IsActive, Converter={StaticResource BoolVisibility}}"/>
+                    <fluent:Button Content="重试" Command="{Binding DataContext.Session.RetryTask, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Visibility="{Binding CanRetry, Converter={StaticResource BoolVisibility}}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </DataTemplate>
+    <!-- 界面主题和主页布局共用折叠区；其他页面的原生展开器保持原样。 -->
+    <Style TargetType="visual:AnimatedExpander" BasedOn="{StaticResource {x:Type Expander}}">
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="visual:AnimatedExpander">
+            <StackPanel>
+                <ToggleButton x:Name="PART_Header" IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                              HorizontalAlignment="Stretch" VerticalAlignment="Stretch" HorizontalContentAlignment="Stretch" FocusVisualStyle="{StaticResource FocusVisual}" AutomationProperties.Name="{Binding (AutomationProperties.Name), RelativeSource={RelativeSource TemplatedParent}}">
+                    <ToggleButton.Template><ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="HeaderFrame" Background="Transparent" CornerRadius="{DynamicResource Radius12}" Padding="12" MinHeight="48">
+                            <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="HeaderFrame" Property="Background" Value="{DynamicResource ControlHover}"/></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="HeaderFrame" Property="Background" Value="{DynamicResource ControlPressed}"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate></ToggleButton.Template>
+                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <Path x:Name="PART_Arrow" Data="M0,0 L4,4 8,0" Width="8" Height="4" Stretch="Uniform" Stroke="{DynamicResource MutedText}" StrokeThickness="1.5" VerticalAlignment="Center" HorizontalAlignment="Left" RenderTransformOrigin="0.5,0.5"/>
+                        <ContentPresenter Grid.Column="1" Content="{TemplateBinding Header}" ContentTemplate="{TemplateBinding HeaderTemplate}"/>
+                    </Grid>
+                </ToggleButton>
+                <visual:RevealDecorator x:Name="PART_Reveal" Visibility="Collapsed"><ContentPresenter ContentSource="Content"/></visual:RevealDecorator>
+            </StackPanel>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="ToolTip" BasedOn="{StaticResource {x:Type ToolTip}}">
+        
+        <Setter Property="visual:ThemeVisuals.IsSoft" Value="{DynamicResource SoftEnabled}"/>
+        <Setter Property="visual:ThemeVisuals.IsFlat" Value="{DynamicResource FlatEnabled}"/>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsFlat), RelativeSource={RelativeSource Self}}" Value="True"><Setter Property="Template" Value="{DynamicResource FlatToolTipTemplate}"/><Setter Property="Foreground" Value="{DynamicResource FlatBlack}"/><Setter Property="HasDropShadow" Value="False"/><Setter Property="Effect" Value="{x:Null}"/></DataTrigger>
+
+            <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsSoft), RelativeSource={RelativeSource Self}}" Value="True"><Setter Property="Template" Value="{DynamicResource SoftToolTipTemplate}"/><Setter Property="HasDropShadow" Value="False"/><Setter Property="Foreground" Value="{DynamicResource AppText}"/></DataTrigger>
+
+            
+</Style.Triggers>
+    </Style>
+    <Style TargetType="fluent:InfoBar" BasedOn="{StaticResource {x:Type fluent:InfoBar}}">
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsFlat), RelativeSource={RelativeSource Self}}" Value="True"><Setter Property="Border.CornerRadius" Value="0"/><Setter Property="BorderThickness" Value="2"/><Setter Property="Foreground" Value="{DynamicResource FlatBlack}"/><Setter Property="Effect" Value="{x:Null}"/></DataTrigger>
+</Style.Triggers>
+    </Style>
+</ResourceDictionary>

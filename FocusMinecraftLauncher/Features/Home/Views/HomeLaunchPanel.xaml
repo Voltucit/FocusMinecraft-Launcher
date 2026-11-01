@@ -1,0 +1,64 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.Home.Views.HomeLaunchPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:visual="clr-namespace:FocusMinecraftLauncher.Presentation.Controls"
+             xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+             x:Name="Root" Focusable="False">
+    <UserControl.Resources>
+        <Style x:Key="LaunchLabel" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryForeground}"/>
+            <Style.Triggers><DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsFlat), RelativeSource={RelativeSource Self}}" Value="True">
+                <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=fluent:Button}}"/>
+            </DataTrigger><DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsSoft), RelativeSource={RelativeSource Self}}" Value="True"><Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=fluent:Button}}"/></DataTrigger>
+            
+</Style.Triggers>
+        </Style>
+        <Style x:Key="LaunchVersionLabel" TargetType="TextBlock" BasedOn="{StaticResource LaunchLabel}">
+            <Setter Property="Opacity" Value="0.88"/>
+            <Style.Triggers><DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsFlat), RelativeSource={RelativeSource Self}}" Value="True"><Setter Property="Opacity" Value="1"/></DataTrigger>
+            <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsSoft), RelativeSource={RelativeSource Self}}" Value="True"><Setter Property="Opacity" Value="1"/></DataTrigger>
+
+            
+</Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+    <StackPanel>
+        <TextBlock Text="{Binding InstanceName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip="{Binding InstanceName}"
+                   Margin="0,0,0,8" Visibility="{Binding ShowInstanceName, Converter={StaticResource BoolVisibility}}"/>
+        <fluent:Button Style="{StaticResource PrimaryButton}" Command="{Binding Primary}" MinHeight="72"
+                       HorizontalContentAlignment="Stretch" ToolTip="{Binding LaunchButtonHint}"
+                       AutomationProperties.Name="{Binding LaunchButtonName}">
+            <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <TextBlock Text="{Binding PrimaryText}" FontSize="16" FontWeight="SemiBold" TextAlignment="Center" TextTrimming="CharacterEllipsis"
+                           Style="{StaticResource LaunchLabel}"/>
+                <TextBlock Grid.Row="1" Text="{Binding TargetVersion}" FontSize="12" Margin="0,4,0,0"
+                           TextAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding TargetVersion}"
+                           Style="{StaticResource LaunchVersionLabel}"/>
+            </Grid>
+        </fluent:Button>
+        <!-- 状态位于原启动区域；文本可滚动，取消和重试始终处于稳定位置。 -->
+        <ScrollViewer MaxHeight="{Binding FeedbackMaxHeight, ElementName=Root}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+                <TextBlock Text="{Binding Session.InstanceError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
+                <TextBlock Text="{Binding LaunchError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
+                <TextBlock Text="{Binding LaunchStage}" Style="{StaticResource Caption}" Margin="0,8,0,0" AutomationProperties.LiveSetting="Polite"
+                           Visibility="{Binding LaunchStage, Converter={StaticResource TextVisibility}}"/>
+                <TextBlock Text="{Binding LaunchHint}" Style="{StaticResource Caption}" Margin="0,8,0,0"
+                           Visibility="{Binding LaunchHint, Converter={StaticResource TextVisibility}}"/>
+            </StackPanel>
+        </ScrollViewer>
+        <!-- 字节和速度来自核心回调；未知总量时保留不确定进度。 -->
+        <TextBlock Text="{Binding Session.LaunchTask.DownloadLabel}" Style="{StaticResource Caption}" Margin="0,8,0,0"/><TextBlock Text="{Binding Session.LaunchTask.Speed}" Style="{StaticResource Caption}"/><ProgressBar Value="{Binding Session.LaunchTask.Percent, Mode=OneWay}" IsIndeterminate="{Binding Session.LaunchTask.IsIndeterminate, Mode=OneWay}" Margin="0,8,0,0" Visibility="{Binding ShowTask, Converter={StaticResource BoolVisibility}}" AutomationProperties.Name="游戏启动进行中"/>
+        <fluent:Button Content="取消启动" Command="{Binding Session.CancelTask}" CommandParameter="{Binding Session.LaunchTask}" Margin="0,8,0,0"
+                       Style="{StaticResource QuietButton}" Visibility="{Binding ShowTask, Converter={StaticResource BoolVisibility}}"/>
+        <fluent:Button Content="重试" Command="{Binding Session.RetryTask}" CommandParameter="{Binding Session.LaunchTask}" Margin="0,8,0,0"
+                       Style="{StaticResource QuietButton}" Visibility="{Binding CanRetryLaunch, Converter={StaticResource BoolVisibility}}"/>
+        <fluent:Button Content="添加账号" Command="{Binding AddAccount}" Style="{StaticResource QuietButton}" Margin="0,8,0,0"
+                       Visibility="{Binding ShowAddAccountGuide, Converter={StaticResource BoolVisibility}}"/>
+        <Grid Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <fluent:Button Content="版本选择" Command="{Binding OpenInstances}"/>
+            <fluent:Button Grid.Column="2" Content="版本设置" Command="{Binding OpenInstanceSettings}" IsEnabled="{Binding CanOpenInstanceSettings}"
+                           ToolTip="{Binding InstanceSettingsHint}" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="当前实例的版本设置"/>
+        </Grid>
+    </StackPanel>
+</UserControl>

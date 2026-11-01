@@ -1,0 +1,7 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.Downloads.Views.ResourceMetadata" x:Name="MetadataRoot" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Focusable="False" Foreground="{DynamicResource AppText}">
+    <UserControl.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="DownloadResources.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></UserControl.Resources>
+    <StackPanel>
+        <WrapPanel><TextBlock Text="{Binding TagsText}" Style="{StaticResource DownloadMeta}"/><TextBlock Text="{Binding CompatibilityText}" Style="{StaticResource DownloadMeta}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" MaxWidth="{Binding ActualWidth, ElementName=MetadataRoot}" ToolTip="{Binding CompatibilityText}"/><TextBlock Text="{Binding EnvironmentText}" Style="{StaticResource DownloadMeta}" Visibility="{Binding EnvironmentText, Converter={StaticResource TextVisibility}}"/></WrapPanel>
+        <WrapPanel><TextBlock Text="{Binding DownloadsText}" ToolTip="{Binding FullDownloads}" Style="{StaticResource DownloadMeta}"/><TextBlock Text="{Binding UpdatedText}" Style="{StaticResource DownloadMeta}"/><TextBlock Text="{Binding SourceText}" Style="{StaticResource DownloadMeta}"/><TextBlock Text="{Binding AuthorText}" Style="{StaticResource DownloadMeta}"/></WrapPanel>
+    </StackPanel>
+</UserControl>

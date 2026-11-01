@@ -1,0 +1,24 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.Home.Views.Instances.InstanceWorkspacePage"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:ui="clr-namespace:FocusMinecraftLauncher.Presentation.Controls"
+ xmlns:views="clr-namespace:FocusMinecraftLauncher.Features.Home.Views.Instances"
+ xmlns:models="clr-namespace:FocusMinecraftLauncher.Features.Home.Models" Focusable="False">
+
+
+<Grid Margin="32,24">
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+    <Grid Margin="0,0,0,24"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <fluent:Button Content="返回主页" Command="{Binding ReturnHome}" Style="{StaticResource QuietButton}" VerticalAlignment="Top" Margin="-10,0,16,0"/>
+        <StackPanel Grid.Column="1"><TextBlock Text="{Binding Instance.Name}" Style="{StaticResource PageTitle}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding Instance.Name}"/><TextBlock Text="{Binding Metadata}" Style="{StaticResource Caption}" Margin="0,6,0,0"/></StackPanel>
+    </Grid>
+    <TextBlock Grid.Row="1" Text="此实例已不在当前列表中，请返回主页重新选择。" Style="{StaticResource ErrorMessage}" Margin="0,0,0,16" Visibility="{Binding IsAvailable, Converter={StaticResource NotVisibility}}"/>
+    <TabControl Grid.Row="2" SelectedIndex="{Binding SelectedTab, Mode=TwoWay}" IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="当前实例管理">
+        <TabItem Header="概览"><views:InstanceOverviewPage DataContext="{Binding Overview}"/></TabItem>
+        <TabItem Header="设置"><views:InstanceLaunchSettingsPage DataContext="{Binding Settings}"/></TabItem>
+        <TabItem Header="Mod 管理"><views:InstanceModsPage DataContext="{Binding Mods}"/></TabItem>
+        <TabItem Header="导出"><views:InstanceExportPage DataContext="{Binding Export}"/></TabItem>
+    </TabControl>
+</Grid>
+
+</UserControl>

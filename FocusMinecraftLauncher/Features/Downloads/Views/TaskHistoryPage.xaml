@@ -1,0 +1,29 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.Downloads.Views.TaskHistoryPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:vm="clr-namespace:FocusMinecraftLauncher.Features.Downloads.ViewModels"
+             xmlns:preview="clr-namespace:FocusMinecraftLauncher.Preview" Focusable="False">
+    <UserControl.Resources>
+        <DataTemplate DataType="{x:Type preview:PreviewTask}">
+            <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource TaskRow}"/>
+        </DataTemplate>
+
+    </UserControl.Resources>
+    <Grid>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <DockPanel Margin="0,0,0,16">
+            <fluent:Button DockPanel.Dock="Right" Content="返回资源列表" Command="{Binding Back}" Style="{StaticResource QuietButton}"/>
+            <TextBlock Text="任务记录" Style="{StaticResource SectionTitle}" VerticalAlignment="Center"/>
+        </DockPanel>
+        <Grid Grid.Row="1">
+            <ListBox ItemsSource="{Binding Items}" AutomationProperties.Name="下载与任务记录">
+                <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                    <Setter Property="Padding" Value="0"/><Setter Property="Focusable" Value="False"/>
+                </Style></ListBox.ItemContainerStyle>
+            </ListBox>
+            <TextBlock Text="还没有任务" Style="{StaticResource Muted}" Margin="0,12"
+                       Visibility="{Binding HasTasks, Converter={StaticResource NotVisibility}}"/>
+        </Grid>
+    </Grid>
+</UserControl>

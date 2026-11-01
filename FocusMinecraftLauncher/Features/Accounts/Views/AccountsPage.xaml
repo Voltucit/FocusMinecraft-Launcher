@@ -1,0 +1,74 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.Accounts.Views.AccountsPage"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:ui="clr-namespace:FocusMinecraftLauncher.Presentation.Controls" SizeChanged="ResizePage" Focusable="False">
+ 
+ 
+<Grid Margin="32,24">
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+    <DockPanel Margin="0,0,0,24"><fluent:Button DockPanel.Dock="Right" Content="添加账号" Command="{Binding ShowAdd}"/><TextBlock Text="账号" Style="{StaticResource PageTitle}" VerticalAlignment="Center"/></DockPanel>
+    <Grid Grid.Row="1">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <Grid Width="280" Margin="0,0,24,0" Visibility="{Binding IsCompact, Converter={StaticResource NotVisibility}}">
+            <ListBox ItemsSource="{Binding Session.Accounts}" SelectedItem="{Binding Selected, Mode=TwoWay}" AutomationProperties.Name="账号列表" IsSynchronizedWithCurrentItem="False">
+                <ListBox.ItemTemplate><DataTemplate><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Border Width="36" Height="36" CornerRadius="{DynamicResource Radius10}" Background="{DynamicResource Surface}" VerticalAlignment="Center"><ui:PlayerHead Source="{Binding HeadImage}" Width="32" Height="32"/></Border>
+                    <StackPanel Grid.Column="1"><TextBlock Text="{Binding Name}" FontWeight="Medium" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/><TextBlock Text="{Binding Kind}" Style="{StaticResource Caption}" Margin="0,4,0,0"/><TextBlock Text="{Binding CurrentLabel}" FontSize="12" Foreground="{DynamicResource AccentText}" Margin="0,4,0,0" Visibility="{Binding IsCurrent, Converter={StaticResource BoolVisibility}}"/></StackPanel>
+                </Grid></DataTemplate></ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock Text="还没有账号" Style="{StaticResource Muted}" Margin="12,16" Visibility="{Binding Session.HasAccounts, Converter={StaticResource NotVisibility}}"/>
+        </Grid>
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0">
+            <StackPanel>
+                <ComboBox ItemsSource="{Binding Session.Accounts}" SelectedItem="{Binding Selected, Mode=TwoWay}" DisplayMemberPath="Label" AutomationProperties.Name="查看账号" Visibility="{Binding IsCompact, Converter={StaticResource BoolVisibility}}" Margin="0,0,0,24"/>
+                <StackPanel Visibility="{Binding HasSelection, Converter={StaticResource BoolVisibility}}">
+                    <Border Width="64" Height="64" CornerRadius="{DynamicResource Radius16}" Background="{DynamicResource SelectionBackground}" HorizontalAlignment="Left"><ui:PlayerHead Source="{Binding Selected.HeadImage}" Width="64" Height="64"/></Border>
+                    <TextBlock Text="{Binding Selected.Name}" Style="{StaticResource PageTitle}" Margin="0,16,0,8"/>
+                    <TextBlock Text="{Binding Selected.Kind}" Style="{StaticResource Muted}"/>
+                    <TextBlock Text="{Binding Selected.SkinMessage}" Style="{StaticResource Caption}" Margin="0,8,0,0" Visibility="{Binding Selected.SkinMessage, Converter={StaticResource TextVisibility}}"/>
+                    <TextBlock Text="{Binding Selected.LoginState}" Style="{StaticResource Muted}" Margin="0,8,0,0"/>
+                    <TextBlock Text="{Binding Selected.CurrentLabel}" Foreground="{DynamicResource AccentText}" Margin="0,12,0,0" Visibility="{Binding Selected.IsCurrent, Converter={StaticResource BoolVisibility}}"/>
+                    <WrapPanel Margin="0,24,0,0"><fluent:Button Content="使用此账号" Command="{Binding Use}" Style="{StaticResource PrimaryButton}" Margin="0,0,12,12"/><fluent:Button Content="修改昵称" Visibility="{Binding Selected.IsMicrosoft, Converter={StaticResource NotVisibility}}" Command="{Binding ShowRename}" Margin="0,0,12,12"/><fluent:Button Content="重新登录" Visibility="{Binding Selected.IsMicrosoft, Converter={StaticResource BoolVisibility}}" Command="{Binding Relogin}" Margin="0,0,12,12"/><fluent:Button Content="刷新头像" Visibility="{Binding Selected.IsMicrosoft, Converter={StaticResource BoolVisibility}}" Command="{Binding RefreshSkin}" Margin="0,0,12,12"/></WrapPanel>
+                    <StackPanel Visibility="{Binding IsRenaming, Converter={StaticResource BoolVisibility}}" MaxWidth="360" HorizontalAlignment="Left" Margin="0,0,0,12">
+                        <TextBlock Text="玩家名称" Style="{StaticResource FieldLabel}"/>
+                        <fluent:TextBox Text="{Binding RenameName, UpdateSourceTrigger=PropertyChanged}" MaxLength="16" MinWidth="240" HorizontalAlignment="Stretch" IsEnabled="{Binding CanEditRename}" AutomationProperties.Name="新的离线玩家名称">
+                            <fluent:TextBox.InputBindings><KeyBinding Key="Enter" Command="{Binding SaveRename}"/><KeyBinding Key="Escape" Command="{Binding CancelRename}"/></fluent:TextBox.InputBindings>
+                        </fluent:TextBox>
+                        <TextBlock Text="{Binding RenameError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
+                        <WrapPanel Margin="0,12,0,0"><fluent:Button Content="保存昵称" Command="{Binding SaveRename}" Margin="0,0,12,8"/><fluent:Button Content="取消" Command="{Binding CancelRename}" Style="{StaticResource QuietButton}" Margin="0,0,0,8"/></WrapPanel>
+                    </StackPanel>
+                    <fluent:Button Content="移除账号" Command="{Binding RequestRemove}" Style="{StaticResource DangerButton}" HorizontalAlignment="Left" Margin="-10,12,0,0"/>
+                    <Border Background="{DynamicResource SidebarBackground}" CornerRadius="{DynamicResource Radius12}" Padding="16" Margin="0,16,0,0" Visibility="{Binding ConfirmRemove, Converter={StaticResource BoolVisibility}}">
+                        <StackPanel><TextBlock Text="移除此设备上的账号及授权缓存？不会删除 Microsoft 账号或游戏文件。" TextWrapping="Wrap"/><WrapPanel Margin="0,16,0,0"><fluent:Button Content="确认移除" Command="{Binding Remove}" Margin="0,0,12,8"/><fluent:Button Content="保留账号" Command="{Binding CancelRemove}" Style="{StaticResource QuietButton}" Margin="0,0,0,8"/></WrapPanel></StackPanel>
+                    </Border>
+                </StackPanel>
+                <StackPanel Visibility="{Binding HasSelection, Converter={StaticResource NotVisibility}}"><TextBlock Text="添加一个账号" Style="{StaticResource SectionTitle}"/><TextBlock Text="添加正版或离线账号。" Style="{StaticResource Muted}" Margin="0,8,0,0"/></StackPanel>
+                <Border BorderBrush="{DynamicResource SubtleBorder}" BorderThickness="0,1,0,0" Padding="0,24,0,0" Margin="0,24,0,0" Visibility="{Binding IsAdding, Converter={StaticResource BoolVisibility}}">
+                    <StackPanel><TextBlock Text="添加离线账号" Style="{StaticResource SectionTitle}" Margin="0,0,0,16"/>
+                        <TextBlock Text="玩家名称" Style="{StaticResource FieldLabel}"/><fluent:TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="离线玩家名称" MaxLength="16"/>
+                        <TextBlock Text="{Binding NameError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
+                        <WrapPanel Margin="0,16,0,0"><fluent:Button Content="添加并使用" Command="{Binding AddOffline}" Style="{StaticResource PrimaryButton}" Margin="0,0,12,8"/><fluent:Button Content="取消" Command="{Binding CancelAdd}" Style="{StaticResource QuietButton}" Margin="0,0,0,8"/></WrapPanel>
+                        <TextBlock Text="离线账号不提供正版服务器身份认证。" Style="{StaticResource Muted}" Margin="0,16,0,0"/>
+                    </StackPanel>
+                </Border>
+                <fluent:Button Content="添加 Microsoft 正版账号" Command="{Binding AddMicrosoft}" HorizontalAlignment="Left" Margin="0,24,0,0"/>
+                <Border Style="{StaticResource GlassCard}" Margin="0,16,0,0" Visibility="{Binding Session.IsAuthenticating, Converter={StaticResource BoolVisibility}}">
+                    <StackPanel>
+                        <TextBlock Text="Microsoft 授权" Style="{StaticResource SectionTitle}"/>
+                        <TextBlock Text="{Binding Session.LoginProgress}" TextWrapping="Wrap" Margin="0,12,0,0" AutomationProperties.LiveSetting="Polite"/>
+                        <StackPanel Visibility="{Binding Session.LoginCode, Converter={StaticResource TextVisibility}}" Margin="0,16,0,0">
+                            <TextBlock Text="在浏览器授权页面输入此代码" Style="{StaticResource Caption}"/>
+                            <TextBox Text="{Binding Session.LoginCode, Mode=OneWay}" IsReadOnly="True" FontSize="24" FontWeight="SemiBold" Margin="0,8,0,0" AutomationProperties.Name="Microsoft 授权代码"/>
+                            <TextBox Text="{Binding Session.LoginUri, Mode=OneWay}" IsReadOnly="True" Margin="0,8,0,0" AutomationProperties.Name="Microsoft 授权网址"/>
+                        </StackPanel>
+                        <WrapPanel Margin="0,16,0,0"><fluent:Button Content="打开授权页面" Command="{Binding OpenLogin}" Margin="0,0,12,0"/><fluent:Button Content="取消登录" Command="{Binding CancelLogin}" Style="{StaticResource QuietButton}"/></WrapPanel>
+                    </StackPanel>
+                </Border>
+                <TextBlock Text="{Binding Session.LoginError}" Style="{StaticResource ErrorMessage}" Margin="0,12,0,0" AutomationProperties.LiveSetting="Polite"/>
+                <TextBlock Text="{Binding Notice}" Style="{StaticResource Muted}" Margin="0,20,0,0" AutomationProperties.LiveSetting="Polite" Visibility="{Binding Notice, Converter={StaticResource TextVisibility}}"/>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Grid>
+
+</UserControl>

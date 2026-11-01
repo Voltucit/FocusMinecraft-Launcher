@@ -1,0 +1,24 @@
+<UserControl x:Class="FocusMinecraftLauncher.Presentation.Controls.BlurImageBackground"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ IsHitTestVisible="False" Focusable="False" ClipToBounds="True"
+ Visibility="{Binding Session.ShowCustomBackgroundImage, Converter={StaticResource BoolVisibility}}">
+    <Grid>
+        <!-- 仅背景图参与模糊，前景的文字、按钮和标题栏均在本控件之外。 -->
+        <Image x:Name="Picture" Source="{Binding Session.CustomBackgroundImage}" Stretch="UniformToFill" Margin="-60"
+               RenderOptions.BitmapScalingMode="HighQuality"/>
+        <!-- 缓存宿主包含固定模糊效果；透明度动画放在缓存外，避免每帧重新生成模糊表面。 -->
+        <Grid x:Name="DynamicLayers" Margin="-60" Visibility="Collapsed">
+            <Border x:Name="LowCacheHost" Background="{DynamicResource AppBackground}">
+                <Image x:Name="LowPicture" Source="{Binding Session.CustomBackgroundImage}" Stretch="UniformToFill"
+                       RenderOptions.BitmapScalingMode="HighQuality"/>
+            </Border>
+            <Grid x:Name="HighBlend" Opacity="0.5">
+                <Border x:Name="HighCacheHost" Background="{DynamicResource AppBackground}">
+                    <Image x:Name="HighPicture" Source="{Binding Session.CustomBackgroundImage}" Stretch="UniformToFill"
+                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                </Border>
+            </Grid>
+        </Grid>
+        <Border Background="{DynamicResource BackgroundImageScrim}"/>
+    </Grid>
+</UserControl>

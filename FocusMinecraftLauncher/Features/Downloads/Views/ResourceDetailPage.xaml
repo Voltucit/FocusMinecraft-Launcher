@@ -1,0 +1,80 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.Downloads.Views.ResourceDetailPage"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:ui="clr-namespace:FocusMinecraftLauncher.Presentation.Controls" xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+ xmlns:local="clr-namespace:FocusMinecraftLauncher.Features.Downloads.Views" Focusable="False" Foreground="{DynamicResource AppText}">
+    <UserControl.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="DownloadResources.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></UserControl.Resources>
+    <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <StackPanel Margin="0,0,0,16">
+            <WrapPanel Margin="-10,0,0,12"><fluent:Button Content="返回" Command="{Binding Back}" Style="{StaticResource QuietButton}" Margin="0,0,12,0"/><fluent:Button Content="复制名称" Command="{Binding CopyName}" Style="{StaticResource QuietButton}"/><TextBlock Text="{Binding Notice}" Style="{StaticResource DownloadMeta}" VerticalAlignment="Center" Margin="12,0,0,0" AutomationProperties.LiveSetting="Polite"/></WrapPanel>
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="76"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Border Width="60" Height="60" CornerRadius="{DynamicResource ControlCornerRadius}" HorizontalAlignment="Left" VerticalAlignment="Top"><Border.Background><ImageBrush ImageSource="{Binding Project.Image}" Stretch="UniformToFill"/></Border.Background></Border>
+                <StackPanel Grid.Column="1"><TextBlock Text="{Binding Project.Name}" Style="{StaticResource ResourceTitle}" ToolTip="{Binding Project.Name}"/><TextBlock Text="{Binding Project.Description}" Style="{StaticResource ResourceDescription}" MaxHeight="40" TextTrimming="CharacterEllipsis" ToolTip="{Binding Project.Description}" Margin="0,6,0,4"/><local:ResourceMetadata DataContext="{Binding Project}"/></StackPanel>
+            </Grid>
+        </StackPanel>
+        <TabControl Grid.Row="1" SelectedIndex="{Binding SelectedTab, Mode=TwoWay}" Foreground="{DynamicResource AppText}">
+            <TabItem Header="介绍" Foreground="{DynamicResource AppText}">
+                <ScrollViewer Style="{StaticResource CommunityScroll}" local:ScrollRetention.Position="{Binding IntroScroll}" Padding="0,0,8,0">
+                    <StackPanel>
+                        <ui:AnimatedExpander Header="兼容的 Minecraft 版本" Style="{StaticResource CommunityExpander}" Margin="0,0,0,16" AutomationProperties.Name="查看完整兼容版本">
+                            <TextBlock Text="{Binding Project.FullCompatibilityText}" Style="{StaticResource ResourceBody}"/>
+                        </ui:AnimatedExpander>
+                        <TextBlock Text="{Binding Project.Introduction}" Style="{StaticResource ResourceBody}" LineHeight="24"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="图片预览" Foreground="{DynamicResource AppText}">
+                <ScrollViewer Style="{StaticResource CommunityScroll}"><StackPanel>
+                    <TextBlock Text="尚未提供预览图片" Style="{StaticResource ResourceDescription}" Visibility="{Binding HasGallery, Converter={StaticResource NotVisibility}}"/>
+                    <ItemsControl ItemsSource="{Binding Gallery}"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel><ItemsControl.ItemTemplate><DataTemplate>
+                        <fluent:Button Command="{Binding Open}" Style="{StaticResource QuietButton}" Padding="0" Margin="0,0,16,16" AutomationProperties.Name="{Binding Title}"><StackPanel><Image Source="{Binding Image}" Width="224" Height="126" Stretch="UniformToFill"/><TextBlock Text="{Binding Title}" Style="{StaticResource ResourceBody}" Margin="0,8,0,0"/></StackPanel></fluent:Button>
+                    </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                </StackPanel></ScrollViewer>
+            </TabItem>
+            <TabItem Header="可下载版本" Foreground="{DynamicResource AppText}">
+                <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <StackPanel Margin="0,0,0,12">
+                        <ToggleButton Style="{StaticResource CommunityDisclosureToggle}" IsChecked="{Binding VersionFilter.IsExpanded, Mode=TwoWay}" AutomationProperties.Name="展开游戏版本筛选">
+                            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="游戏版本" Style="{StaticResource ResourceBody}" Margin="0,0,16,0"/><TextBlock Grid.Column="1" Text="{Binding VersionFilter.SelectionText}" Style="{StaticResource ResourceDescription}"/></Grid>
+                        </ToggleButton>
+                        <local:GameVersionFilterBody DataContext="{Binding VersionFilter}"/>
+                    </StackPanel>
+                    <ScrollViewer Grid.Row="1" Style="{StaticResource CommunityScroll}" local:ScrollRetention.Position="{Binding FileScroll}" Padding="0,0,8,0">
+                        <StackPanel>
+                            <TextBlock Text="未提供匹配的文件版本" Style="{StaticResource ResourceDescription}" Visibility="{Binding HasFiles, Converter={StaticResource NotVisibility}}"/>
+                            <ItemsControl ItemsSource="{Binding Groups}"><ItemsControl.ItemTemplate><DataTemplate>
+                                <ui:AnimatedExpander Style="{StaticResource CommunityExpander}" IsExpanded="{Binding IsExpanded, Mode=TwoWay}" Margin="0,0,0,8" AutomationProperties.Name="{Binding Title}">
+                                    <ui:AnimatedExpander.Header><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Title}" Style="{StaticResource ResourceBody}" FontWeight="SemiBold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}"/><TextBlock Grid.Column="1" Text="{Binding Count}" Style="{StaticResource DownloadMeta}" Margin="12,0,0,0" VerticalAlignment="Center"/></Grid></ui:AnimatedExpander.Header>
+                                    <ItemsControl ItemsSource="{Binding Files}"><ItemsControl.ItemTemplate><DataTemplate>
+                                        <Grid Margin="0,4,0,8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <RadioButton Style="{StaticResource DownloadChoice}" IsChecked="{Binding IsSelected, Mode=OneWay}" Command="{Binding Select}" AutomationProperties.Name="{Binding File.Label}">
+                                                <StackPanel>
+                                                    <WrapPanel><TextBlock Text="资源版本" Style="{StaticResource DownloadMeta}" Margin="0,0,8,0"/><TextBlock Text="{Binding File.ResourceVersion}" Style="{StaticResource ResourceBody}" FontWeight="SemiBold"/></WrapPanel>
+                                                    <TextBlock Text="{Binding File.FileName}" Style="{StaticResource ResourceBody}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding File.FileName}" Margin="0,4,0,0"/>
+                                                    <WrapPanel><TextBlock Text="{Binding File.CompatibilityText}" Style="{StaticResource DownloadMeta}"/><TextBlock Text="{Binding File.EnvironmentText}" Style="{StaticResource DownloadMeta}" Visibility="{Binding File.EnvironmentText, Converter={StaticResource TextVisibility}}"/><TextBlock Text="{Binding File.DateText}" Style="{StaticResource DownloadMeta}"/><TextBlock Text="{Binding File.SizeText}" Style="{StaticResource DownloadMeta}"/><TextBlock Text="{Binding File.DownloadsText}" ToolTip="{Binding File.FullDownloads}" Style="{StaticResource DownloadMeta}"/><TextBlock Text="{Binding File.DependencyText}" Style="{StaticResource DownloadMeta}"/></WrapPanel>
+                                                </StackPanel>
+                                            </RadioButton>
+                                            <fluent:Button Grid.Column="1" Content="下载" Command="{Binding DownloadPreview}" Style="{StaticResource QuietButton}" VerticalAlignment="Top" Margin="8,4,0,0" ToolTip="确认下载文件与目标实例"/>
+                                        </Grid>
+                                    </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                                </ui:AnimatedExpander>
+                            </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                            <TextBlock Text="{Binding DependencyStatus}" Style="{StaticResource ResourceBody}" Margin="12,12,0,8"/>
+                            <ui:AnimatedExpander Header="当前文件的前置资源" Style="{StaticResource CommunityExpander}" IsExpanded="{Binding Entry.IsDependenciesExpanded, Mode=TwoWay}" Visibility="{Binding HasDependencies, Converter={StaticResource BoolVisibility}}">
+                                <ItemsControl ItemsSource="{Binding Dependencies}" ItemTemplate="{StaticResource DependencyRow}"/>
+                            </ui:AnimatedExpander>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+            <TabItem Header="前置资源" Foreground="{DynamicResource AppText}">
+                <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <ui:AnimatedComboBox Style="{StaticResource CommunityCombo}" ItemsSource="{Binding AvailableFiles}" SelectedItem="{Binding SelectedFile, Mode=TwoWay}" DisplayMemberPath="Label" IsEnabled="{Binding HasFiles}" AutomationProperties.Name="查看文件版本的前置资源" Margin="0,0,0,12"/>
+                    <ScrollViewer Grid.Row="1" Style="{StaticResource CommunityScroll}" local:ScrollRetention.Position="{Binding DependencyScroll}" Padding="0,0,8,0"><StackPanel>
+                        <TextBlock Text="{Binding DependencyStatus}" Style="{StaticResource ResourceBody}" Margin="12,0,0,8"/>
+                        <ui:AnimatedExpander Header="前置资源" Style="{StaticResource CommunityExpander}" IsExpanded="{Binding Entry.IsDependenciesExpanded, Mode=TwoWay}" Visibility="{Binding HasDependencies, Converter={StaticResource BoolVisibility}}"><ItemsControl ItemsSource="{Binding Dependencies}" ItemTemplate="{StaticResource DependencyRow}"/></ui:AnimatedExpander>
+                    </StackPanel></ScrollViewer>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>

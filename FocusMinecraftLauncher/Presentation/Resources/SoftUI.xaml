@@ -1,0 +1,155 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:system="clr-namespace:System;assembly=System.Runtime"
+                    xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+                    xmlns:visual="clr-namespace:FocusMinecraftLauncher.Presentation.Controls">
+    <!-- Soft UI 的视觉定义独立装载；阴影只放在表面层，不模糊前景文字。 -->
+    <SolidColorBrush x:Key="AppBackground" Color="#F8FAFC"/>
+    <SolidColorBrush x:Key="SidebarBackground" Color="#F9FAFB"/>
+    <SolidColorBrush x:Key="TitleBarBackground" Color="#F8FAFC"/>
+    <SolidColorBrush x:Key="ContentScrim" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Surface" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="PopupSurface" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="AppText" Color="#1F2937"/>
+    <SolidColorBrush x:Key="MutedText" Color="#4B5563"/>
+    <SolidColorBrush x:Key="CaptionText" Color="#6B7280"/>
+    <SolidColorBrush x:Key="BorderBrush" Color="#E5E7EB"/>
+    <SolidColorBrush x:Key="SubtleBorder" Color="#E5E7EB"/>
+    <SolidColorBrush x:Key="ControlHover" Color="#F1F5F9"/>
+    <SolidColorBrush x:Key="ControlPressed" Color="#E2E8F0"/>
+    <SolidColorBrush x:Key="SelectionBackground" Color="#EEF2FF"/>
+    <SolidColorBrush x:Key="SelectedText" Color="#4338CA"/>
+    <SolidColorBrush x:Key="NavigationSelectedBackground" Color="#EEF2FF"/>
+    <SolidColorBrush x:Key="NavigationSelectedText" Color="#4338CA"/>
+    <SolidColorBrush x:Key="PrimaryBackground" Color="#6265EF"/>
+    <SolidColorBrush x:Key="PrimaryForeground" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="PrimaryHover" Color="#595CDF"/>
+    <SolidColorBrush x:Key="PrimaryPressed" Color="#4F52CD"/>
+    <SolidColorBrush x:Key="AccentText" Color="#4338CA"/>
+    <SolidColorBrush x:Key="FocusRing" Color="#6366F1"/>
+    <SolidColorBrush x:Key="ErrorText" Color="#B42348"/>
+    <SolidColorBrush x:Key="SoftAccent" Color="#6366F1"/>
+    <SolidColorBrush x:Key="SoftIconBackground" Color="#EEF2FF"/>
+    <SolidColorBrush x:Key="SoftInputBackground" Color="#F1F5F9"/>
+    <SolidColorBrush x:Key="SoftFocusRing" Color="#736366F1"/>
+    <SolidColorBrush x:Key="SoftDisabledBackground" Color="#F9FAFB"/>
+    <SolidColorBrush x:Key="SoftFocusedInputBackground" Color="#FFFFFF"/>
+    <Color x:Key="SoftPanelShadowColor">#64748B</Color>
+    <Color x:Key="SoftShadowColor">#6366F1</Color>
+    <Thickness x:Key="OutlineThickness">0</Thickness>
+    <Thickness x:Key="DropdownPopupMargin">12,8,12,16</Thickness>
+    <Thickness x:Key="AnimatedPopupMargin">12,8,12,16</Thickness>
+    <system:Double x:Key="DropdownHorizontalOffset">-12</system:Double>
+    <system:Double x:Key="DisabledOpacity">1</system:Double>
+    <system:Double x:Key="AccountDisabledOpacity">1</system:Double>
+    <system:Double x:Key="FocusCornerRadius">19</system:Double>
+    <CornerRadius x:Key="ControlCornerRadius">16</CornerRadius>
+    <CornerRadius x:Key="CardCornerRadius">24</CornerRadius>
+    <CornerRadius x:Key="MainPanelCornerRadius">24</CornerRadius>
+    <CornerRadius x:Key="SidebarCornerRadius">24</CornerRadius>
+    <CornerRadius x:Key="NavigationCornerRadius">16</CornerRadius>
+    <CornerRadius x:Key="NavigationFocusCornerRadius">18</CornerRadius>
+    <CornerRadius x:Key="DropdownCornerRadius">24</CornerRadius>
+    <CornerRadius x:Key="IconCornerRadius">28</CornerRadius>
+    <CornerRadius x:Key="Radius2">16</CornerRadius><CornerRadius x:Key="Radius3">16</CornerRadius>
+    <CornerRadius x:Key="Radius4">16</CornerRadius><CornerRadius x:Key="Radius5">8</CornerRadius>
+    <CornerRadius x:Key="Radius6">16</CornerRadius><CornerRadius x:Key="Radius7">16</CornerRadius>
+    <CornerRadius x:Key="Radius8">16</CornerRadius><CornerRadius x:Key="Radius10">18</CornerRadius>
+    <CornerRadius x:Key="Radius12">16</CornerRadius><CornerRadius x:Key="Radius16">24</CornerRadius>
+    <DropShadowEffect x:Key="SoftPopupShadow" Color="#6366F1" BlurRadius="18" ShadowDepth="3" Direction="270" Opacity="0.16"/>
+
+    <ControlTemplate x:Key="SoftButtonTemplate" TargetType="fluent:Button">
+        <Grid x:Name="PART_SoftRoot" SnapsToDevicePixels="True">
+            <Border x:Name="PART_SoftShadow" Background="{TemplateBinding Background}" CornerRadius="16" IsHitTestVisible="False" Opacity="0.65">
+                <Border.Effect><DropShadowEffect Color="{DynamicResource SoftShadowColor}" BlurRadius="18" ShadowDepth="3" Direction="270" Opacity="0.24"/></Border.Effect>
+            </Border>
+            <Border x:Name="Frame" Background="{TemplateBinding Background}" CornerRadius="16" Padding="{TemplateBinding Padding}">
+                <Grid HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <ContentPresenter x:Name="Icon" Content="{TemplateBinding Icon}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <ContentPresenter Grid.Column="1" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                </Grid>
+            </Border>
+            <Border x:Name="Focus" BorderBrush="{DynamicResource SoftFocusRing}" BorderThickness="2" CornerRadius="16" Visibility="Collapsed" IsHitTestVisible="False"/>
+        </Grid>
+        <ControlTemplate.Triggers>
+            <Trigger Property="Icon" Value="{x:Null}"><Setter TargetName="Icon" Property="Visibility" Value="Collapsed"/><Setter TargetName="Icon" Property="Margin" Value="0"/></Trigger>
+            <Trigger Property="Appearance" Value="Primary"><Setter TargetName="Frame" Property="Background" Value="{DynamicResource PrimaryBackground}"/><Setter TargetName="PART_SoftShadow" Property="Background" Value="{DynamicResource PrimaryBackground}"/><Setter Property="Foreground" Value="{DynamicResource PrimaryForeground}"/></Trigger>
+            <Trigger Property="Appearance" Value="Transparent"><Setter TargetName="Frame" Property="Background" Value="Transparent"/><Setter TargetName="PART_SoftShadow" Property="Visibility" Value="Collapsed"/></Trigger>
+            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Frame" Property="Background" Value="{DynamicResource ControlHover}"/></Trigger>
+            <MultiTrigger><MultiTrigger.Conditions><Condition Property="Appearance" Value="Primary"/><Condition Property="IsMouseOver" Value="True"/></MultiTrigger.Conditions><Setter TargetName="Frame" Property="Background" Value="{DynamicResource PrimaryHover}"/></MultiTrigger>
+            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Frame" Property="Background" Value="{DynamicResource ControlPressed}"/></Trigger>
+            <MultiTrigger><MultiTrigger.Conditions><Condition Property="Appearance" Value="Primary"/><Condition Property="IsPressed" Value="True"/></MultiTrigger.Conditions><Setter TargetName="Frame" Property="Background" Value="{DynamicResource PrimaryPressed}"/></MultiTrigger>
+            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Focus" Property="Visibility" Value="Visible"/></Trigger>
+            <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Frame" Property="Background" Value="{DynamicResource SoftDisabledBackground}"/><Setter TargetName="PART_SoftShadow" Property="Visibility" Value="Collapsed"/><Setter Property="Foreground" Value="{DynamicResource CaptionText}"/></Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <ControlTemplate x:Key="SoftTextBoxTemplate" TargetType="TextBox">
+        <Grid x:Name="PART_SoftRoot">
+            <Border x:Name="PART_SoftHalo" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource SoftFocusRing}" BorderThickness="2" CornerRadius="16" Opacity="0" IsHitTestVisible="False">
+                <Border.Effect><DropShadowEffect Color="{DynamicResource SoftShadowColor}" BlurRadius="18" ShadowDepth="0" Opacity="0.18"/></Border.Effect>
+            </Border>
+            <Border x:Name="Frame" Background="{DynamicResource SoftInputBackground}" CornerRadius="16" Padding="{TemplateBinding Padding}" BorderThickness="2" BorderBrush="Transparent">
+                <Grid>
+                    <TextBlock x:Name="Placeholder" Text="{TemplateBinding Tag}" Foreground="{DynamicResource MutedText}" IsHitTestVisible="False" Visibility="Collapsed" VerticalAlignment="Center"/>
+                    <ScrollViewer x:Name="PART_ContentHost" Focusable="False" HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}" VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}"/>
+                </Grid>
+            </Border>
+        </Grid>
+        <ControlTemplate.Triggers>
+            <Trigger Property="Text" Value=""><Setter TargetName="Placeholder" Property="Visibility" Value="Visible"/></Trigger>
+            <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Frame" Property="Background" Value="{DynamicResource SoftFocusedInputBackground}"/><Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource SoftFocusRing}"/></Trigger>
+            <Trigger Property="IsReadOnly" Value="True"><Setter TargetName="Frame" Property="Background" Value="{DynamicResource SidebarBackground}"/></Trigger>
+            <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="{DynamicResource CaptionText}"/><Setter TargetName="Frame" Property="Background" Value="{DynamicResource SoftDisabledBackground}"/></Trigger>
+            <Trigger Property="Validation.HasError" Value="True"><Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource ErrorText}"/></Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+    <ControlTemplate x:Key="SoftValidationTemplate"><Border BorderBrush="{DynamicResource ErrorText}" BorderThickness="2" CornerRadius="16"><AdornedElementPlaceholder/></Border></ControlTemplate>
+
+    <!-- 共用面板只在主要内容宿主上显示一层中等阴影，侧栏不重复投影。 -->
+    <Style TargetType="visual:GlassPanel">
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="VerticalContentAlignment" Value="Stretch"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="visual:GlassPanel">
+            <Grid>
+                <Border x:Name="PanelShadow" Background="{DynamicResource Surface}" CornerRadius="{TemplateBinding CornerRadius}" IsHitTestVisible="False">
+                    <Border.Effect><DropShadowEffect Color="{DynamicResource SoftPanelShadowColor}" BlurRadius="24" ShadowDepth="4" Direction="270" Opacity="0.14"/></Border.Effect>
+                </Border>
+                <Border x:Name="PART_Surface" Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}" Padding="{TemplateBinding Padding}">
+                    <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" ClipToBounds="True"/>
+                </Border>
+            </Grid>
+            <ControlTemplate.Triggers>
+                <Trigger Property="HoverFeedback" Value="False"><Setter TargetName="PanelShadow" Property="Visibility" Value="Collapsed"/></Trigger>
+                <Trigger Property="visual:ThemeVisuals.PageSurfaceVisible" Value="False"><Setter TargetName="PART_Surface" Property="Background" Value="Transparent"/><Setter TargetName="PanelShadow" Property="Visibility" Value="Collapsed"/></Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+
+    <ControlTemplate x:Key="SoftLayoutOptionTemplate" TargetType="ListBoxItem">
+        <Grid x:Name="PART_SoftRoot">
+            <Border x:Name="PART_SoftShadow" Background="{DynamicResource Surface}" CornerRadius="24" IsHitTestVisible="False" Opacity="0.65"><Border.Effect><DropShadowEffect Color="{DynamicResource SoftShadowColor}" BlurRadius="18" ShadowDepth="3" Direction="270" Opacity="0.18"/></Border.Effect></Border>
+            <Border x:Name="Frame" Background="{DynamicResource Surface}" CornerRadius="24" Padding="12" BorderBrush="Transparent" BorderThickness="1"><ContentPresenter/></Border>
+        </Grid>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsSelected" Value="True"><Setter TargetName="Frame" Property="Background" Value="{DynamicResource SelectionBackground}"/><Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource SoftFocusRing}"/></Trigger>
+            <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource FocusRing}"/></Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+    <ControlTemplate x:Key="SoftContextMenuTemplate" TargetType="ContextMenu">
+        <Border Background="{DynamicResource Surface}" CornerRadius="24" Padding="8" Margin="12,8,12,16" Effect="{DynamicResource SoftPopupShadow}">
+            <ScrollViewer CanContentScroll="True" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/></ScrollViewer>
+        </Border>
+    </ControlTemplate>
+    <ControlTemplate x:Key="SoftMenuItemTemplate" TargetType="MenuItem">
+        <Border x:Name="Frame" Background="Transparent" CornerRadius="12" Padding="12,8"><ContentPresenter ContentSource="Header" RecognizesAccessKey="True"/></Border>
+        <ControlTemplate.Triggers><Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Frame" Property="Background" Value="{DynamicResource SelectionBackground}"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="{DynamicResource CaptionText}"/></Trigger></ControlTemplate.Triggers>
+    </ControlTemplate>
+    <ContextMenu x:Key="SoftEditMenu" x:Shared="False" HasDropShadow="False" Foreground="{DynamicResource AppText}" Template="{StaticResource SoftContextMenuTemplate}">
+        <ContextMenu.ItemContainerStyle><Style TargetType="MenuItem"><Setter Property="Template" Value="{StaticResource SoftMenuItemTemplate}"/><Setter Property="CommandTarget" Value="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/></Style></ContextMenu.ItemContainerStyle>
+        <MenuItem Header="剪切" Command="ApplicationCommands.Cut"/><MenuItem Header="复制" Command="ApplicationCommands.Copy"/><MenuItem Header="粘贴" Command="ApplicationCommands.Paste"/><MenuItem Header="全选" Command="ApplicationCommands.SelectAll"/>
+    </ContextMenu>
+    <ControlTemplate x:Key="SoftToolTipTemplate" TargetType="ToolTip">
+        <Border Background="{DynamicResource Surface}" CornerRadius="16" Padding="12,8" Margin="12,8,12,16" Effect="{DynamicResource SoftPopupShadow}"><ContentPresenter/></Border>
+    </ControlTemplate>
+</ResourceDictionary>

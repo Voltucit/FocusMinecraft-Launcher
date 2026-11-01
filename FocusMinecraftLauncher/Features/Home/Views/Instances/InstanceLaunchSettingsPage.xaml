@@ -1,0 +1,73 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.Home.Views.Instances.InstanceLaunchSettingsPage"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:ui="clr-namespace:FocusMinecraftLauncher.Presentation.Controls"
+ xmlns:views="clr-namespace:FocusMinecraftLauncher.Features.Home.Views.Instances"
+ xmlns:models="clr-namespace:FocusMinecraftLauncher.Features.Home.Models" Focusable="False">
+
+
+<ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,16">
+    <StackPanel>
+        <TextBlock Text="启动设置" Style="{StaticResource SectionTitle}"/>
+        <ui:SettingRow Title="Java">
+            <StackPanel>
+                <CheckBox Content="使用全局设置" IsChecked="{Binding IsUsingGlobalJavaSettings, Mode=TwoWay}"/>
+                <TextBlock Text="{Binding JavaDisplayText}" FontWeight="SemiBold" Margin="0,12,0,0" AutomationProperties.LiveSetting="Polite"
+                           Visibility="{Binding IsJavaAutoSelected, Converter={StaticResource NotVisibility}}"/>
+                <fluent:TextBox Text="{Binding SelectedJavaPath, Mode=OneWay}" IsReadOnly="True" IsEnabled="False" Tag="自动选择"
+                                ToolTip="{Binding SelectedJavaPath}" ToolTipService.ShowOnDisabled="True" Margin="0,8,0,0" AutomationProperties.Name="继承的全局 Java 路径"
+                                Visibility="{Binding UseGlobalJava, Converter={StaticResource BoolVisibility}}"/>
+                <StackPanel Margin="0,8,0,0" Visibility="{Binding UseGlobalJava, Converter={StaticResource NotVisibility}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <fluent:TextBox Text="{Binding JavaPath, UpdateSourceTrigger=PropertyChanged}" Tag="自动选择"
+                                        ToolTip="{Binding JavaPath}" AutomationProperties.Name="此实例的 Java 路径，留空自动选择"/>
+                        <fluent:Button Grid.Column="1" Content="浏览" Command="{Binding BrowseJava}" Margin="8,0,0,0"/>
+                    </Grid>
+                    <fluent:Button Content="恢复自动选择" Command="{Binding ClearJava}" Style="{StaticResource QuietButton}"
+                                   HorizontalAlignment="Left" Margin="0,8,0,0" Visibility="{Binding IsJavaAutoSelected, Converter={StaticResource NotVisibility}}"/>
+                </StackPanel>
+                <StackPanel Margin="0,8,0,0" Visibility="{Binding IsJavaAutoSelected, Converter={StaticResource BoolVisibility}}">
+                    <TextBlock Text="{Binding JavaRecommendationText}" Style="{StaticResource Muted}"
+                               ToolTip="推荐版本由后续服务提供，不代表本机已经安装。" AutomationProperties.LiveSetting="Polite"/>
+                </StackPanel>
+                <TextBlock Text="{Binding JavaError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
+            </StackPanel>
+        </ui:SettingRow>
+        <ui:SettingRow Title="内存分配">
+            <StackPanel>
+                <CheckBox Content="使用全局设置" IsChecked="{Binding UseGlobalMemory, Mode=TwoWay}"/>
+                <TextBlock Text="{Binding GlobalMemory}" Style="{StaticResource Muted}" Margin="0,8,0,0"
+                           Visibility="{Binding UseGlobalMemory, Converter={StaticResource BoolVisibility}}"/>
+                <StackPanel Margin="0,12,0,0" Visibility="{Binding UseGlobalMemory, Converter={StaticResource NotVisibility}}">
+                    <ui:MemoryAllocationPanel DataContext="{Binding MemoryAllocation}"/>
+                </StackPanel>
+            </StackPanel>
+        </ui:SettingRow>
+        <ui:SettingRow Title="游戏窗口">
+            <StackPanel><CheckBox Content="使用全局设置" IsChecked="{Binding UseGlobalWindow, Mode=TwoWay}"/><TextBlock Text="使用游戏默认窗口设置" Style="{StaticResource Caption}" Margin="0,4,0,0" Visibility="{Binding UseGlobalWindow, Converter={StaticResource BoolVisibility}}"/>
+                <StackPanel Margin="0,8,0,0" Visibility="{Binding UseGlobalWindow, Converter={StaticResource NotVisibility}}">
+                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><fluent:TextBox Text="{Binding Width, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="游戏窗口宽度"/><TextBlock Grid.Column="1" Text="×" VerticalAlignment="Center" Margin="12,0"/><fluent:TextBox Grid.Column="2" Text="{Binding Height, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="游戏窗口高度"/></Grid>
+                    <CheckBox Content="全屏启动" IsChecked="{Binding Fullscreen, Mode=TwoWay}" Margin="0,8,0,0"/>
+                </StackPanel>
+                <TextBlock Text="{Binding WindowError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
+            </StackPanel>
+        </ui:SettingRow>
+        <ui:SettingRow Title="游戏目录"><fluent:TextBox Text="{Binding Directory, Mode=OneWay}" IsReadOnly="True" ToolTip="{Binding Directory}" AutomationProperties.Name="当前实例目录"/></ui:SettingRow>
+        <ui:SettingRow Title="隔离方式"><TextBlock Text="按版本使用独立目录" Style="{StaticResource Muted}"/></ui:SettingRow>
+        <Expander Header="高级参数" Margin="0,12,0,0">
+            <StackPanel>
+                <CheckBox Content="使用全局参数" IsChecked="{Binding UseGlobalArguments, Mode=TwoWay}" Margin="0,8,0,8"/>
+                <StackPanel Visibility="{Binding UseGlobalArguments, Converter={StaticResource NotVisibility}}">
+                    <ui:SettingRow Title="JVM 参数"><fluent:TextBox Text="{Binding JvmArguments, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" AutomationProperties.Name="此实例 JVM 参数"/></ui:SettingRow>
+                    <ui:SettingRow Title="游戏参数"><fluent:TextBox Text="{Binding GameArguments, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" AutomationProperties.Name="此实例附加游戏参数"/></ui:SettingRow>
+                </StackPanel>
+            </StackPanel>
+        </Expander>
+        <WrapPanel Margin="0,20,0,0"><fluent:Button Content="保存实例设置" Command="{Binding Save}" Style="{StaticResource PrimaryButton}" Margin="0,0,12,12"/><fluent:Button Content="恢复已保存的值" Command="{Binding Restore}" Margin="0,0,0,12"/></WrapPanel>
+        <TextBlock Text="{Binding Notice}" Style="{StaticResource Muted}" Visibility="{Binding Notice, Converter={StaticResource TextVisibility}}" AutomationProperties.LiveSetting="Polite"/>
+        <TextBlock Text="此页设置只影响当前实例。" Style="{StaticResource Caption}" Margin="0,12,0,0"/>
+    </StackPanel>
+</ScrollViewer>
+
+</UserControl>

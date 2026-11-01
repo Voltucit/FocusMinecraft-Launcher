@@ -1,0 +1,279 @@
+using System.Collections.Specialized;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Windows;
+using FMCore.Accounts;
+using FocusMinecraftLauncher.Features.Home.Models;
+using FocusMinecraftLauncher.Infrastructure.Authentication;
+using FocusMinecraftLauncher.Infrastructure.Configuration;
+using FocusMinecraftLauncher.Presentation;
+
+namespace FocusMinecraftLauncher.Preview;
+
+public sealed partial class PreviewSession
+{
+    private readonly LauncherConfiguration _configuration = ((App)Application.Current).Configuration;
+    private readonly CancellationTokenSource _lifetime = new();
+    private readonly Dictionary<Guid, CancellationTokenSource> _accountAttempts = [];
+    private readonly List<JsonNode?> _unreadableAccounts = [];
+    private bool _restoringConfiguration = true, _authenticating;
+    private string _loginCode = "", _loginProgress = "", _loginError = "";
+    private Uri? _loginUri;
+    private HomeLayout _homeLayout;
+    private bool _showLauncherUpdates = true, _showGameUpdates = true;
+    private static readonly JsonSerializerOptions AccountJson = new() { PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    public string ConfigurationMessage => _configuration.Status;
+    public bool HasConfigurationMessage => ConfigurationMessage.Length > 0;
+    public bool IsAuthenticating { get => _authenticating; private set => Set(ref _authenticating, value); }
+    public string LoginCode { get => _loginCode; private set => Set(ref _loginCode, value); }
+    public string LoginProgress { get => _loginProgress; private set => Set(ref _loginProgress, value); }
+    public string LoginError { get => _loginError; private set => Set(ref _loginError, value); }
+    public Uri? LoginUri { get => _loginUri; private set => Set(ref _loginUri, value); }
+    public HomeLayout HomeLayout
+    {
+        get => _homeLayout;
+        set
+        {
+            var layout = Enum.IsDefined(value) ? value : HomeLayout.Classic;
+            if (Set(ref _homeLayout, layout)) { Changed(nameof(HomeLayoutName)); SaveAppearance(); }
+        }
+    }
+
+    public string HomeLayoutName => HomeLayout switch { HomeLayout.Minimal => "留白布局", HomeLayout.Centered => "居中启动", _ => "经典布局" };
+
+    /// <summary>主页两类更新记录独立选择并即时保存，不影响账号、实例或启动任务。</summary>
+    public bool ShowLauncherUpdates
+    {
+        get => _showLauncherUpdates;
+        set { if (Set(ref _showLauncherUpdates, value)) SaveAppearance(); }
+    }
+    public bool ShowGameUpdates
+    {
+        get => _showGameUpdates;
+        set { if (Set(ref _showGameUpdates, value)) SaveAppearance(); }
+    }
+
+    private static string ThemeKey(string theme) => theme == UiTheme.SoftThemeName ? "SoftUI" : theme == UiTheme.FlatThemeName ? "MinimalistFlat" : "Glass";
+    private static string ThemeLabel(string key) => key switch { "SoftUI" => UiTheme.SoftThemeName, "MinimalistFlat" => UiTheme.FlatThemeName, _ => UiTheme.GlassThemeName };
+    private double ReadThemeTransparency(string theme)
+    {
+        var root = _configuration.ReadLauncher();
+        return Math.Clamp(LauncherConfiguration.Number(root["appearance"]?["themes"]?[ThemeKey(theme)]?["glassTransparency"], 50), 0, 100);
+    }
+
+    /// <summary>主窗口构建前恢复配置；Microsoft 条目只恢复资料，认证成功后才标记为可用。</summary>
+    private void RestoreConfiguration()
+    {
+        var root = _configuration.ReadLauncher();
+        _theme = ThemeLabel(LauncherConfiguration.Text(root["appearance"]?["theme"], "Glass"));
+        _homeLayout = LauncherConfiguration.Text(root["appearance"]?["homeLayout"]) switch { "Minimal" => HomeLayout.Minimal, "Centered" => HomeLayout.Centered, _ => HomeLayout.Classic };
+        _showLauncherUpdates = LauncherConfiguration.Boolean(root["appearance"]?["homeContent"]?["showLauncherUpdates"], true);
+        _showGameUpdates = LauncherConfiguration.Boolean(root["appearance"]?["homeContent"]?["showGameUpdates"], true);
+        _animations = LauncherConfiguration.Boolean(root["appearance"]?["animationsEnabled"], true);
+        _glassTransparency = ReadThemeTransparency(_theme);
+        RestorePersonalization(root);
+        RestoreFlatAppearance(root);
+        RestoreSoftAppearance(root);
+        SavedSettings = new PreviewSettings
+        {
+            JavaPath = LauncherConfiguration.Text(root["global"]?["javaPath"]),
+            GameDirectory = LauncherConfiguration.Text(root["global"]?["gameDirectory"], _configuration.MinecraftDirectory),
+            MemoryMb = Math.Max(512, (int)LauncherConfiguration.Number(root["global"]?["memoryMb"], 4096)),
+            JvmArguments = LauncherConfiguration.Text(root["global"]?["jvmArguments"]),
+            AutomaticMemory = LauncherConfiguration.Boolean(root["global"]?["automaticMemory"]),
+            OptimizeMemory = LauncherConfiguration.Boolean(root["global"]?["optimizeMemory"])
+        };
+        RestoreRuntimeConfiguration(root);
+        var accountData = _configuration.ReadAccounts();
+        if (accountData["accounts"] is JsonArray list)
+            foreach (var node in list)
+                try
+                {
+                    if (node?.Deserialize<StoredAccount>(AccountJson) is not { } stored || stored.Type is not ("Offline" or "Microsoft") || string.IsNullOrWhiteSpace(stored.Name))
+                        throw new JsonException("账户资料不完整。");
+                    stored.ProtectedSession ??= "";
+                    if (Accounts.Any(account => account.Id == stored.Id)) throw new JsonException("重复的账户标识。");
+                    Accounts.Add(new PreviewAccount(stored));
+                }
+                catch (Exception error) when (error is JsonException or ArgumentException)
+                { _unreadableAccounts.Add(node?.DeepClone()); _configuration.ReportNotice("部分账户资料无法读取，已保留原始条目，请检查账户配置文件。"); }
+        PreviewAccount? Find(string key) => Guid.TryParse(LauncherConfiguration.Text(accountData[key]), out var id) ? Accounts.FirstOrDefault(account => account.Id == id) : null;
+        _microsoftMode = LauncherConfiguration.Boolean(accountData["microsoftMode"]);
+        _lastMicrosoftAccount = Find("lastMicrosoftAccountId") is { IsMicrosoft: true } microsoft ? microsoft : null;
+        _lastOfflineAccount = Find("lastOfflineAccountId") is { IsMicrosoft: false } offline ? offline : null;
+        CurrentAccount = Find("currentAccountId") is { } current && current.IsMicrosoft == _microsoftMode ? current
+            : (_microsoftMode ? _lastMicrosoftAccount : _lastOfflineAccount) ?? Accounts.FirstOrDefault(account => account.IsMicrosoft == _microsoftMode);
+        foreach (var account in Accounts) account.PropertyChanged += AccountChanged;
+        Accounts.CollectionChanged += PersistentAccountsChanged;
+        _configuration.StatusChanged += ConfigurationChanged;
+        _restoringConfiguration = false;
+    }
+
+    private void SaveAppearance()
+    {
+        if (_restoringConfiguration) return;
+        _configuration.ChangeLauncher(root =>
+        {
+            var appearance = LauncherConfiguration.Object(root, "appearance");
+            appearance["theme"] = ThemeKey(Theme);
+            appearance["homeLayout"] = HomeLayout.ToString();
+            appearance["animationsEnabled"] = AnimationsEnabled;
+            var homeContent = LauncherConfiguration.Object(appearance, "homeContent");
+            homeContent["showLauncherUpdates"] = ShowLauncherUpdates;
+            homeContent["showGameUpdates"] = ShowGameUpdates;
+            LauncherConfiguration.Object(LauncherConfiguration.Object(appearance, "themes"), ThemeKey(Theme))["glassTransparency"] = GlassTransparency;
+        });
+    }
+    private void SaveSelectedInstance()
+    {
+        if (!_restoringConfiguration) _configuration.ChangeLauncher(root => SaveInstanceSelection(root));
+    }
+    private void SaveAccountSelection()
+    {
+        if (_restoringConfiguration) return;
+        var accounts = JsonSerializer.SerializeToNode(Accounts.Select(account => account.Stored).ToArray(), AccountJson)!.AsArray();
+        foreach (var unreadable in _unreadableAccounts) accounts.Add(unreadable?.DeepClone());
+        _configuration.ChangeAccounts(root =>
+        {
+            root["accounts"] = accounts;
+            root["currentAccountId"] = CurrentAccount?.Id.ToString("D");
+            root["microsoftMode"] = MicrosoftMode;
+            root["lastMicrosoftAccountId"] = _lastMicrosoftAccount?.Id.ToString("D");
+            root["lastOfflineAccountId"] = _lastOfflineAccount?.Id.ToString("D");
+        });
+    }
+    private void AccountChanged(object? sender, PropertyChangedEventArgs e) => Signal();
+    private void PersistentAccountsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.OldItems != null) foreach (PreviewAccount account in e.OldItems)
+        {
+            account.PropertyChanged -= AccountChanged;
+            CancelSkinRequest(account.Id);
+            if (_accountAttempts.Remove(account.Id, out var cancellation)) { cancellation.Cancel(); }
+        }
+        if (e.NewItems != null) foreach (PreviewAccount account in e.NewItems) account.PropertyChanged += AccountChanged;
+        if (_lastMicrosoftAccount != null && !Accounts.Contains(_lastMicrosoftAccount)) _lastMicrosoftAccount = null;
+        if (_lastOfflineAccount != null && !Accounts.Contains(_lastOfflineAccount)) _lastOfflineAccount = null;
+        if (_account != null && !Accounts.Contains(_account)) CurrentAccount = Accounts.FirstOrDefault(account => account.IsMicrosoft == MicrosoftMode);
+        SaveAccountSelection(); Signal();
+    }
+    private void ConfigurationChanged() => PostUi(() => { Changed(nameof(ConfigurationMessage)); Changed(nameof(HasConfigurationMessage)); });
+    private void PostUi(Action action)
+    {
+        if (_lifetime.IsCancellationRequested) return;
+        Application.Current.Dispatcher.InvokeAsync(() => { if (!_lifetime.IsCancellationRequested) action(); });
+    }
+    public async Task<bool> SaveGlobalSettingsAsync(PreviewSettings settings)
+    {
+        _configuration.ChangeLauncher(root =>
+        {
+            var global = LauncherConfiguration.Object(root, "global");
+            global["javaPath"] = settings.JavaPath; global["memoryMb"] = settings.MemoryMb;
+            global["gameDirectory"] = settings.GameDirectory; global["jvmArguments"] = settings.JvmArguments;
+            global["automaticMemory"] = settings.AutomaticMemory; global["optimizeMemory"] = settings.OptimizeMemory;
+        });
+        if (!await _configuration.FlushAsync()) return false;
+        SavedSettings = settings.Copy();
+        await SelectRootAsync(settings.GameDirectory);
+        Signal();
+        return true;
+    }
+
+    public PreviewAccount AddOfflineAccount(string name)
+    {
+        var offline = OfflineAccount.Create(name);
+        var account = new PreviewAccount(new StoredAccount { Type = "Offline", Name = offline.Username, Uuid = offline.Uuid });
+        Accounts.Add(account); CurrentAccount = account;
+        return account;
+    }
+    /// <summary>验证离线昵称并及时保存；共享对象、选中账号、UUID 和各模式的选择均保持原值。</summary>
+    public async Task<bool> RenameOfflineAccountAsync(PreviewAccount account, string name)
+    {
+        if (!Accounts.Contains(account)) throw new InvalidOperationException("这个账号已被移除。");
+        if (account.IsMicrosoft) throw new InvalidOperationException("正版账号请前往官网修改玩家名称。");
+        if (IsBusy || IsLoading || IsAuthenticating) throw new InvalidOperationException("请等待当前任务完成后再修改昵称。");
+        name = name.Trim();
+        var error = ValidateOfflineName(name);
+        if (error.Length > 0) throw new ArgumentException(error);
+        if (Accounts.Any(other => other != account && !other.IsMicrosoft && other.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            throw new ArgumentException("这个离线昵称已被其他账号使用。");
+        account.RenameOffline(name);
+        SaveAccountSelection();
+        Signal();
+        return await _configuration.FlushAsync();
+    }
+    public static string ValidateOfflineName(string name) => name.Length is < 3 or > 16 || name.Any(character => !(char.IsAsciiLetterOrDigit(character) || character == '_'))
+        ? "使用 3–16 位字母、数字或下划线。" : "";
+    public async Task RestoreMicrosoftAccountsAsync()
+    {
+        await RestoreSkinCacheAsync();
+        foreach (var account in Accounts.Where(account => account.IsMicrosoft).ToArray())
+        {
+            if (_lifetime.IsCancellationRequested) break;
+            if (account.Stored.ProtectedSession.Length == 0) { account.MarkLoginFailure("需要重新登录"); continue; }
+            await AuthenticateMicrosoftAsync(account, false);
+        }
+    }
+    public Task LoginMicrosoftAsync(PreviewAccount? account = null) => AuthenticateMicrosoftAsync(account, true);
+    public void CancelMicrosoftLogin()
+    { foreach (var cancellation in _accountAttempts.Values.ToArray()) cancellation.Cancel(); }
+
+    private async Task AuthenticateMicrosoftAsync(PreviewAccount? existing, bool interactive)
+    {
+        if (interactive && IsAuthenticating) return;
+        var attemptId = existing?.Id ?? Guid.NewGuid();
+        if (_accountAttempts.ContainsKey(attemptId)) return;
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _accountAttempts[attemptId] = cancellation;
+        if (interactive) { IsAuthenticating = true; LoginCode = ""; LoginError = ""; LoginUri = null; LoginProgress = "正在恢复 Microsoft 授权"; }
+        existing?.SetRestoring(true);
+        try
+        {
+            var result = await MicrosoftSessionService.AuthenticateAsync(existing?.Stored.ProtectedSession ?? "", interactive,
+                code => PostUi(() => { LoginCode = code.UserCode; LoginUri = code.VerificationUri; }),
+                progress => { if (interactive) PostUi(() => LoginProgress = progress); },
+                encrypted => { if (existing != null && !interactive) PostUi(() => { if (Accounts.Contains(existing)) { existing.Stored.ProtectedSession = encrypted; SaveAccountSelection(); } }); },
+                cancellation.Token);
+            if (existing != null && !Accounts.Contains(existing)) return;
+            if (result.Account == null) { existing?.MarkLoginFailure("需要重新登录"); return; }
+            if (existing != null && existing.Uuid != Guid.Empty && existing.Uuid != result.Account.Uuid)
+                throw new InvalidOperationException("登录的账户与所选账户不一致。");
+            var target = existing ?? Accounts.FirstOrDefault(account => account.IsMicrosoft && account.Uuid == result.Account.Uuid);
+            if (target == null) { target = new PreviewAccount(new StoredAccount { Type = "Microsoft", Name = result.Account.Username, Uuid = result.Account.Uuid }); Accounts.Add(target); }
+            target.ApplyMicrosoft(result.Account, result.ProtectedSession);
+            if (interactive) { CurrentAccount = target; LoginProgress = "Microsoft 登录成功"; }
+            SaveAccountSelection();
+            _ = RefreshSkinAsync(target, true);
+        }
+        catch (OperationCanceledException)
+        { existing?.MarkLoginFailure("需要重新登录"); if (interactive) LoginError = "登录已取消。"; }
+        catch (Exception error)
+        {
+            Trace.TraceWarning("Microsoft 会话未恢复：{0}", error.GetType().Name);
+            var message = error is CryptographicException or FormatException ? "授权缓存无法解密，请重新登录。"
+                : error is HttpRequestException ? "无法连接认证服务，请检查网络后重试。"
+                : "登录验证未完成，请重新登录并检查所选 Microsoft 账号。";
+            existing?.MarkLoginFailure(message);
+            if (interactive) LoginError = message;
+        }
+        finally
+        {
+            _accountAttempts.Remove(attemptId);
+            existing?.SetRestoring(false);
+            if (interactive) { IsAuthenticating = false; LoginCode = ""; LoginUri = null; }
+            Signal();
+        }
+    }
+    private void DisposePersistence()
+    {
+        _lifetime.Cancel();
+        _configuration.StatusChanged -= ConfigurationChanged;
+        Accounts.CollectionChanged -= PersistentAccountsChanged;
+        foreach (var account in Accounts) account.PropertyChanged -= AccountChanged;
+        foreach (var cancellation in _accountAttempts.Values.ToArray()) cancellation.Cancel();
+    }
+}

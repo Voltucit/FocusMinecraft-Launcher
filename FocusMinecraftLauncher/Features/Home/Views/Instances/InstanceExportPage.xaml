@@ -1,0 +1,80 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.Home.Views.Instances.InstanceExportPage"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:ui="clr-namespace:FocusMinecraftLauncher.Presentation.Controls"
+ xmlns:views="clr-namespace:FocusMinecraftLauncher.Features.Home.Views.Instances"
+ xmlns:models="clr-namespace:FocusMinecraftLauncher.Features.Home.Models" Focusable="False">
+
+<UserControl.Resources>
+    <Style x:Key="ExportCheck" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+        <Setter Property="MinHeight" Value="32"/>
+        
+    </Style>
+    <Style x:Key="ExportTreeItem" TargetType="TreeViewItem">
+        <Setter Property="Foreground" Value="{DynamicResource AppText}"/>
+        <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual}"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TreeViewItem">
+            <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <ToggleButton x:Name="Expand" Focusable="False" IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" VerticalAlignment="Top" Margin="0,10,0,0">
+                    <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border Background="Transparent" Width="20" Height="20"><Path x:Name="Arrow" Data="M1,0 L5,4 1,8" Stroke="{DynamicResource MutedText}" StrokeThickness="1.5" Width="6" Height="8" VerticalAlignment="Center" HorizontalAlignment="Center" RenderTransformOrigin="0.5,0.5"/></Border><ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Arrow" Property="RenderTransform"><Setter.Value><RotateTransform Angle="90"/></Setter.Value></Setter></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template>
+                </ToggleButton>
+                <Border x:Name="HeaderFrame" Grid.Column="1" Background="Transparent" CornerRadius="{DynamicResource Radius6}" Padding="4,4"><ContentPresenter x:Name="PART_Header" ContentSource="Header"/></Border>
+                <ItemsPresenter x:Name="ChildrenHost" Grid.Row="1" Grid.Column="1"/>
+            </Grid>
+            <ControlTemplate.Triggers>
+                <Trigger Property="HasItems" Value="False"><Setter TargetName="Expand" Property="Visibility" Value="Hidden"/></Trigger>
+                <Trigger Property="IsExpanded" Value="False"><Setter TargetName="ChildrenHost" Property="Visibility" Value="Collapsed"/></Trigger>
+                <Trigger Property="IsSelected" Value="True"><Setter TargetName="HeaderFrame" Property="Background" Value="{DynamicResource SelectionBackground}"/></Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <HierarchicalDataTemplate DataType="{x:Type models:ExportSelectionNode}" ItemsSource="{Binding Children}">
+        <CheckBox Style="{StaticResource ExportCheck}" IsChecked="{Binding IsChecked, Mode=TwoWay}" IsEnabled="{Binding CanToggle}" ToolTip="{Binding Hint}" ToolTipService.ShowOnDisabled="True" AutomationProperties.HelpText="{Binding Hint}" AutomationProperties.Name="{Binding Title}"><TextBlock Text="{Binding Title}" TextWrapping="Wrap"/></CheckBox>
+    </HierarchicalDataTemplate>
+</UserControl.Resources>
+
+
+<Grid>
+    <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,16">
+        <StackPanel IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolean}}">
+            <TextBlock Text="基本信息" Style="{StaticResource SectionTitle}"/>
+            <ui:SettingRow Title="整合包名称"><StackPanel><fluent:TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" MaxLength="128" AutomationProperties.Name="整合包名称"/><TextBlock Text="{Binding NameError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/></StackPanel></ui:SettingRow>
+            <ui:SettingRow Title="整合包版本"><StackPanel><fluent:TextBox Text="{Binding Version, UpdateSourceTrigger=PropertyChanged}" MaxLength="64" AutomationProperties.Name="整合包版本"/><TextBlock Text="{Binding VersionError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/></StackPanel></ui:SettingRow>
+            <ui:SettingRow Title="作者"><fluent:TextBox Text="{Binding Author, UpdateSourceTrigger=PropertyChanged}" MaxLength="128" AutomationProperties.Name="整合包作者"/></ui:SettingRow>
+            <ui:SettingRow Title="说明"><fluent:TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" AutomationProperties.Name="整合包说明"/></ui:SettingRow>
+            <ui:SettingRow Title="导出格式"><TextBlock Text="Modrinth (.mrpack)"/></ui:SettingRow>
+            <TextBlock Text="导出内容" Style="{StaticResource SectionTitle}" Margin="0,32,0,12"/>
+            <WrapPanel><fluent:Button Content="全选可选内容" Command="{Binding SelectAll}" Style="{StaticResource QuietButton}" Margin="-10,0,8,0"/><fluent:Button Content="取消全选" Command="{Binding SelectNone}" Style="{StaticResource QuietButton}"/></WrapPanel>
+            <TreeView ItemsSource="{Binding Content}" ItemContainerStyle="{StaticResource ExportTreeItem}" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource AppText}" Padding="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled" AutomationProperties.Name="整合包导出内容">
+                <TreeView.Resources><Style TargetType="TreeViewItem" BasedOn="{StaticResource ExportTreeItem}"/></TreeView.Resources>
+            </TreeView>
+            <TextBlock Text="{Binding SelectionText}" Style="{StaticResource Caption}" Margin="24,12,0,0"/>
+            <TextBlock Text="账号凭据与访问令牌不属于可选内容。" Style="{StaticResource Caption}" Margin="24,8,0,0"/>
+            <TextBlock Text="{Binding PrivacyWarning}" Style="{StaticResource ErrorMessage}" Margin="24,12,0,0"/>
+            <Expander Header="高级选项" IsExpanded="{Binding AdvancedExpanded, Mode=TwoWay}" Margin="0,24,0,0">
+                <StackPanel>
+                    <ui:SettingRow Title="资源文件"><CheckBox Content="打包资源文件" IsChecked="{Binding BundleResources, Mode=TwoWay}"/></ui:SettingRow>
+                    <ui:SettingRow Title="资源来源"><CheckBox Content="仅使用 Modrinth 来源资源" IsChecked="{Binding OnlyModrinth, Mode=TwoWay}"/></ui:SettingRow>
+                    <StackPanel Visibility="{Binding HasConflicts, Converter={StaticResource BoolVisibility}}" Margin="0,12,0,16"><TextBlock Text="以下项目无法确认满足来源要求，请调整勾选或来源条件：" Style="{StaticResource ErrorMessage}"/><ItemsControl ItemsSource="{Binding SourceConflicts}"><ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Style="{StaticResource Muted}" Margin="0,6,0,0"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel>
+                    <ui:SettingRow Title="包含规则" Description="每行一个实例内的相对路径规则"><StackPanel><fluent:TextBox Text="{Binding Includes, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" AutomationProperties.Name="导出文件包含规则"/><TextBlock Text="{Binding IncludesError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/></StackPanel></ui:SettingRow>
+                    <ui:SettingRow Title="排除规则" Description="每行一个实例内的相对路径规则"><StackPanel><fluent:TextBox Text="{Binding Excludes, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" AutomationProperties.Name="导出文件排除规则"/><TextBlock Text="{Binding ExcludesError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/></StackPanel></ui:SettingRow>
+                    <ui:SettingRow Title="目录结构"><TextBlock Text="Modrinth 索引与 overrides 目录" Style="{StaticResource Muted}"/></ui:SettingRow>
+                    <WrapPanel Margin="0,16,0,8"><fluent:Button Content="读取导出配置" Command="{Binding LoadConfiguration}" Margin="0,0,8,8"/><fluent:Button Content="保存导出配置" Command="{Binding SaveConfiguration}" Margin="0,0,8,8"/><fluent:Button Content="整合包制作指南" Command="{Binding Guide}" Margin="0,0,8,8"/></WrapPanel>
+                </StackPanel>
+            </Expander>
+        </StackPanel>
+    </ScrollViewer>
+    <Border Grid.Row="1" BorderBrush="{DynamicResource SubtleBorder}" BorderThickness="0,1,0,0" Padding="0,16,0,0">
+        <StackPanel>
+            <TextBlock Text="{Binding DestinationPath}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DestinationPath}" Margin="0,8,0,0" Visibility="{Binding DestinationPath, Converter={StaticResource TextVisibility}}" AutomationProperties.Name="已选择的导出位置"/>
+            <TextBlock Text="{Binding Stage}" TextWrapping="Wrap" Margin="0,8,0,0" AutomationProperties.LiveSetting="Polite" Visibility="{Binding Stage, Converter={StaticResource TextVisibility}}"/>
+            <TextBlock Text="{Binding ProgressText}" Style="{StaticResource Caption}" Margin="0,8,0,0" Visibility="{Binding ProgressText, Converter={StaticResource TextVisibility}}"/>
+            <ProgressBar Value="{Binding ProgressPercent, Mode=OneWay}" IsIndeterminate="{Binding IsProgressIndeterminate, Mode=OneWay}" Margin="0,12,0,0" Visibility="{Binding IsBusy, Converter={StaticResource BoolVisibility}}" AutomationProperties.Name="整合包导出进度"/>
+            <WrapPanel Margin="0,12,0,0"><fluent:Button Content="开始导出" Style="{StaticResource PrimaryButton}" Command="{Binding StartPreview}" Margin="0,0,12,0"/><fluent:Button Content="打开所在文件夹" Command="{Binding OpenResult}" Visibility="{Binding HasResult, Converter={StaticResource BoolVisibility}}" Margin="0,0,12,0"/><fluent:Button Content="取消" Command="{Binding Cancel}" Visibility="{Binding IsBusy, Converter={StaticResource BoolVisibility}}"/></WrapPanel>
+        </StackPanel>
+    </Border>
+</Grid>
+
+</UserControl>
