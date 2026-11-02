@@ -16,7 +16,10 @@ $output = Join-Path $repoRoot "artifacts\release\$Version"
 $publish = Join-Path $output 'app'
 if (Test-Path -LiteralPath $publish) { throw "发布输出已存在，未覆盖：$publish" }
 $project = Join-Path $repoRoot 'FocusMinecraftLauncher\FocusMinecraftLauncher.csproj'
-dotnet publish $project -c Release -r win-x64 --self-contained false -p:Version=$Version -o $publish
+# 框架依赖单文件：输出目录只有 FocusMinecraftLauncher.exe，原生库随包内嵌、运行时自动解压。
+dotnet publish $project -c Release -r win-x64 --self-contained false -p:Version=$Version `
+    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+    -p:DebugType=None -p:DebugSymbols=false -o $publish
 if ($LASTEXITCODE -ne 0) { throw '启动器发布构建失败。' }
 if (-not $SkipPackage) {
     dotnet run --project $tools -c Release -- pack --input $publish --output $output --version $Version
