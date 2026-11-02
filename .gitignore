@@ -1,0 +1,38 @@
+# .NET build output
+[Bb]in/
+[Oo]bj/
+artifacts/
+TestResults/
+*.binlog
+
+# Generated release attachments (uploaded to Releases, not source control)
+FMLauncher-*-win-x64.zip
+FMLauncher-win-x64.update.json
+FMLauncher-win-x64.update.json.sig
+
+# Local IDE state
+.idea/
+.vs/
+*.user
+*.suo
+*.sln.docstates
+
+# Local launcher configuration, accounts and game data
+/FMLauncher/
+.minecraft/
+Launcher_config.json
+account_config.json
+
+# Update signing private keys stay outside the repository
+*.pem
+*.key
+*.pfx
+*.p12
+.update-signing/
+.fmlauncher-signing/
+
+# The release public key is required by client and CI builds
+!/Build/Updates/update-public.pem
+
+# Keep these shared ignore rules visible to source control
+!/.gitignore

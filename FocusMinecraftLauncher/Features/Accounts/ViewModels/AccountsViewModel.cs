@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Windows;
 using FocusMinecraftLauncher.Common;
 using FocusMinecraftLauncher.Preview;
 
@@ -26,13 +28,15 @@ public sealed class AccountsViewModel : ObservableObject, IDisposable
     public bool CanEditRename => !_savingRename;
     public string RenameName { get => _renameName; set {if(Set(ref _renameName,value)){RenameError="";System.Windows.Input.CommandManager.InvalidateRequerySuggested();}} }
     public string RenameError { get => _renameError; private set => Set(ref _renameError,value); }
-    private bool CanManage => !_savingRename && !Session.IsBusy && !Session.IsLoading && !Session.IsAuthenticating;
+    private bool CanManage => !_savingRename && !Session.IsEditingBlocked && !Session.IsLoading && !Session.IsAuthenticating;
     public UiCommand ShowAdd { get; }
     public UiCommand CancelAdd { get; }
     public UiCommand AddOffline { get; }
     public UiCommand AddMicrosoft { get; }
     public UiCommand OpenLogin { get; }
     public UiCommand CancelLogin { get; }
+    /// <summary>重新复制授权码（自动复制失败或需要再粘贴一次时用）。</summary>
+    public UiCommand CopyLoginCode { get; }
     public UiCommand Use { get; }
     public UiCommand Relogin { get; }
     public UiCommand RefreshSkin { get; }
@@ -110,6 +114,13 @@ public sealed class AccountsViewModel : ObservableObject, IDisposable
             catch (Win32Exception) { Notice = "无法打开浏览器，请手动打开授权网址。"; }
         }, _ => session.LoginUri is { Scheme: "https" });
         CancelLogin = new(_ => session.CancelMicrosoftLogin(), _ => session.IsAuthenticating);
+        CopyLoginCode = new(_ =>
+        {
+            if (session.LoginCode.Length == 0) return;
+            try { Clipboard.SetText(session.LoginCode); Notice = "授权代码已复制。"; }
+            catch (ExternalException) { Notice = "无法写入剪贴板，请手动选择代码复制。"; }
+            catch (InvalidOperationException) { Notice = "无法写入剪贴板，请手动选择代码复制。"; }
+        }, _ => session.LoginCode.Length > 0);
         RequestRemove = new(_ => {CancelRenameEditor();ConfirmRemove = true;}, _ => Selected != null && CanManage);
         CancelRemove = new(_ => ConfirmRemove = false);
         Remove = new(_ =>

@@ -31,6 +31,7 @@ public partial class MainWindow : FluentWindow
     public MainWindow()
     {
         InitializeComponent();
+        ((App)Application.Current).Updates.Attach(_navigation.Session);
         _settings = new(_navigation.Session);
         AppTitleBar.WndProcInvoked += FixedWindowHitTest;
         UiTheme.Apply(_navigation.Session.Theme, _navigation.Session.GlassTransparency, _navigation.Session.HasCustomBackgroundImage);
@@ -98,7 +99,7 @@ public partial class MainWindow : FluentWindow
                 if(root.Length>0)await _navigation.Session.SelectRootAsync(root);
                 _navigation.Session.CurrentInstance=_navigation.Session.Instances.FirstOrDefault(i=>i.Id==id);
                 if(_navigation.Session.CanLaunch)_navigation.Session.Launch.Execute(null);
-                else _navigation.Session.NotifyTask("无法启动指定版本，请检查账号与实例。",true);
+                else _navigation.Session.NotifyTask("无法启动指定版本，请检查账号与游戏。",true);
             }
         }
         catch(Exception error){_navigation.Session.NotifyTask(Infrastructure.Runtime.RuntimeSupport.Error(error),true);}

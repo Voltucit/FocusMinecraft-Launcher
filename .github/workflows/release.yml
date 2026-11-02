@@ -1,6 +1,6 @@
 name: Release
 
-# 只发 Release：把 CHANGELOG.md 里对应版本号的小节作为 Release 正文，不构建、不打包。
+# 手动触发：从 CHANGELOG.md 读取说明，构建并签名更新附件后再公开 Release。
 on:
   workflow_dispatch:
     inputs:
@@ -25,10 +25,15 @@ jobs:
   release:
     name: 发布
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - name: 检出仓库
         uses: actions/checkout@v4
+
+      - name: 安装 .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
 
       - name: 校验版本号
         shell: pwsh
@@ -97,7 +102,14 @@ jobs:
           "NOTES_FILE=$notes" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host "已读取 $env:APP_VERSION 的更新内容，共 $($body.Count) 行。"
 
-      - name: 创建 GitHub Release
+      - name: 构建并签名更新包
+        shell: pwsh
+        env:
+          FMLAUNCHER_UPDATE_PRIVATE_KEY: ${{ secrets.FMLAUNCHER_UPDATE_PRIVATE_KEY }}
+        run: |
+          & .\Build\Publish-Launcher.ps1 -Version $env:APP_VERSION
+
+      - name: 上传附件并公开 GitHub Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -106,11 +118,25 @@ jobs:
           $flags = @(
             "--title", "v$env:APP_VERSION",
             "--notes-file", $env:NOTES_FILE,
-            "--target", $env:GITHUB_SHA
+            "--target", $env:GITHUB_SHA,
+            "--draft"
           )
           if ($env:PRERELEASE -eq "true") { $flags += "--prerelease" }
 
-          gh release create $env:RELEASE_TAG @flags
+          $output = Join-Path $env:GITHUB_WORKSPACE "artifacts/release/$env:APP_VERSION"
+          $assets = @(
+            (Join-Path $output "FMLauncher-${env:APP_VERSION}-win-x64.zip"),
+            (Join-Path $output "FMLauncher-win-x64.update.json"),
+            (Join-Path $output "FMLauncher-win-x64.update.json.sig")
+          )
+          foreach ($asset in $assets) { if (-not (Test-Path -LiteralPath $asset)) { throw "发布附件缺失：$asset" } }
+
+          gh release create $env:RELEASE_TAG @assets @flags
           if ($LASTEXITCODE -ne 0) { throw "创建 Release 失败，退出码 $LASTEXITCODE。" }
+
+          $publishFlags = @("--draft=false")
+          if ($env:PRERELEASE -ne "true") { $publishFlags += "--latest" }
+          gh release edit $env:RELEASE_TAG @publishFlags
+          if ($LASTEXITCODE -ne 0) { throw "附件已上传但 Release 未公开，请检查草稿。" }
 
           Write-Host "已发布 $env:RELEASE_TAG。"

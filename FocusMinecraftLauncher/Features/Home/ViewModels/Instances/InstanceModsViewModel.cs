@@ -29,7 +29,7 @@ public sealed class InstanceModsViewModel : ObservableObject, IDisposable
     public int SelectedCount=>Items.Count(m=>m.IsSelected);
     public string SelectionText=>$"已选 {SelectedCount} 项";
     public string Notice { get=>_notice;private set=>Set(ref _notice,value); }
-    public string StateText=>!SupportsMods?"当前实例未配置 Mod 加载器。":_busy?"正在读取 Mod":_error.Length>0?_error:FilteredItems.IsEmpty?Items.Count==0?"尚未安装 Mod":"没有匹配的 Mod":"";
+    public string StateText=>!SupportsMods?"当前游戏未配置 Mod 加载器。":_busy?"正在读取 Mod":_error.Length>0?_error:FilteredItems.IsEmpty?Items.Count==0?"尚未安装 Mod":"没有匹配的 Mod":"";
     public string Query { get=>_query;set {if(Set(ref _query,value)){FilteredItems.Refresh();Refresh();}} }
     public bool AllVisibleSelected {get=>!FilteredItems.IsEmpty&&FilteredItems.Cast<PreviewModRow>().All(m=>m.IsSelected);set {foreach(var m in FilteredItems.Cast<PreviewModRow>().ToArray())m.IsSelected=value;Refresh();}}
     public bool ConfirmRemove {get=>_confirm;set=>Set(ref _confirm,value);}
@@ -54,7 +54,12 @@ public sealed class InstanceModsViewModel : ObservableObject, IDisposable
         RemoveSelected=new(async _=>await RemoveAsync(),_=>CanEdit&&HasSelection&&ConfirmRemove);
         OpenFolder=new(_=>{try {var directory=Path.Combine(instance.GameDirectory,"mods");Directory.CreateDirectory(directory);RuntimeSupport.OpenFolder(directory);}catch(Exception error){Notice=RuntimeSupport.Error(error);}},_=>SupportsMods);
         InstallFiles=new(async _=>await InstallAsync(),_=>CanEdit&&SupportsMods);
-        DownloadMods=new(_=>{session.DownloadTab=2;session.Navigate(Navigation.MainPage.Downloads);},_=>SupportsMods);
+        
+        // 带上本实例的游戏版本与加载器，下载页据此自动筛选：直接把“找 Mod”落在兼容范围内。
+        DownloadMods=new(_=>{
+            session.PendingResourceFilter=new(instance.Version,LoaderKey(instance.Loader));
+            session.DownloadTab=2;session.Navigate(Navigation.MainPage.Downloads);
+        },_=>SupportsMods);
         Reload=new(async _=>await LoadAsync(),_=>!_busy);
         session.InstanceContentChanged += ContentChanged;
         _ = LoadAsync();
@@ -150,6 +155,8 @@ public sealed class InstanceModsViewModel : ObservableObject, IDisposable
         finally{_editing=false;Instance.IsEditingContent=false;CommandManager.InvalidateRequerySuggested();}
     }
     private void RowChanged(object? sender,PropertyChangedEventArgs e){if(e.PropertyName==nameof(PreviewModRow.IsSelected))ConfirmRemove=false;Refresh();CommandManager.InvalidateRequerySuggested();}
+    /// <summary>把实例的加载器名映射成下载页筛选用的键；原版等未知加载器返回空串（不筛加载器）。</summary>
+    private static string LoaderKey(string loader)=>loader switch{"Fabric"=>"fabric","Forge"=>"forge","NeoForge"=>"neoforge","Quilt"=>"quilt",_=>""};
     private void ContentChanged(string root,string id)
     {
         if(string.Equals(InstanceStore.Key(root,id),InstanceStore.Key(Instance.Root,Instance.Id),StringComparison.OrdinalIgnoreCase))_ = LoadAsync();

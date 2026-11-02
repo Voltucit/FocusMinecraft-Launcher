@@ -186,7 +186,8 @@ public sealed class LauncherConfiguration
         },
         ["selection"] = new JsonObject { ["instanceId"] = null },
         ["global"] = new JsonObject { ["versionIsolation"] = "All", ["javaPath"] = "", ["memoryMb"] = 4096, ["gameDirectory"] = MinecraftDirectory, ["jvmArguments"] = "" },
-        ["downloads"] = new JsonObject()
+        ["downloads"] = new JsonObject(),
+        ["updates"] = new JsonObject { ["autoCheck"] = true, ["autoDownload"] = false, ["lastCheckUtc"] = "", ["preparedJob"] = "" }
     };
     private static JsonObject DefaultAccounts() => new()
     {

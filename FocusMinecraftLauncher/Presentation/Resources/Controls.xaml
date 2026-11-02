@@ -403,4 +403,87 @@
             <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsFlat), RelativeSource={RelativeSource Self}}" Value="True"><Setter Property="Border.CornerRadius" Value="0"/><Setter Property="BorderThickness" Value="2"/><Setter Property="Foreground" Value="{DynamicResource FlatBlack}"/><Setter Property="Effect" Value="{x:Null}"/></DataTrigger>
 </Style.Triggers>
     </Style>
+    <!-- 首页头像动作按钮与账号菜单：三套布局共用，放在应用级字典里以便独立 UserControl 引用。 -->
+    <Style x:Key="AccountAction" TargetType="fluent:Button" BasedOn="{StaticResource {x:Type fluent:Button}}">
+        <Setter Property="Padding" Value="4,10"/><Setter Property="Margin" Value="4,0"/><Setter Property="MinHeight" Value="64"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource SubtleBorder}"/>
+    </Style>
+    <Style x:Key="ActionIcon" TargetType="Path">
+        <Setter Property="Width" Value="20"/><Setter Property="Height" Value="20"/><Setter Property="Stretch" Value="Uniform"/>
+        <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=fluent:Button}}"/><Setter Property="StrokeThickness" Value="1.5"/>
+        <Setter Property="StrokeStartLineCap" Value="Round"/><Setter Property="StrokeEndLineCap" Value="Round"/><Setter Property="StrokeLineJoin" Value="Round"/>
+    </Style>
+    <Style x:Key="AccountMenu" TargetType="ContextMenu">
+        <Setter Property="visual:ThemeVisuals.IsSoft" Value="{DynamicResource SoftEnabled}"/>
+        <Setter Property="visual:ThemeVisuals.IsFlat" Value="{DynamicResource FlatEnabled}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppText}"/><Setter Property="Background" Value="{DynamicResource PopupSurface}"/>
+        <Setter Property="FontFamily" Value="Segoe UI Variable Text, Microsoft YaHei UI"/><Setter Property="FontSize" Value="14"/>
+        <Setter Property="MinWidth" Value="240"/><Setter Property="MaxHeight" Value="480"/>
+        <Setter Property="DataContext" Value="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ContextMenu">
+            <Border Background="{TemplateBinding Background}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="{DynamicResource OutlineThickness}" CornerRadius="{DynamicResource Radius12}" Padding="4">
+                <ScrollViewer CanContentScroll="True" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/></ScrollViewer>
+            </Border>
+        </ControlTemplate></Setter.Value></Setter>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsFlat), RelativeSource={RelativeSource Self}}" Value="True"><Setter Property="HasDropShadow" Value="False"/></DataTrigger>
+            <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsSoft), RelativeSource={RelativeSource Self}}" Value="True"><Setter Property="Template" Value="{DynamicResource SoftContextMenuTemplate}"/><Setter Property="HasDropShadow" Value="False"/></DataTrigger>
+        </Style.Triggers>
+    </Style>
+    <Style x:Key="AccountMenuItem" TargetType="MenuItem">
+        <Setter Property="Foreground" Value="{DynamicResource AppText}"/><Setter Property="MinHeight" Value="36"/>
+        <Setter Property="Padding" Value="12,8"/><Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="MenuItem">
+            <Border x:Name="Frame" Background="Transparent" CornerRadius="{DynamicResource Radius7}" Padding="{TemplateBinding Padding}">
+                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Path x:Name="Check" Data="M0,5 L4,9 11,1" Stroke="{DynamicResource AppText}" StrokeThickness="1.6" Width="12" Height="10" VerticalAlignment="Center" Visibility="Collapsed"/>
+                    <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Frame" Property="Background" Value="{DynamicResource ControlHover}"/></Trigger>
+                <MultiDataTrigger><MultiDataTrigger.Conditions><Condition Binding="{Binding Path=(visual:ThemeVisuals.IsFlat), RelativeSource={RelativeSource Self}}" Value="True"/><Condition Binding="{Binding IsHighlighted, RelativeSource={RelativeSource Self}}" Value="True"/></MultiDataTrigger.Conditions><Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource FlatBlack}"/><Setter TargetName="Frame" Property="BorderThickness" Value="2"/></MultiDataTrigger>
+                <Trigger Property="IsChecked" Value="True"><Setter TargetName="Check" Property="Visibility" Value="Visible"/></Trigger>
+                <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="{DynamicResource MutedText}"/></Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style x:Key="MenuHeading" TargetType="MenuItem" BasedOn="{StaticResource AccountMenuItem}">
+        <Setter Property="IsEnabled" Value="False"/><Setter Property="FontSize" Value="12"/><Setter Property="MinHeight" Value="28"/>
+    </Style>
+    <Style x:Key="CapeMenuItem" TargetType="MenuItem" BasedOn="{StaticResource AccountMenuItem}">
+        <Setter Property="Header" Value="{Binding Alias}"/><Setter Property="IsCheckable" Value="True"/><Setter Property="IsChecked" Value="{Binding IsActive, Mode=OneWay}"/>
+        <Setter Property="Command" Value="{Binding Command}"/><Setter Property="CommandParameter" Value="{Binding}"/>
+        <Setter Property="AutomationProperties.Name" Value="{Binding Alias}"/>
+        <Style.Triggers><DataTrigger Binding="{Binding Id}" Value=""><Setter Property="IsEnabled" Value="False"/></DataTrigger></Style.Triggers>
+    </Style>
+    <Style x:Key="SwitchMenuItem" TargetType="MenuItem" BasedOn="{StaticResource AccountMenuItem}">
+        <Setter Property="Header" Value="{Binding Title}"/><Setter Property="Command" Value="{Binding Command}"/><Setter Property="CommandParameter" Value="{Binding Parameter}"/>
+        <Setter Property="IsCheckable" Value="{Binding IsAccount}"/><Setter Property="IsChecked" Value="{Binding Account.IsCurrent, Mode=OneWay, FallbackValue=False}"/>
+        <Setter Property="AutomationProperties.Name" Value="{Binding Title}"/>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsPlaceholder}" Value="True"><Setter Property="IsEnabled" Value="False"/></DataTrigger>
+            <DataTrigger Binding="{Binding IsSeparator}" Value="True">
+                <Setter Property="IsEnabled" Value="False"/><Setter Property="Focusable" Value="False"/><Setter Property="MinHeight" Value="8"/>
+                <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="MenuItem"><Border Height="1" Background="{DynamicResource SubtleBorder}" Margin="8,4"/></ControlTemplate></Setter.Value></Setter>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+    <Style x:Key="MenuSeparator" TargetType="Separator"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Separator"><Border Height="1" Margin="8,4" Background="{DynamicResource SubtleBorder}"/></ControlTemplate></Setter.Value></Setter></Style>
+    <!-- 头像本身就是菜单入口：去掉按钮外观，只在悬停时给出底色。 -->
+    <Style x:Key="AvatarAction" TargetType="Button">
+        <Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="0"/><Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual}"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+            <Border x:Name="Frame" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{DynamicResource Radius16}" Padding="3">
+                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Frame" Property="Background" Value="{DynamicResource ControlHover}"/></Trigger>
+                <Trigger Property="IsPressed" Value="True"><Setter TargetName="Frame" Property="Background" Value="{DynamicResource ControlPressed}"/></Trigger>
+                <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource FocusRing}"/><Setter TargetName="Frame" Property="BorderThickness" Value="2"/><Setter TargetName="Frame" Property="Padding" Value="1"/></Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
 </ResourceDictionary>

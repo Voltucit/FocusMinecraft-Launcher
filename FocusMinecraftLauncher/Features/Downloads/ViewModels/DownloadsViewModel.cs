@@ -21,6 +21,8 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
     private DownloadNotification? _notification;
     private ImageSource? _image;
     private bool _compact, _syncing,_disposed;
+    private ResourceFilter? _filter;
+    private bool _filterApplied;
     private int _navigationRevision;
     private readonly CancellationTokenSource _lifetime = new();
     private string _state = "正常";
@@ -56,7 +58,7 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
         Session = session;
         _entries = [];
         _categories = Enum.GetValues<DownloadSection>().Where(section => (int)section >= 2).ToDictionary(section => section,section => new CommunityCatalogViewModel(section,_catalog,_entries,OpenResource));
-        Vanilla = new(session,OpenInstallation); Tasks = new(session,() => SetSection(_lastBrowse),ShowNotification);
+        Vanilla = new(OpenInstallation); Tasks = new(session,() => SetSection(_lastBrowse),ShowNotification);
         _section = Enum.IsDefined((DownloadSection)session.DownloadTab) ? (DownloadSection)session.DownloadTab : DownloadSection.Vanilla;
         _lastBrowse = _section == DownloadSection.Tasks ? DownloadSection.Vanilla : _section;
         ShowTasks = new(_ => SetSection(DownloadSection.Tasks)); NormalState = new(async _ => await LoadVanillaAsync());
@@ -65,7 +67,7 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
         session.PropertyChanged += SessionChanged;
         session.TaskNotification += ShowNotification;
         _ = LoadVanillaAsync();
-        if(_categories.TryGetValue(_section,out var currentCategory))_ = currentCategory.EnsureLoadedAsync();
+        if(_categories.TryGetValue(_section,out var currentCategory))_ = EnterCategoryAsync(currentCategory);
     }
     private void SessionChanged(object? sender,PropertyChangedEventArgs e)
     { if(!_syncing && e.PropertyName == nameof(PreviewSession.DownloadTab)) SetSection(Enum.IsDefined((DownloadSection)Session.DownloadTab) ? (DownloadSection)Session.DownloadTab : DownloadSection.Vanilla); }
@@ -76,7 +78,16 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
         _section = section; _detail = null; _installation = null; _detailTrail.Clear(); _state = "正常";
         _syncing = true; Session.DownloadTab = (int)section; _syncing = false;
         Changed(nameof(SelectedNavigation)); RefreshRoute();
-        if(_categories.TryGetValue(section,out var category)) _ = category.EnsureLoadedAsync();
+        if(_categories.TryGetValue(section,out var category)) _ = EnterCategoryAsync(category);
+    }
+    /// <summary>首次进入分类时接管实例带来的筛选上下文：自动落到版本与加载器，之后详情页沿用同一范围。</summary>
+    private async Task EnterCategoryAsync(CommunityCatalogViewModel category)
+    {
+        if(_filter==null&&Session.PendingResourceFilter is { } pending){_filter=pending;Session.PendingResourceFilter=null;}
+        await category.EnsureLoadedAsync();
+        if(_filter is not { } filter||_filterApplied||category.Category!=DownloadSection.Mods)return;
+        _filterApplied=true;
+        category.ApplyFilter(filter.GameVersion,filter.Loader);
     }
     private void OpenInstallation(GameVersionItem game)
     {
@@ -102,7 +113,7 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
             if(!_entries.TryGetValue(id,out var entry))_entries[id]=entry=new(project,_catalog,OpenResource);else if(!ReferenceEquals(entry.Project,project))entry.UpdateProject(project);
             Preview=null;
             if(_detail!=null&&_detail.Project.Id!=id)_detailTrail.Push(_detail);
-            if(!_details.TryGetValue(id,out var vm))_details[id]=vm=new ResourceDetailViewModel(entry,BackFromDetail,async file=>await OpenDownloadConfirmationAsync(entry,file),async key=>LargeImage=await RemoteArtwork.LoadAsync(key));_detail=vm;if(versions)vm.SelectedTab=2;RefreshRoute();
+            if(!_details.TryGetValue(id,out var vm))_details[id]=vm=new ResourceDetailViewModel(entry,BackFromDetail,async file=>await OpenDownloadConfirmationAsync(entry,file),async key=>LargeImage=await RemoteArtwork.LoadAsync(key),_filter);_detail=vm;if(versions)vm.SelectedTab=2;RefreshRoute();
         }
         catch(Exception error){if(!_disposed)ShowNotification(Infrastructure.Runtime.RuntimeSupport.Error(error),true);}
     }
@@ -127,7 +138,7 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
     private void BackFromDetail() { _navigationRevision++; _detail = _detailTrail.TryPop(out var previous) ? previous : null; RefreshRoute(); }
     private void RefreshRoute() { Changed(nameof(ActivePage)); Changed(nameof(CanChangeDisplayState)); Changed(nameof(ShowPage)); Changed(nameof(ShowState)); Changed(nameof(StateTitle)); Changed(nameof(StateDescription)); Changed(nameof(DisplayState)); }
     private void OverlayChanged() { Changed(nameof(IsOverlayOpen)); Changed(nameof(IsPreviewOpen)); Changed(nameof(IsImageOpen)); Changed(nameof(CanInteract)); }
-    public void Dispose() { _disposed=true;_navigationRevision++;_lifetime.Cancel(); Session.PropertyChanged -= SessionChanged; Session.TaskNotification -= ShowNotification; _catalog.Dispose(); Tasks.Dispose();Vanilla.Dispose(); foreach(var detail in _details.Values) detail.Dispose(); }
+    public void Dispose() { _disposed=true;_navigationRevision++;_lifetime.Cancel(); Session.PropertyChanged -= SessionChanged; Session.TaskNotification -= ShowNotification; _catalog.Dispose(); Tasks.Dispose(); foreach(var detail in _details.Values) detail.Dispose(); }
 }
 /// <summary>用户确认目标后才加入资源下载任务，前置资源与所选文件绑定。</summary>
 public sealed class DownloadPreviewViewModel : ObservableObject
@@ -145,7 +156,7 @@ public sealed class DownloadPreviewViewModel : ObservableObject
     public bool HasDependencies => Dependencies.Count > 0;
     public IReadOnlyList<DependencyViewModel> Dependencies { get; }
     public PreviewInstance? SelectedInstance { get => _instance; set { if(Set(ref _instance,value)) Changed(nameof(InstanceText)); } }
-    public string InstanceText => SelectedInstance?.Name ?? "未选择实例";
+    public string InstanceText => SelectedInstance?.Name ?? "未选择游戏";
     private DownloadPreviewViewModel(string title,string summary,string message,PreviewSession session,ResourceFileItem? file,ResourceCatalog? catalog,Action<string,bool>? open)
     {
         Title = title; Summary = summary; Message = message; Session = session; SelectInstance = file != null && file.DownloadFile?.Filename.EndsWith(".mrpack",StringComparison.OrdinalIgnoreCase) != true; _instance = session.CurrentInstance; DependencyStatus = file?.DependencyText ?? "";

@@ -5,6 +5,8 @@ using FocusMinecraftLauncher.Preview;
 using FocusMinecraftLauncher.Infrastructure.Configuration;
 using System.Text.Json.Nodes;
 using FocusMinecraftLauncher.Features.ExtraPages.Views;
+using FocusMinecraftLauncher.Features.More.ViewModels;
+using FocusMinecraftLauncher.Infrastructure.Updates;
 
 namespace FocusMinecraftLauncher;
 
@@ -13,6 +15,7 @@ public partial class App : Application
 {
     public LauncherConfiguration Configuration { get; private set; } = null!;
     public BackgroundImageStore BackgroundImages { get; private set; } = null!;
+    public LauncherUpdateViewModel Updates { get; private set; } = null!;
     private BitmapSource? _initialBackground;
     public string RequestedLaunchId { get; private set; } = "";
     public string RequestedLaunchRoot { get; private set; } = "";
@@ -24,10 +27,15 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        string updateError = "";
+        try { if (UpdateBootstrap.RecoverBeforeStartup(e.Args)) { Shutdown(); return; } }
+        catch (Exception error) { updateError = "上次更新需要处理，请查看 FMLauncher/Updates 中的记录。"; System.Diagnostics.Trace.TraceError("更新恢复：{0}", error); }
         for(var index=0;index<e.Args.Length-1;index++)
         {if(e.Args[index]=="--launch-instance")RequestedLaunchId=e.Args[++index];else if(e.Args[index]=="--launch-root")RequestedLaunchRoot=e.Args[++index];}
 
         Configuration = await LauncherConfiguration.OpenAsync();
+        if (updateError.Length > 0) Configuration.ReportNotice(updateError);
+        Updates = new(Configuration);
         var appearance = Configuration.ReadLauncher()["appearance"];
         BackgroundImages = new BackgroundImageStore(Configuration.ConfigDirectory);
         var storedTheme = LauncherConfiguration.Text(appearance?["theme"], "Glass");
@@ -54,6 +62,7 @@ public partial class App : Application
     /// <summary>补齐最后一次尚在合并等待中的写入，失败时保留明确反馈。</summary>
     protected override void OnExit(ExitEventArgs e)
     {
+        Updates?.Dispose();
         if (Configuration != null && !Configuration.FlushAsync().GetAwaiter().GetResult())
             MessageBox.Show("配置保存失败。请检查程序目录的写入权限，本次更改可能未保存。", "FMLauncher", MessageBoxButton.OK, MessageBoxImage.Warning);
         base.OnExit(e);
@@ -71,6 +80,12 @@ public partial class App : Application
     private void ShowMainWindow()
     {
         MainWindow = new MainWindow();
+        MainWindow.ContentRendered += MainWindowReady;
         MainWindow.Show();
+    }
+    private async void MainWindowReady(object? sender, EventArgs e)
+    {
+        if (sender is Window window) window.ContentRendered -= MainWindowReady;
+        await Updates.OnMainWindowReadyAsync();
     }
 }

@@ -1,6 +1,5 @@
 using System.IO;
 using System.Windows.Input;
-using System.Collections.Specialized;
 using FocusMinecraftLauncher.Preview;
 using FocusMinecraftLauncher.Common;
 using FocusMinecraftLauncher.Features.Downloads.Models;
@@ -9,12 +8,9 @@ namespace FocusMinecraftLauncher.Features.Downloads.ViewModels;
 
 public sealed class VanillaVersionRowViewModel(GameVersionItem game, Action<GameVersionItem> configure) : ObservableObject
 {
-    private bool _installed;
     public GameVersionItem Game { get; } = game;
     public UiCommand Configure { get; } = new(_ => configure(game));
-    public bool IsInstalled { get=>_installed;internal set {if(Set(ref _installed,value)){Changed(nameof(ActionText));Changed(nameof(AccessibleName));}} }
-    public string ActionText => IsInstalled?"已安装":"安装";
-    public string AccessibleName => "Minecraft "+Game.Number+"，"+ActionText;
+    public string AccessibleName => "Minecraft "+Game.Number+"，安装";
 }
 public sealed class VanillaGroupViewModel(string title, IEnumerable<VanillaVersionRowViewModel> rows, bool expanded) : ObservableObject
 {
@@ -24,21 +20,12 @@ public sealed class VanillaGroupViewModel(string title, IEnumerable<VanillaVersi
     public string Count => Rows.Count + " 个版本";
     public bool IsExpanded { get => _expanded; set => Set(ref _expanded, value); }
 }
-public sealed class VanillaCatalogViewModel : ObservableObject,IDisposable
+public sealed class VanillaCatalogViewModel : ObservableObject
 {
     public IReadOnlyList<VanillaGroupViewModel> Groups { get; private set; } = [];
     public DownloadScrollPosition Scroll { get; } = new();
     private readonly Action<GameVersionItem> _configure;
-    private readonly PreviewSession _session;
-    public VanillaCatalogViewModel(PreviewSession session,Action<GameVersionItem> configure)
-    {_session=session;_configure=configure;session.Instances.CollectionChanged+=InstancesChanged;}
-    private void InstancesChanged(object? sender,NotifyCollectionChangedEventArgs e)=>UpdateInstalledStates();
-    /// <summary>只使用当前游戏目录中安装成功的共享实例，不按下载百分比推断安装状态。</summary>
-    private void UpdateInstalledStates()
-    {
-        var installed=_session.Instances.Where(instance=>string.Equals(instance.Root,_session.SelectedRoot,StringComparison.OrdinalIgnoreCase)).Select(instance=>instance.Version).ToHashSet(StringComparer.Ordinal);
-        foreach(var row in Groups.SelectMany(group=>group.Rows))row.IsInstalled=installed.Contains(row.Game.Number);
-    }
+    public VanillaCatalogViewModel(Action<GameVersionItem> configure) => _configure=configure;
     public async Task LoadAsync(CancellationToken token)
     {
         var versions = await FMCore.Installer.MinecraftInstaller.GetVersionsAsync(token);
@@ -48,9 +35,7 @@ public sealed class VanillaCatalogViewModel : ObservableObject,IDisposable
         Groups = [new("最新版本", games.Where(g => g.Kind == "正式版").Take(1).Concat(games.Where(g => g.Kind == "预览版").Take(1)).Select(Row), true),
             ..new[] { "正式版", "预览版", "远古版", "愚人节版" }.Select(kind => new VanillaGroupViewModel(kind, games.Where(g => g.Kind == kind).Select(Row), false))];
         Changed(nameof(Groups));
-        UpdateInstalledStates();
     }
-    public void Dispose()=>_session.Instances.CollectionChanged-=InstancesChanged;
 }
 public sealed record ComponentVersionItem(string Version, string Date, string Stability, string[] CompatiblePrimaries)
 {

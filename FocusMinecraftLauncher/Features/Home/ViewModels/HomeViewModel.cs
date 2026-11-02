@@ -57,7 +57,7 @@ public sealed class HomeViewModel : ObservableObject, IDisposable
     public bool IsInfoNarrow { get => _infoNarrow; set => Set(ref _infoNarrow, value); }
     public double PanelWidth { get => _panelWidth; set => Set(ref _panelWidth, value); }
     public double AvatarSize => IsCompactHeight ? (Session.IsLaunching ? 48 : 64) : 96;
-    public bool CanChangeIdentity => !Session.IsBusy && !Session.IsLoading && !Session.IsAuthenticating;
+    public bool CanChangeIdentity => !Session.IsEditingBlocked && !Session.IsLoading && !Session.IsAuthenticating;
     public bool HasCurrentAccount => Session.CurrentAccount != null;
     public bool HasInstance => Session.CurrentInstance != null;
     public bool NeedsLogin => Session.CurrentAccount is { IsMicrosoft: true, IsValid: false, IsRestoring: false };
@@ -70,19 +70,19 @@ public sealed class HomeViewModel : ObservableObject, IDisposable
         : Session.CurrentAccount?.IsRestoring == true ? "正在恢复登录" : !HasInstance ? "安装游戏" : !HasCurrentAccount ? "添加账号" : NeedsLogin ? "重新登录" : "开始游戏";
     public string TargetVersion => Session.CurrentInstance is not { } instance ? "未选择版本"
         : string.IsNullOrWhiteSpace(instance.Loader) || instance.Loader == "原版" ? instance.Version : instance.Version + " / " + instance.ComponentsText;
-    public string LaunchButtonHint => (HasInstance ? InstanceName + "\n" : "") + TargetVersion;
-    public string LaunchButtonName => PrimaryText + "，" + TargetVersion;
-    public bool ShowInstanceName => IsClassicHome && Session.CurrentInstance is { } instance && instance.Name != instance.Version && instance.Name != instance.VersionText;
+    public string LaunchSubtitle => HasInstance ? InstanceName : TargetVersion;
+    public string LaunchButtonHint => HasInstance ? InstanceName + "\n" + TargetVersion : TargetVersion;
+    public string LaunchButtonName => PrimaryText + "，" + LaunchSubtitle;
     public bool ShowAddAccountGuide => !HasCurrentAccount && !HasInstance && CanChangeIdentity;
     public string InstanceName => Session.CurrentInstance?.Name ?? "尚未选择游戏版本";
     public string InstanceVersion => Session.CurrentInstance?.VersionText ?? "";
     public string InstanceLoader => Session.CurrentInstance?.Loader ?? "";
     public bool ShowTask => Session.IsLaunching;
-    public string LaunchHint => ShowTask ? "" : Session.IsLoading ? "正在读取实例" : Session.InstanceError.Length > 0 ? "实例暂不可用" : !HasCurrentAccount ? "请先添加账号" : NeedsLogin ? "请重新登录后启动" : Session.IsBusy ? "正在处理任务" : IsClassicHome && HasInstance ? "" : "";
+    public string LaunchHint => ShowTask ? "" : Session.IsLoading ? "正在读取游戏" : Session.InstanceError.Length > 0 ? "游戏暂不可用" : !HasCurrentAccount ? "请先添加账号" : NeedsLogin ? "请重新登录后启动" : Session.IsBusy ? "正在处理任务" : IsClassicHome && HasInstance ? "" : "";
     public string LaunchStage => Session.LaunchTask?.Stage ?? "";
     public string LaunchError => Session.LaunchTask?.Error ?? "";
     public bool CanRetryLaunch => Session.LaunchTask?.CanRetry == true;
-    public string InstanceSettingsHint => HasInstance ? "管理当前实例" : "请先选择游戏版本";
+    public string InstanceSettingsHint => HasInstance ? "管理当前游戏" : "请先选择游戏版本";
     public bool CanOpenInstanceSettings => HasInstance && CanChangeIdentity;
     public UiCommand Accounts { get; }
     public UiCommand AddAccount { get; }
@@ -182,7 +182,7 @@ public sealed class HomeViewModel : ObservableObject, IDisposable
         // 提前读一次披风，外观菜单展开时才能直接列出可选项。
         EnsureCapesLoaded();
     }
-    private bool CanEditCapes => Session.CurrentAccount is { IsMicrosoft: true, IsValid: true } && !Session.IsBusy;
+    private bool CanEditCapes => Session.CurrentAccount is { IsMicrosoft: true, IsValid: true } && !Session.IsEditingBlocked;
     private static Infrastructure.Authentication.OfficialSkinService Capes() =>
         new(((App)System.Windows.Application.Current).Configuration.ConfigDirectory);
     private async Task RefreshCapesAsync()
@@ -233,7 +233,7 @@ public sealed class HomeViewModel : ObservableObject, IDisposable
             var saved = await Infrastructure.Authentication.LocalSkinStore.SaveAsync(targets, account.Name, png, CancellationToken.None);
             Session.NotifyTask($"本地皮肤已保存到 {saved} 个游戏目录", false);
             if (targets.Any(directory => !Infrastructure.Authentication.LocalSkinStore.HasLoader(directory)))
-                Session.NotifyTask("未检测到 CustomSkinLoader，游戏内不会显示本地皮肤，请先给实例安装该 Mod。", true);
+                Session.NotifyTask("未检测到 CustomSkinLoader，游戏内不会显示本地皮肤，请先给游戏安装该 Mod。", true);
             Refresh();
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException)
@@ -272,7 +272,7 @@ public sealed class HomeViewModel : ObservableObject, IDisposable
     }
     private void HomeVisibilityChanged()
     {
-        Changed(nameof(IsHome)); Changed(nameof(ShowPageSurface)); Changed(nameof(IsClassicHome)); Changed(nameof(IsMinimalHome)); Changed(nameof(IsCenteredHome)); Changed(nameof(ShowInstanceName));
+        Changed(nameof(IsHome)); Changed(nameof(ShowPageSurface)); Changed(nameof(IsClassicHome)); Changed(nameof(IsMinimalHome)); Changed(nameof(IsCenteredHome));
     }
     /// <summary>只在来源或账号列表改变时重建菜单，任务进度通知不会打断菜单键盘选择。</summary>
     private void UpdateAccountMenu()

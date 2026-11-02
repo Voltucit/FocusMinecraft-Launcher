@@ -62,6 +62,8 @@ public sealed class PreviewAccount : ObservableObject
         RuntimeAccount = account; _valid = true; _restoring = false; Refresh();
     }
 }
+/// <summary>从实例进入资源下载时携带的筛选上下文：目标游戏版本与加载器（空串表示不限）。</summary>
+public sealed record ResourceFilter(string GameVersion, string Loader);
 /// <summary>由核心读取的本地实例及启动器显示元数据。</summary>
 public sealed class PreviewInstance(string id, string name, string version, string loader, string versionType = "release") : ObservableObject
 {

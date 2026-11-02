@@ -62,7 +62,9 @@ public sealed partial class PreviewSession : ObservableObject, IDisposable
     public PreviewTask? ActiveTask => Tasks.FirstOrDefault(task=>task.IsActive) ?? _active;
     public PreviewTask? LaunchTask => _launch;
     public bool HasTask => Tasks.Count > 0;
-    public bool IsBusy => IsApplyingIsolation || Tasks.Any(task => task.IsActive);
+    public bool IsBusy => IsApplyingIsolation || IsRemovingInstance || IsInstallingLauncherUpdate || Tasks.Any(task => task.IsActive);
+    /// <summary>下载、安装与补全只是后台写文件，不该锁住换账号、换实例与改设置；只有游戏运行中、删实例、切隔离与装更新才需要独占。</summary>
+    public bool IsEditingBlocked => IsApplyingIsolation || IsRemovingInstance || IsInstallingLauncherUpdate || IsLaunching;
     public bool IsLaunching => _launch?.IsActive == true;
     public bool HasInstances => Instances.Count > 0;
     public bool HasAccounts => Accounts.Count > 0;
@@ -95,6 +97,8 @@ public sealed partial class PreviewSession : ObservableObject, IDisposable
         }
     }
     public int DownloadTab { get => _tab; set => Set(ref _tab, value); }
+    /// <summary>实例页跳转“下载 Mod”时携带的筛选上下文；下载页读取后立即清空，只生效一次。</summary>
+    public ResourceFilter? PendingResourceFilter { get; set; }
     public UiCommand Launch { get; }
     public UiCommand CancelTask { get; }
     public UiCommand RetryTask { get; }
@@ -146,7 +150,8 @@ public sealed class PreviewSettings
     public string JavaPath { get; set; } = "";
     public string GameDirectory { get; set; } = System.IO.Path.Combine(AppContext.BaseDirectory, ".minecraft");
     public int MemoryMb { get; set; } = 4096;
-    public bool AutomaticMemory { get; set; }
+    /// <summary>首次启动没有配置项时默认按实例 Mod 数量自动分配。</summary>
+    public bool AutomaticMemory { get; set; } = true;
     public bool OptimizeMemory { get; set; }
     public string JvmArguments { get; set; } = "";
     public PreviewSettings Copy() => (PreviewSettings)MemberwiseClone();

@@ -40,7 +40,7 @@ public sealed class ResourceCatalog : IDisposable
         foreach (var version in versions)
         {
             IReadOnlyList<ResourceDependency>? dependencies = version.Dependencies.Any(d => d.ProjectId == null && d.VersionId == null) ? null : version.Dependencies.Where(d => d.DependencyType is "required" or "optional").Select(d => new ResourceDependency(d.ProjectId ?? d.VersionId!, d.VersionId ?? "由兼容版本决定", d.DependencyType == "required", version.GameVersions.ToArray(), string.Join(" / ", version.Loaders), "")).ToArray();
-            foreach (var file in version.Files)
+            foreach (var file in SelectInstallable(version.Files))
                 files.Add(new(version.Id + ":" + file.Filename, version.VersionNumber, file.Filename, version.GameVersions.ToArray(), version.Loaders.Count > 0 ? string.Join(" / ", version.Loaders) : null,
                     DateOnly.FromDateTime(version.PublishedAt.Date), file.Size, null, dependencies)
                     { DownloadFile = file, CoreVersion = version, ProjectId = detail.Id, Loaders = version.Loaders.ToArray() });
@@ -48,6 +48,19 @@ public sealed class ResourceCatalog : IDisposable
         result.Files = files;_loaded.Add(id);
         result.LoadedImage = await RemoteArtwork.LoadAsync(detail.IconUrl, token);
         return result;
+    }
+
+    /// <summary>同一版本会附带源码、文档等不可加载的附件，装进 mods 会让加载器在启动阶段直接失败。</summary>
+    private static IEnumerable<ModrinthFile> SelectInstallable(IReadOnlyList<ModrinthFile> files)
+    {
+        var usable = files.Where(file =>
+            !file.Filename.EndsWith("-sources.jar", StringComparison.OrdinalIgnoreCase)
+            && !file.Filename.EndsWith("-javadoc.jar", StringComparison.OrdinalIgnoreCase)
+            && !file.Filename.EndsWith(".pom", StringComparison.OrdinalIgnoreCase)
+            && !file.Filename.EndsWith(".module", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (usable.Length == 0) return usable;
+        // 有主文件时只保留主文件，避免用户在同版本里选到资源包之类的次要附件。
+        return usable.Any(file => file.Primary) ? usable.Where(file => file.Primary) : usable;
     }
     public async Task EnsureDependenciesAsync(ResourceFileItem file)
     {
@@ -72,7 +85,7 @@ public sealed class ResourceCatalog : IDisposable
             {item.LoadedImage=await RemoteArtwork.LoadAsync(project.IconUrl);_projects[id]=item;}
             else item=existing;
             if(dependency.ProjectId == null && dependency.VersionId != null) _projects[dependency.VersionId] = item;
-            resolved.Add(new(id,version?.VersionNumber??"按目标实例选择兼容版本",dependency.DependencyType=="required",
+            resolved.Add(new(id,version?.VersionNumber??"按目标游戏选择兼容版本",dependency.DependencyType=="required",
                 version?.GameVersions.ToArray()??project.GameVersions.ToArray(),
                 string.Join(" / ",version?.Loaders??project.Loaders),version==null?"安装时选择兼容的文件版本。":"要求指定的文件版本。"));
         }

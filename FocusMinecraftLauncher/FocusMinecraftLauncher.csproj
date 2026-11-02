@@ -10,8 +10,9 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="FocusMinecraftCore" Version="2.0.3" />
+      <PackageReference Include="FocusMinecraftCore" Version="2.0.5" />
       <PackageReference Include="WPF-UI" Version="4.3.0" />
+      <ProjectReference Include="..\FMLauncher.UpdateShared\FMLauncher.UpdateShared.csproj" />
     </ItemGroup>
 
     <ItemGroup>
@@ -32,16 +33,17 @@
         <Description>Minecraft 启动器</Description>
 
         <!-- 软件版本号 -->
-        <Version>1.0.0</Version>
+        <Version Condition="'$(Version)' == ''">2.0.2</Version>
+        <ReleaseNumber>$([System.Text.RegularExpressions.Regex]::Match('$(Version)', '^\d+\.\d+\.\d+').Value)</ReleaseNumber>
 
         <!-- 程序集版本 -->
-        <AssemblyVersion>1.0.0.0</AssemblyVersion>
+        <AssemblyVersion>$(ReleaseNumber).0</AssemblyVersion>
 
         <!-- Windows 文件版本 -->
-        <FileVersion>1.0.0.0</FileVersion>
+        <FileVersion>$(ReleaseNumber).0</FileVersion>
 
         <!-- Windows 产品版本 -->
-        <InformationalVersion>1.0.0</InformationalVersion>
+        <InformationalVersion>$(Version)</InformationalVersion>
 
         <!-- 避免产品版本自动附带 Git 提交哈希 -->
         <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
@@ -51,4 +53,5 @@
     </PropertyGroup>
 
 
+    <Import Project="..\Build\Updates\EmbeddedUpdater.targets" />
 </Project>

@@ -90,7 +90,7 @@
                 <TextBlock x:Name="MinecraftValue" Grid.Column="1" Style="{StaticResource DetailValue}"/>
                 <TextBlock Grid.Row="1" Text="加载器" Style="{StaticResource DetailLabel}" Margin="0,10,16,0"/>
                 <TextBlock x:Name="LoaderValue" Grid.Row="1" Grid.Column="1" Style="{StaticResource DetailValue}" Margin="0,10,0,0"/>
-                <TextBlock Grid.Row="2" Text="实例名称" Style="{StaticResource DetailLabel}" Margin="0,10,16,0"/>
+                <TextBlock Grid.Row="2" Text="游戏名称" Style="{StaticResource DetailLabel}" Margin="0,10,16,0"/>
                 <TextBlock x:Name="InstanceValue" Grid.Row="2" Grid.Column="1" Style="{StaticResource DetailValue}" Margin="0,10,0,0"/>
                 <TextBlock Grid.Row="3" Text="资源文件" Style="{StaticResource DetailLabel}" Margin="0,10,16,0" VerticalAlignment="Top"/>
                 <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,10,0,0">

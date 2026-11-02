@@ -3,9 +3,15 @@
  IsHitTestVisible="False" Focusable="False" ClipToBounds="True"
  Visibility="{Binding Session.ShowCustomBackgroundImage, Converter={StaticResource BoolVisibility}}">
     <Grid>
-        <!-- 仅背景图参与模糊，前景的文字、按钮和标题栏均在本控件之外。 -->
-        <Image x:Name="Picture" Source="{Binding Session.CustomBackgroundImage}" Stretch="UniformToFill" Margin="-60"
-               RenderOptions.BitmapScalingMode="HighQuality"/>
+        <!-- 铺底：同一张图重度模糊后拉伸填满，让未铺满的空白处与画面同色，避免出现硬边。 -->
+        <Image x:Name="Backdrop" Source="{Binding Session.CustomBackgroundImage}" Stretch="UniformToFill" Margin="-60"
+               Opacity="0.9" RenderOptions.BitmapScalingMode="LowQuality">
+            <Image.CacheMode><BitmapCache RenderAtScale="0.25" EnableClearType="False"/></Image.CacheMode>
+            <Image.Effect><BlurEffect Radius="40" KernelType="Gaussian" RenderingBias="Performance"/></Image.Effect>
+        </Image>
+        <!-- 清晰层只向下缩放，小图按原始像素居中显示，不再被放大成模糊的壁画。 -->
+        <Image x:Name="Picture" Source="{Binding Session.CustomBackgroundImage}" Stretch="Uniform" StretchDirection="DownOnly"
+               Margin="-60" RenderOptions.BitmapScalingMode="HighQuality"/>
         <!-- 缓存宿主包含固定模糊效果；透明度动画放在缓存外，避免每帧重新生成模糊表面。 -->
         <Grid x:Name="DynamicLayers" Margin="-60" Visibility="Collapsed">
             <Border x:Name="LowCacheHost" Background="{DynamicResource AppBackground}">

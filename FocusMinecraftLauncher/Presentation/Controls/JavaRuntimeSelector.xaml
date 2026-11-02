@@ -5,7 +5,12 @@
     <ui:AnimatedExpander IsExpanded="{Binding IsExpanded, Mode=TwoWay}" AutomationProperties.Name="选择本机 Java">
         <ui:AnimatedExpander.Header><TextBlock Text="{Binding SelectionText}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" ToolTip="{Binding SelectedPath}"/></ui:AnimatedExpander.Header>
         <StackPanel Margin="12,0,12,12">
-            <fluent:Button Content="检测本机 Java" Command="{Binding Detect}" HorizontalAlignment="Left" Margin="0,0,0,12"/>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                <fluent:Button Content="检测本机 Java" Command="{Binding Detect}" Margin="0,0,8,0"/>
+                <fluent:Button Content="下载 Java" Command="{Binding Install}" AutomationProperties.Name="下载官方 Java 运行时"/>
+            </StackPanel>
+            <ProgressBar Value="{Binding InstallProgress, Mode=OneWay}" Maximum="100" Visibility="{Binding IsInstalling, Converter={StaticResource BoolVisibility}}" AutomationProperties.Name="Java 下载进度" Margin="0,0,0,8"/>
+            <TextBlock Text="{Binding InstallStatus}" Visibility="{Binding InstallStatus, Converter={StaticResource TextVisibility}}" AutomationProperties.LiveSetting="Polite" Style="{StaticResource Caption}" Margin="0,0,0,8"/>
             <ProgressBar IsIndeterminate="True" Visibility="{Binding IsBusy, Converter={StaticResource BoolVisibility}}" AutomationProperties.Name="Java 检测进度" Margin="0,0,0,8"/>
             <TextBlock Text="{Binding StatusText}" AutomationProperties.LiveSetting="Polite" Margin="0,0,0,8">
                 <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource Caption}"><Style.Triggers><DataTrigger Binding="{Binding HasFailed}" Value="True"><Setter Property="Foreground" Value="{DynamicResource ErrorText}"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
@@ -16,10 +21,7 @@
                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="12" Margin="0,4,0,0" ToolTip="{Binding Path}">
                     <fluent:Button.Style><Style TargetType="fluent:Button" BasedOn="{StaticResource QuietButton}"><Style.Triggers><DataTrigger Binding="{Binding IsSelected}" Value="True"><Setter Property="Background" Value="{DynamicResource SelectionBackground}"/></DataTrigger></Style.Triggers></Style></fluent:Button.Style>
                     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <StackPanel Margin="0,0,12,0">
-                            <WrapPanel><TextBlock Text="{Binding Version}" FontWeight="SemiBold" Margin="0,0,12,0"/><TextBlock Text="{Binding Architecture}" Style="{StaticResource Caption}" VerticalAlignment="Center"/></WrapPanel>
-                            <TextBlock Text="{Binding Path}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
-                        </StackPanel>
+                        <TextBlock Text="{Binding Headline}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" Margin="0,0,12,0" ToolTip="{Binding Headline}"/>
                         <TextBlock Grid.Column="1" Text="当前选择" Foreground="{DynamicResource AccentText}" VerticalAlignment="Center" Visibility="{Binding IsSelected, Converter={StaticResource BoolVisibility}}"/>
                     </Grid>
                 </fluent:Button>

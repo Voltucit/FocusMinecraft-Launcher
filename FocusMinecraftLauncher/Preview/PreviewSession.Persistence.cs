@@ -2,6 +2,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -21,7 +22,7 @@ public sealed partial class PreviewSession
     private readonly Dictionary<Guid, CancellationTokenSource> _accountAttempts = [];
     private readonly List<JsonNode?> _unreadableAccounts = [];
     private bool _restoringConfiguration = true, _authenticating;
-    private string _loginCode = "", _loginProgress = "", _loginError = "";
+    private string _loginCode = "", _loginProgress = "", _loginError = "", _loginHint = "";
     private Uri? _loginUri;
     private HomeLayout _homeLayout;
     private bool _showLauncherUpdates = true, _showGameUpdates = true;
@@ -32,6 +33,8 @@ public sealed partial class PreviewSession
     public string LoginCode { get => _loginCode; private set => Set(ref _loginCode, value); }
     public string LoginProgress { get => _loginProgress; private set => Set(ref _loginProgress, value); }
     public string LoginError { get => _loginError; private set => Set(ref _loginError, value); }
+    /// <summary>授权码展示行的说明文字，随复制与打开浏览器的结果变化。</summary>
+    public string LoginHint { get => _loginHint; private set => Set(ref _loginHint, value); }
     public Uri? LoginUri { get => _loginUri; private set => Set(ref _loginUri, value); }
     public HomeLayout HomeLayout
     {
@@ -85,7 +88,7 @@ public sealed partial class PreviewSession
             GameDirectory = LauncherConfiguration.Text(root["global"]?["gameDirectory"], _configuration.MinecraftDirectory),
             MemoryMb = Math.Max(512, (int)LauncherConfiguration.Number(root["global"]?["memoryMb"], 4096)),
             JvmArguments = LauncherConfiguration.Text(root["global"]?["jvmArguments"]),
-            AutomaticMemory = LauncherConfiguration.Boolean(root["global"]?["automaticMemory"]),
+            AutomaticMemory = LauncherConfiguration.Boolean(root["global"]?["automaticMemory"], true),
             OptimizeMemory = LauncherConfiguration.Boolean(root["global"]?["optimizeMemory"])
         };
         RestoreRuntimeConfiguration(root);
@@ -209,7 +212,7 @@ public sealed partial class PreviewSession
     {
         if (!Accounts.Contains(account)) throw new InvalidOperationException("这个账号已被移除。");
         if (account.IsMicrosoft) throw new InvalidOperationException("正版账号请前往官网修改玩家名称。");
-        if (IsBusy || IsLoading || IsAuthenticating) throw new InvalidOperationException("请等待当前任务完成后再修改昵称。");
+        if (IsEditingBlocked || IsLoading || IsAuthenticating) throw new InvalidOperationException("请等待游戏或文件操作结束后再修改昵称。");
         name = name.Trim();
         var error = ValidateOfflineName(name);
         if (error.Length > 0) throw new ArgumentException(error);
@@ -243,12 +246,12 @@ public sealed partial class PreviewSession
         if (_accountAttempts.ContainsKey(attemptId)) return;
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         _accountAttempts[attemptId] = cancellation;
-        if (interactive) { IsAuthenticating = true; LoginCode = ""; LoginError = ""; LoginUri = null; LoginProgress = "正在恢复 Microsoft 授权"; }
+        if (interactive) { IsAuthenticating = true; LoginCode = ""; LoginError = ""; LoginHint = ""; LoginUri = null; LoginProgress = "正在恢复 Microsoft 授权"; }
         existing?.SetRestoring(true);
         try
         {
             var result = await MicrosoftSessionService.AuthenticateAsync(existing?.Stored.ProtectedSession ?? "", interactive,
-                code => PostUi(() => { LoginCode = code.UserCode; LoginUri = code.VerificationUri; }),
+                code => PostUi(() => PresentLoginCode(code)),
                 progress => { if (interactive) PostUi(() => LoginProgress = progress); },
                 encrypted => { if (existing != null && !interactive) PostUi(() => { if (Accounts.Contains(existing)) { existing.Stored.ProtectedSession = encrypted; SaveAccountSelection(); } }); },
                 cancellation.Token);
@@ -278,9 +281,44 @@ public sealed partial class PreviewSession
         {
             _accountAttempts.Remove(attemptId);
             existing?.SetRestoring(false);
-            if (interactive) { IsAuthenticating = false; LoginCode = ""; LoginUri = null; }
+            if (interactive) { IsAuthenticating = false; LoginCode = ""; LoginUri = null; LoginHint = ""; }
             Signal();
         }
+    }
+
+    /// <summary>设备码一到手就复制并拉起 Edge，用户只需要在浏览器里粘贴一次。</summary>
+    private void PresentLoginCode(MicrosoftLoginCode code)
+    {
+        LoginCode = code.UserCode;
+        LoginUri = code.VerificationUri;
+        var copied = false;
+        try { Clipboard.SetText(code.UserCode); copied = true; }
+        catch (ExternalException) { }
+        catch (InvalidOperationException) { }
+        var opened = OpenVerification(LoginUri);
+        LoginHint = (copied, opened) switch
+        {
+            (true, true) => "授权代码已复制，并已在 Edge 中打开授权页面，直接粘贴即可。",
+            (true, false) => "授权代码已复制，请手动打开授权页面后粘贴。",
+            (false, true) => "已在 Edge 中打开授权页面，请复制下方代码后粘贴。",
+            _ => "请手动复制下方代码，并在浏览器中打开授权页面。"
+        };
+    }
+    /// <summary>优先用 Edge 打开授权页；系统没有 Edge 或协议未注册时退回默认浏览器。</summary>
+    private static bool OpenVerification(Uri? uri)
+    {
+        if (uri is not { Scheme: "https" } target) return false;
+        foreach (var start in new[]
+        {
+            new ProcessStartInfo("microsoft-edge:" + target.AbsoluteUri) { UseShellExecute = true },
+            new ProcessStartInfo(target.AbsoluteUri) { UseShellExecute = true }
+        })
+        {
+            try { Process.Start(start); return true; }
+            catch (Win32Exception) { }
+            catch (InvalidOperationException) { }
+        }
+        return false;
     }
     private void DisposePersistence()
     {

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+    <UpdatePublicKeyFile Condition="'$(UpdatePublicKeyFile)' == ''">$(MSBuildThisFileDirectory)..\Build\Updates\update-public.pem</UpdatePublicKeyFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\FMLauncher.UpdateShared\FMLauncher.UpdateShared.csproj"/>
+    <EmbeddedResource Include="$(UpdatePublicKeyFile)" LogicalName="FMLauncher.UpdatePublicKey" Condition="Exists('$(UpdatePublicKeyFile)')"/>
+  </ItemGroup>
+</Project>

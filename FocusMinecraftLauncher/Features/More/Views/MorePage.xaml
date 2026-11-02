@@ -10,6 +10,24 @@
         <TextBlock Text="关于" Style="{StaticResource SectionTitle}"/>
         <ui:SettingRow Title="FMLauncher"><TextBlock Text="{Binding Version}" Style="{StaticResource Muted}"/></ui:SettingRow>
         <ui:SettingRow Title="应用框架"><TextBlock Text="WPF / .NET 10" Style="{StaticResource Muted}"/></ui:SettingRow>
+        <ui:SettingRow Title="启动器更新">
+            <StackPanel>
+                <TextBlock Text="{Binding Updates.Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
+                <TextBlock Text="{Binding Updates.Error}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
+                <ProgressBar Value="{Binding Updates.Percent, Mode=OneWay}" IsIndeterminate="{Binding Updates.IsIndeterminate, Mode=OneWay}" Visibility="{Binding Updates.IsWorking, Converter={StaticResource BoolVisibility}}" Margin="0,12,0,0" AutomationProperties.Name="启动器更新进度"/>
+                <TextBlock Text="{Binding Updates.Transfer}" Style="{StaticResource Caption}" Visibility="{Binding Updates.Transfer, Converter={StaticResource TextVisibility}}" Margin="0,8,0,0"/>
+                <WrapPanel Margin="0,12,0,0">
+                    <fluent:Button Content="检查更新" Command="{Binding Updates.Check}" Margin="0,0,8,8"/>
+                    <fluent:Button Content="下载更新" Command="{Binding Updates.Download}" Style="{StaticResource PrimaryButton}" Visibility="{Binding Updates.HasDownload, Converter={StaticResource BoolVisibility}}" Margin="0,0,8,8"/>
+                    <fluent:Button Content="重启并更新" Command="{Binding Updates.Install}" Style="{StaticResource PrimaryButton}" Visibility="{Binding Updates.HasPreparedUpdate, Converter={StaticResource BoolVisibility}}" ToolTip="{Binding Updates.InstallHint}" ToolTipService.ShowOnDisabled="True" Margin="0,0,8,8"/>
+                    <fluent:Button Content="取消下载" Command="{Binding Updates.Cancel}" Visibility="{Binding Updates.IsDownloading, Converter={StaticResource BoolVisibility}}" Margin="0,0,8,8"/>
+                    <fluent:Button Content="发布页面" Command="{Binding Updates.OpenRelease}" Style="{StaticResource QuietButton}" Margin="0,0,0,8"/>
+                </WrapPanel>
+                <Expander Header="更新内容" Visibility="{Binding Updates.HasNotes, Converter={StaticResource BoolVisibility}}" Margin="0,8,0,0">
+                    <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><TextBlock Text="{Binding Updates.Notes}" TextWrapping="Wrap" Style="{StaticResource Muted}" Margin="0,8,8,0"/></ScrollViewer>
+                </Expander>
+            </StackPanel>
+        </ui:SettingRow>
         <Expander Header="键盘操作" Margin="0,12,0,0"><StackPanel Margin="0,8,0,16"><TextBlock Text="Tab 切换控件，方向键选择列表项，Enter 或空格执行操作。" Style="{StaticResource Muted}"/><TextBlock Text="Esc 收起侧栏。" Style="{StaticResource Muted}" Margin="0,8,0,0"/></StackPanel></Expander>
         <Expander Header="本次日志" Margin="0,8,0,0"><Grid Margin="0,8,0,16"><ListBox ItemsSource="{Binding Session.Logs}" MaxHeight="240" AutomationProperties.Name="启动器事件日志"><ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap" Style="{StaticResource Caption}"/></DataTemplate></ListBox.ItemTemplate></ListBox><TextBlock Text="暂无日志" Style="{StaticResource Muted}" Visibility="{Binding Session.Logs.Count, Converter={StaticResource ZeroVisibility}}"/></Grid></Expander>
         <WrapPanel Margin="0,24,0,0"><fluent:Button Content="导出日志" Command="{Binding ExportLog}"/><TextBlock Text="{Binding Notice}" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="16,0,0,0"/></WrapPanel>

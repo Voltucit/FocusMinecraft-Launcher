@@ -13,7 +13,7 @@
                 <RadioButton Content="自定义" IsChecked="{Binding IsCustom, Mode=TwoWay}" MinHeight="32"
                              FocusVisualStyle="{StaticResource FocusVisual}"/>
             </WrapPanel>
-            <TextBlock Text="根据启动时的可用内存自动分配" Style="{StaticResource Caption}" Margin="0,8,0,0"
+            <TextBlock Text="{Binding AutomaticMemoryHint}" Style="{StaticResource Caption}" Margin="0,8,0,0"
                        Visibility="{Binding IsAutomatic, Converter={StaticResource BoolVisibility}}"/>
             <Slider Minimum="{Binding MinimumMemoryGb}" Maximum="{Binding MaximumMemoryGb}"
                     Value="{Binding AllocatedMemoryGb, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"

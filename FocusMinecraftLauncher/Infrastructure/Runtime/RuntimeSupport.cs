@@ -34,7 +34,7 @@ public static class RuntimeSupport
     {
         var ordered=javaCandidates??await ReadLaunchJavaCandidatesAsync(instance,settings,global,token);
         string reason="";
-        var memory=MemoryMb(settings.GlobalMemory?global.AutomaticMemory:settings.AutomaticMemory,settings.GlobalMemory?global.MemoryMb:settings.MemoryMb);
+        var memory=MemoryMb(settings.GlobalMemory?global.AutomaticMemory:settings.AutomaticMemory,settings.GlobalMemory?global.MemoryMb:settings.MemoryMb,ModCount(instance));
         var jvmArguments = LaunchJvmArguments(instance, account, settings.GlobalArguments ? global.JvmArguments : settings.JvmArguments);
         foreach(var java in ordered)
         {
@@ -82,7 +82,7 @@ public static class RuntimeSupport
         var result=candidates.Where(java=>!string.IsNullOrWhiteSpace(preferred)||!target.HasValue||java.MajorVersion>=target.Value)
             .OrderBy(java=>string.IsNullOrWhiteSpace(preferred)&&target.HasValue&&java.MajorVersion!=target.Value?1:0)
             .ThenByDescending(java=>java.MajorVersion).ToArray();
-        if(result.Length==0)throw new InvalidOperationException(target.HasValue?$"未找到 Java {target} 或更高版本，请安装并选择可用的 Java。":"未找到可用的 Java，请先安装并选择 Java。");
+        // 结果可能为空：由调用方决定是提示下载 Java，还是直接报告缺少运行时。
         return result;
     }
     public static void OpenFolder(string folder)
@@ -117,11 +117,37 @@ public static class RuntimeSupport
         if (!GlobalMemoryStatusEx(ref state)) throw new IOException("无法读取系统内存。");
         return (state.TotalPhysical / 1073741824d, state.AvailablePhysical / 1073741824d);
     }
-    public static int MemoryMb(bool automatic, int configured)
+    /// <summary>统计实例中启用的 Mod 数量；目录不可读时按 0 计，不影响启动流程。</summary>
+    public static int ModCount(PreviewInstance instance)
+    {
+        try
+        {
+            var directory = Path.Combine(instance.GameDirectory, "mods");
+            if (!Directory.Exists(directory)) return 0;
+            return Directory.EnumerateFiles(directory, "*.jar", SearchOption.TopDirectoryOnly)
+                .Count(file => !file.EndsWith(".jar.disabled", StringComparison.OrdinalIgnoreCase)
+                    && !File.GetAttributes(file).HasFlag(FileAttributes.ReparsePoint));
+        }
+        catch (IOException) { return 0; }
+        catch (UnauthorizedAccessException) { return 0; }
+    }
+    /// <summary>自动分配：先按 Mod 数量估算需求，再取本机总内存与当前可用内存允许的最大值。</summary>
+    public static int AutomaticMemoryMb(double totalGb, double availableGb, int modCount)
+    {
+        // 原版基线 2 GB，每个启用的 Mod 追加 96 MB，需求上限 16 GB。
+        var need = Math.Clamp(2048d + Math.Max(0, modCount) * 96d, 2048d, 16384d);
+        var total = totalGb * 1024d;
+        var available = availableGb * 1024d;
+        // 总内存预留系统 15%（不低于 2 GB）；可用内存只取 85%，其余留给 JVM 自身与瞬时波动。
+        var cap = Math.Min(total - Math.Max(2048d, total * .15), available * .85);
+        var target = Math.Min(need, cap);
+        return (int)Math.Clamp(Math.Floor(target / 256d) * 256d, 512d, 16384d);
+    }
+    public static int MemoryMb(bool automatic, int configured, int modCount = 0)
     {
         if (!automatic) return configured;
         var reading = Memory();
-        return (int)Math.Clamp(Math.Floor(Math.Min(reading.Total * .4, reading.Available * .65) * 2) * 512, 1024, 12288);
+        return AutomaticMemoryMb(reading.Total, reading.Available, modCount);
     }
     public static void ReleaseLauncherMemory() { GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); }
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern IntPtr CommandLineToArgvW(string command, out int count);

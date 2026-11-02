@@ -11,7 +11,7 @@ public sealed record HomeContentEntry(string Title,string Summary,string Date,Ur
 /// <summary>只读公开发布公告和 Mojang 官方 Java 更新内容，不检查或安装启动器升级。</summary>
 public static class HomeContentService
 {
-    private const string RepositoryPath="/Voltucit/FocusMinecraft-Launcher";
+    private const string RepositoryPath="/" + FMLauncher.UpdateShared.UpdateProduct.Repository;
     private static readonly Uri Mojang=new("https://launchercontent.mojang.com/v2/");
     private static readonly HttpClient Client=CreateClient();
     private static HttpClient CreateClient()

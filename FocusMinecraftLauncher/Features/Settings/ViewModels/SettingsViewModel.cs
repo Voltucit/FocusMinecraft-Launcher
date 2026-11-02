@@ -61,7 +61,7 @@ public sealed class SettingsViewModel : ObservableObject
     public UiCommand ResetBackground { get; }
     public SettingsViewModel(PreviewSession session)
     {
-        JavaDetection = new(path => JavaPath = path);
+        JavaDetection = new(path => JavaPath = path, () => session.FileSource == FMCore.Downloads.DownloadSource.BmclApi);
         Session = session;
         _isolation = session.SavedSettings.VersionIsolation;
         _java = string.IsNullOrWhiteSpace(session.SavedSettings.JavaPath) || session.SavedSettings.JavaPath.Trim() == "自动选择" ? "" : session.SavedSettings.JavaPath;

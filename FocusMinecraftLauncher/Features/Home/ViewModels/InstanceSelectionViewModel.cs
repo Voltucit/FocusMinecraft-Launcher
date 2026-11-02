@@ -27,11 +27,12 @@ public sealed class InstanceSelectionViewModel : ObservableObject, IDisposable
     }
     public string Search { get => _search; set { if (Set(ref _search, value)) RefreshVersions(); } }
     public string Notice { get => _notice; private set => Set(ref _notice, value); }
-    public bool CanChangeSelection => !Session.IsBusy && !Session.IsLoading && !Session.IsAuthenticating;
+    public bool CanChangeSelection => !Session.IsEditingBlocked && !Session.IsLoading && !Session.IsAuthenticating;
     public bool IsLoading => Session.IsLoading;
     public bool HasError => !IsLoading && Session.InstanceError.Length > 0;
-    public bool ShowGroups => !IsLoading && !HasError && Groups.Any(group => !group.Versions.IsEmpty);
-    public string StateText => IsLoading ? "正在读取游戏版本"
+    // 读取期间保留已有条目，只在新结果到达后替换；否则列表会瞬间清空，页面闪出一帧空白。
+    public bool ShowGroups => !HasError && Groups.Any(group => !group.Versions.IsEmpty);
+    public string StateText => IsLoading ? (ShowGroups ? "" : "正在读取游戏版本")
         : HasError ? Session.InstanceError
         : ShowGroups ? ""
         : string.IsNullOrWhiteSpace(Search) ? "此文件夹中没有游戏版本" : "没有匹配的版本";
@@ -40,17 +41,18 @@ public sealed class InstanceSelectionViewModel : ObservableObject, IDisposable
     public UiCommand ChooseInstance { get; }
     public UiCommand AddFolder { get; }
     public UiCommand ImportModpack { get; }
+    public UiCommand RemoveFolder { get; }
 
     public InstanceSelectionViewModel(PreviewSession session, Action returnHome)
     {
         Session = session;
-        _currentFolder = new("当前文件夹", session.SavedSettings.GameDirectory, true);
+        _currentFolder = new("当前文件夹", session.SavedSettings.GameDirectory, true, canRemove: false);
         _selectedFolder = SamePath(session.SelectedRoot, _currentFolder.FullPath) ? _currentFolder : new("已选文件夹", session.SelectedRoot, true);
         Folders.Add(_currentFolder);
         if (_selectedFolder != _currentFolder) Folders.Add(_selectedFolder);
         foreach(var path in session.GameFolders) if(!Folders.Any(f => SamePath(f.FullPath,path))) Folders.Add(new(Path.GetFileName(path),path,true));
         var officialPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ".minecraft");
-        if (!SamePath(_currentFolder.FullPath, officialPath)) Folders.Add(new("官方启动器文件夹", officialPath));
+        if (!SamePath(_currentFolder.FullPath, officialPath)) Folders.Add(new("官方启动器文件夹", officialPath, canRemove: false));
         var modVersions = new ListCollectionView(session.Instances)
             { Filter = item => item is PreviewInstance instance && Matches(instance) && SupportsMods(instance) };
         var regularVersions = new ListCollectionView(session.Instances)
@@ -62,6 +64,14 @@ public sealed class InstanceSelectionViewModel : ObservableObject, IDisposable
             item => item is PreviewInstance instance && CanChangeSelection && Matches(instance) && session.Instances.Contains(instance));
         AddFolder = new(_ => SelectFolder(), _ => CanChangeSelection);
         ImportModpack = new(async _ => await ImportAsync(), _ => CanChangeSelection);
+        RemoveFolder = new(item =>
+        {
+            if (item is not InstanceFolderOption folder || !folder.CanRemove) return;
+            if (ReferenceEquals(SelectedFolder, folder)) SelectedFolder = _currentFolder;
+            Session.ForgetFolder(folder.FullPath);
+            Folders.Remove(folder);
+            Notice = "已从列表移除该文件夹，磁盘上的文件没有删除";
+        }, item => item is InstanceFolderOption { CanRemove: true } && CanChangeSelection);
         session.Instances.CollectionChanged += InstancesChanged;
         session.PropertyChanged += SessionChanged;
     }

@@ -17,12 +17,12 @@ public static class ModpackArchive
         var parts = ValidateRelative(relative);
         var basePath = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var path = Path.GetFullPath(Path.Combine(basePath, Path.Combine(parts)));
-        if (!path.StartsWith(basePath, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("文件路径超出实例范围。");
+        if (!path.StartsWith(basePath, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("文件路径超出游戏范围。");
         var current = basePath.TrimEnd(Path.DirectorySeparatorChar);
         foreach (var part in parts)
         {
             current = Path.Combine(current, part);
-            if ((File.Exists(current) || Directory.Exists(current)) && File.GetAttributes(current).HasFlag(FileAttributes.ReparsePoint)) throw new InvalidDataException("不能通过目录链接写入实例外的文件。");
+            if ((File.Exists(current) || Directory.Exists(current)) && File.GetAttributes(current).HasFlag(FileAttributes.ReparsePoint)) throw new InvalidDataException("不能通过目录链接写入游戏外的文件。");
         }
         return path;
     }
@@ -35,7 +35,7 @@ public static class ModpackArchive
     public static void EnsureInstanceWritePath(PreviewInstance instance)
     {
         var versions=Path.GetFullPath(Path.Combine(instance.Root,"versions"));var folder=Path.GetFullPath(instance.Folder);
-        if(!string.Equals(Path.GetDirectoryName(folder),versions,StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("实例必须位于所选目录的 versions 文件夹内。");
+        if(!string.Equals(Path.GetDirectoryName(folder),versions,StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("游戏必须位于所选目录的 versions 文件夹内。");
         _ = SafePath(instance.Root,"versions/"+Path.GetFileName(folder));
     }
     /// <summary>版本元数据仍在 versions 内，游戏内容仅允许写入该版本目录或明确选择的共享根目录。</summary>
@@ -45,7 +45,7 @@ public static class ModpackArchive
         var game = Path.GetFullPath(instance.GameDirectory);
         if (!game.Equals(Path.GetFullPath(instance.Root), StringComparison.OrdinalIgnoreCase)
             && !game.Equals(Path.GetFullPath(instance.Folder), StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("游戏目录不属于当前实例或所选共享目录。");
+            throw new InvalidDataException("游戏目录不属于当前游戏或所选共享目录。");
         if ((Directory.Exists(game) || File.Exists(game)) && File.GetAttributes(game).HasFlag(FileAttributes.ReparsePoint))
             throw new InvalidDataException("不能通过目录链接写入游戏目录。");
     }
@@ -234,7 +234,7 @@ public static class ModpackArchive
                 var loaderVersion=instance.Loader=="Forge"&&instance.LoaderVersion.StartsWith(instance.Version+"-")?instance.LoaderVersion[(instance.Version.Length+1)..]:instance.LoaderVersion;
                 dependencies[instance.Loader=="Fabric"?"fabric-loader":instance.Loader.ToLowerInvariant()]=loaderVersion;
             }
-            if(instance.Loader=="OptiFine")throw new NotSupportedException("Modrinth 整合包声明不支持独立 OptiFine 加载器，请导出原版或支持的 Mod 加载器实例。");
+            if(instance.Loader=="OptiFine")throw new NotSupportedException("Modrinth 整合包声明不支持独立 OptiFine 加载器，请导出原版或支持的 Mod 加载器游戏。");
             var index=new JsonObject{["formatVersion"]=1,["game"]="minecraft",["name"]=name,["versionId"]=version,["summary"]=summary,["dependencies"]=dependencies,["files"]=indexed};
             Report("打包",true);
             using(var archive=ZipFile.Open(temporary,ZipArchiveMode.Create))

@@ -118,7 +118,7 @@ public static class ResourceFileInstaller
                 catch(Exception error){recoveryErrors.Add(error);}
             foreach(var file in moved.AsEnumerable().Reverse())
                 try{if(!File.Exists(file.Original))File.Move(file.Backup,file.Original,false);else recoveryErrors.Add(new IOException("原位置已被其他文件占用。"));}catch(Exception error){recoveryErrors.Add(error);}
-            if(recoveryErrors.Count>0)throw new IOException("资源应用未完成，部分旧文件仍保留在实例备份目录中，请先检查文件再重试。",new AggregateException(new[]{failure}.Concat(recoveryErrors)));
+            if(recoveryErrors.Count>0)throw new IOException("资源应用未完成，部分旧文件仍保留在游戏备份目录中，请先检查文件再重试。",new AggregateException(new[]{failure}.Concat(recoveryErrors)));
             throw;
         }
         finally

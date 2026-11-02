@@ -17,14 +17,14 @@
         <ui:SettingRow Title="游戏图标">
             <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="72"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                 <Border Width="56" Height="56" Background="{DynamicResource SoftIconBackground}" CornerRadius="{DynamicResource IconCornerRadius}" HorizontalAlignment="Left">
-                    <Image Margin="8" Source="{Binding DisplayIcon}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" AutomationProperties.Name="实例图标预览"/>
+                    <Image Margin="8" Source="{Binding DisplayIcon}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" AutomationProperties.Name="游戏图标预览"/>
                 </Border>
                 <WrapPanel Grid.Column="1" VerticalAlignment="Center"><fluent:Button Content="选择图标" Command="{Binding ChooseIcon}" Margin="0,0,8,8"/><fluent:Button Content="重置" Command="{Binding ClearIcon}" Style="{StaticResource QuietButton}" Margin="0,0,0,8"/></WrapPanel>
             </Grid>
         </ui:SettingRow>
-        <ui:SettingRow Title="游戏名称"><StackPanel><fluent:TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" MaxLength="80" AutomationProperties.Name="当前实例显示名称"/><TextBlock Text="{Binding NameError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/></StackPanel></ui:SettingRow>
-        <ui:SettingRow Title="分类"><fluent:TextBox Text="{Binding Category, UpdateSourceTrigger=PropertyChanged}" MaxLength="40" AutomationProperties.Name="实例分类"/></ui:SettingRow>
-        <ui:SettingRow Title="描述"><fluent:TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" MaxLength="2000" AutomationProperties.Name="实例描述"/></ui:SettingRow>
+        <ui:SettingRow Title="游戏名称"><StackPanel><fluent:TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" MaxLength="80" AutomationProperties.Name="当前游戏显示名称"/><TextBlock Text="{Binding NameError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/></StackPanel></ui:SettingRow>
+        <ui:SettingRow Title="分类"><fluent:TextBox Text="{Binding Category, UpdateSourceTrigger=PropertyChanged}" MaxLength="40" AutomationProperties.Name="游戏分类"/></ui:SettingRow>
+        <ui:SettingRow Title="描述"><fluent:TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" MaxLength="2000" AutomationProperties.Name="游戏描述"/></ui:SettingRow>
         <ui:SettingRow Title="收藏"><CheckBox Content="收藏这个游戏" IsChecked="{Binding Favorite, Mode=TwoWay}"/></ui:SettingRow>
         <fluent:Button Content="保存个性化" Style="{StaticResource PrimaryButton}" Command="{Binding Save}" HorizontalAlignment="Left" Margin="0,20,0,0"/>
         <TextBlock Text="{Binding Notice}" Style="{StaticResource Muted}" Margin="0,12,0,0" AutomationProperties.LiveSetting="Polite" Visibility="{Binding Notice, Converter={StaticResource TextVisibility}}"/>
@@ -34,20 +34,11 @@
             <fluent:Button Content="存档文件夹" Command="{Binding OpenFolder}" CommandParameter="saves" Margin="0,0,12,12"/>
             <fluent:Button Content="Mod 文件夹" Command="{Binding OpenFolder}" CommandParameter="mods" Margin="0,0,12,12"/>
             <fluent:Button Content="资源包文件夹" Command="{Binding OpenFolder}" CommandParameter="resourcepacks" Margin="0,0,12,12"/>
+            <fluent:Button Content="删除当前游戏" Command="{Binding RequestRemove}" Style="{StaticResource DangerButton}" Margin="0,0,12,12"/>
         </WrapPanel>
         <Expander Header="高级管理" Margin="0,16,0,0">
             <StackPanel>
                 <WrapPanel Margin="0,8,0,0"><fluent:Button Content="导出启动脚本" Command="{Binding ExportScript}" Margin="0,0,12,12"/><fluent:Button Content="检查并补全文件" Command="{Binding Repair}" Margin="0,0,12,12"/></WrapPanel>
-                <Border BorderBrush="{DynamicResource SubtleBorder}" BorderThickness="0,1,0,0" Padding="0,16,0,0" Margin="0,8,0,0">
-                    <StackPanel>
-                        <fluent:Button Content="删除游戏" Command="{Binding RequestRemove}" Style="{StaticResource DangerButton}" HorizontalAlignment="Left" Margin="-10,0,0,0"/>
-                        <StackPanel Margin="0,12,0,0" Visibility="{Binding ConfirmRemove, Converter={StaticResource BoolVisibility}}">
-                            <TextBlock Text="将此实例移入回收站？" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                            <TextBlock Text="包括此实例目录内的存档、Mod 和设置。共享资源与其他实例不受影响。" Style="{StaticResource Muted}" Margin="0,8,0,0"/>
-                            <WrapPanel Margin="0,16,0,0"><fluent:Button Content="确认移入回收站" Command="{Binding RemovePreview}" Foreground="{DynamicResource ErrorText}" Margin="0,0,12,8"/><fluent:Button Content="保留实例" Command="{Binding CancelRemove}" Style="{StaticResource QuietButton}" Margin="0,0,0,8"/></WrapPanel>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
             </StackPanel>
         </Expander>
     </StackPanel>

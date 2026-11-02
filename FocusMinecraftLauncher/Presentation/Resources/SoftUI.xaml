@@ -4,10 +4,10 @@
                     xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
                     xmlns:visual="clr-namespace:FocusMinecraftLauncher.Presentation.Controls">
     <!-- Soft UI 的视觉定义独立装载；阴影只放在表面层，不模糊前景文字。 -->
-    <SolidColorBrush x:Key="AppBackground" Color="#F8FAFC"/>
-    <SolidColorBrush x:Key="SidebarBackground" Color="#F9FAFB"/>
-    <SolidColorBrush x:Key="TitleBarBackground" Color="#F8FAFC"/>
-    <SolidColorBrush x:Key="ContentScrim" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="AppBackground" Color="#F1F4F9"/>
+    <SolidColorBrush x:Key="SidebarBackground" Color="#F4F6FA"/>
+    <SolidColorBrush x:Key="TitleBarBackground" Color="#F1F4F9"/>
+    <SolidColorBrush x:Key="ContentScrim" Color="#F7F9FC"/>
     <SolidColorBrush x:Key="Surface" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="PopupSurface" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="AppText" Color="#1F2937"/>

@@ -58,7 +58,7 @@
                                                     <WrapPanel><TextBlock Text="{Binding File.CompatibilityText}" Style="{StaticResource DownloadMeta}"/><TextBlock Text="{Binding File.EnvironmentText}" Style="{StaticResource DownloadMeta}" Visibility="{Binding File.EnvironmentText, Converter={StaticResource TextVisibility}}"/><TextBlock Text="{Binding File.DateText}" Style="{StaticResource DownloadMeta}"/><TextBlock Text="{Binding File.SizeText}" Style="{StaticResource DownloadMeta}"/><TextBlock Text="{Binding File.DownloadsText}" ToolTip="{Binding File.FullDownloads}" Style="{StaticResource DownloadMeta}"/><TextBlock Text="{Binding File.DependencyText}" Style="{StaticResource DownloadMeta}"/></WrapPanel>
                                                 </StackPanel>
                                             </RadioButton>
-                                            <fluent:Button Grid.Column="1" Content="下载" Command="{Binding DownloadPreview}" Style="{StaticResource QuietButton}" VerticalAlignment="Top" Margin="8,4,0,0" ToolTip="确认下载文件与目标实例"/>
+                                            <fluent:Button Grid.Column="1" Content="下载" Command="{Binding DownloadPreview}" Style="{StaticResource QuietButton}" VerticalAlignment="Top" Margin="8,4,0,0" ToolTip="确认下载文件与目标游戏"/>
                                         </Grid>
                                     </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
                                 </ui:AnimatedExpander>

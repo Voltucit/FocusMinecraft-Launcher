@@ -5,6 +5,7 @@ namespace FocusMinecraftLauncher.Features.Settings.ViewModels;
 /// <summary>统一保存下载和资源显示选项；认证证书校验始终使用库的默认安全行为。</summary>
 public sealed class OtherSettingsViewModel : ObservableObject
 {
+    public FocusMinecraftLauncher.Features.More.ViewModels.LauncherUpdateViewModel Updates => ((App)System.Windows.Application.Current).Updates;
     private const string PreferOfficial = "官方源";
     private const string ProjectAndFileName = "资源名称 + 原文件名";
     private string _fileDownloadSource = PreferOfficial;

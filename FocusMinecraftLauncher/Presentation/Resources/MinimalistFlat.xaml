@@ -3,11 +3,11 @@
                     xmlns:system="clr-namespace:System;assembly=System.Runtime"
                     xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
                     xmlns:visual="clr-namespace:FocusMinecraftLauncher.Presentation.Controls">
-    <!-- 独立预设：只在选中时装入，卸载后恢复基础资源和其他主题。 -->
-    <SolidColorBrush x:Key="AppBackground" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="SidebarBackground" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="TitleBarBackground" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="ContentScrim" Color="#FFFFFF"/>
+    <!-- 独立预设：只在选中时装入，卸载后恢复基础资源和其他主题。日间纸色取近白灰而非纯白，避免整屏刺眼。 -->
+    <SolidColorBrush x:Key="AppBackground" Color="#F7F7F8"/>
+    <SolidColorBrush x:Key="SidebarBackground" Color="#F7F7F8"/>
+    <SolidColorBrush x:Key="TitleBarBackground" Color="#F7F7F8"/>
+    <SolidColorBrush x:Key="ContentScrim" Color="#F7F7F8"/>
     <SolidColorBrush x:Key="Surface" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="PopupSurface" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="AppText" Color="#000000"/>

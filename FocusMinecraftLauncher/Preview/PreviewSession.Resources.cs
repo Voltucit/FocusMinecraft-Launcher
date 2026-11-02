@@ -16,9 +16,9 @@ public sealed partial class PreviewSession
     {
         if (file.DownloadFile == null || file.CoreVersion == null) throw new InvalidOperationException("这个文件没有可用下载信息。");
         var pack = file.DownloadFile.Filename.EndsWith(".mrpack", StringComparison.OrdinalIgnoreCase);
-        if (!pack && instance == null) throw new InvalidOperationException("请先选择目标实例。");
+        if (!pack && instance == null) throw new InvalidOperationException("请先选择目标游戏。");
         if (!pack && !file.GameVersions.Contains(instance!.Version)) throw new InvalidOperationException("所选文件不支持目标 Minecraft 版本，请选择其他文件。");
-        if (instance != null && Tasks.Any(t => t.IsActive && string.Equals(InstanceStore.Key(t.Root,t.InstanceId),InstanceStore.Key(instance.Root,instance.Id),StringComparison.OrdinalIgnoreCase))) throw new InvalidOperationException("目标实例正在运行或处理其他任务。");
+        if (instance != null && Tasks.Any(t => t.IsActive && string.Equals(InstanceStore.Key(t.Root,t.InstanceId),InstanceStore.Key(instance.Root,instance.Id),StringComparison.OrdinalIgnoreCase))) throw new InvalidOperationException("目标游戏正在运行或处理其他任务。");
         var root = instance?.Root ?? SelectedRoot;
         var targetId = instance?.Id ?? file.ProjectId;
         if (Tasks.Any(t => t.IsActive && t.Kind == PreviewTaskKind.Resource && t.Name == file.FileName && t.Root == root && t.InstanceId == targetId)) throw new InvalidOperationException("这个文件已加入下载列表。");
@@ -107,7 +107,7 @@ public sealed partial class PreviewSession
                 var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "选择目标存档文件夹", InitialDirectory = Path.Combine(selected.GameDirectory, "saves") };
                 if (dialog.ShowDialog(Application.Current.MainWindow) != true) {Cancel(task); throw new OperationCanceledException(token); }
                 var saves = Path.GetFullPath(Path.Combine(selected.GameDirectory, "saves")) + Path.DirectorySeparatorChar;
-                if (!Path.GetFullPath(dialog.FolderName).StartsWith(saves, StringComparison.OrdinalIgnoreCase)||!File.Exists(Path.Combine(dialog.FolderName,"level.dat"))) throw new InvalidOperationException("请选择当前实例 saves 内的存档文件夹。");
+                if (!Path.GetFullPath(dialog.FolderName).StartsWith(saves, StringComparison.OrdinalIgnoreCase)||!File.Exists(Path.Combine(dialog.FolderName,"level.dat"))) throw new InvalidOperationException("请选择当前游戏 saves 内的存档文件夹。");
                 datapackFolder = Path.Combine(dialog.FolderName, "datapacks");
             }
             var files=new List<ResourceInstallFile>();

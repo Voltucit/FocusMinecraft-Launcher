@@ -21,7 +21,7 @@
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <fluent:TextBox Text="{Binding JavaPath, UpdateSourceTrigger=PropertyChanged}" Tag="自动选择"
-                                        ToolTip="{Binding JavaPath}" AutomationProperties.Name="此实例的 Java 路径，留空自动选择"/>
+                                        ToolTip="{Binding JavaPath}" AutomationProperties.Name="此游戏的 Java 路径，留空自动选择"/>
                         <fluent:Button Grid.Column="1" Content="浏览" Command="{Binding BrowseJava}" Margin="8,0,0,0"/>
                     </Grid>
                     <ui:JavaRuntimeSelector DataContext="{Binding JavaDetection}" Margin="0,8,0,0"/>
@@ -52,20 +52,20 @@
                 <TextBlock Text="{Binding WindowError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
             </StackPanel>
         </ui:SettingRow>
-        <ui:SettingRow Title="游戏目录"><fluent:TextBox Text="{Binding Directory, Mode=OneWay}" IsReadOnly="True" ToolTip="{Binding Directory}" AutomationProperties.Name="当前实例目录"/></ui:SettingRow>
+        <ui:SettingRow Title="游戏目录"><fluent:TextBox Text="{Binding Directory, Mode=OneWay}" IsReadOnly="True" ToolTip="{Binding Directory}" AutomationProperties.Name="当前游戏目录"/></ui:SettingRow>
         <ui:SettingRow Title="隔离方式"><TextBlock Text="{Binding IsolationText}" Style="{StaticResource Muted}"/></ui:SettingRow>
         <Expander Header="高级参数" Margin="0,12,0,0">
             <StackPanel>
                 <CheckBox Content="使用全局参数" IsChecked="{Binding UseGlobalArguments, Mode=TwoWay}" Margin="0,8,0,8"/>
                 <StackPanel Visibility="{Binding UseGlobalArguments, Converter={StaticResource NotVisibility}}">
-                    <ui:SettingRow Title="JVM 参数"><fluent:TextBox Text="{Binding JvmArguments, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" AutomationProperties.Name="此实例 JVM 参数"/></ui:SettingRow>
-                    <ui:SettingRow Title="游戏参数"><fluent:TextBox Text="{Binding GameArguments, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" AutomationProperties.Name="此实例附加游戏参数"/></ui:SettingRow>
+                    <ui:SettingRow Title="JVM 参数"><fluent:TextBox Text="{Binding JvmArguments, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" AutomationProperties.Name="此游戏 JVM 参数"/></ui:SettingRow>
+                    <ui:SettingRow Title="游戏参数"><fluent:TextBox Text="{Binding GameArguments, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" AutomationProperties.Name="此游戏附加游戏参数"/></ui:SettingRow>
                 </StackPanel>
             </StackPanel>
         </Expander>
-        <WrapPanel Margin="0,20,0,0"><fluent:Button Content="保存实例设置" Command="{Binding Save}" Style="{StaticResource PrimaryButton}" Margin="0,0,12,12"/><fluent:Button Content="恢复已保存的值" Command="{Binding Restore}" Margin="0,0,0,12"/></WrapPanel>
+        <WrapPanel Margin="0,20,0,0"><fluent:Button Content="保存游戏设置" Command="{Binding Save}" Style="{StaticResource PrimaryButton}" Margin="0,0,12,12"/><fluent:Button Content="恢复已保存的值" Command="{Binding Restore}" Margin="0,0,0,12"/></WrapPanel>
         <TextBlock Text="{Binding Notice}" Style="{StaticResource Muted}" Visibility="{Binding Notice, Converter={StaticResource TextVisibility}}" AutomationProperties.LiveSetting="Polite"/>
-        <TextBlock Text="此页设置只影响当前实例。" Style="{StaticResource Caption}" Margin="0,12,0,0"/>
+        <TextBlock Text="此页设置只影响当前游戏。" Style="{StaticResource Caption}" Margin="0,12,0,0"/>
     </StackPanel>
 </ScrollViewer>
 

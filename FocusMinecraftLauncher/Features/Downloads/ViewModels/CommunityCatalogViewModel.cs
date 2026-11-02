@@ -70,6 +70,15 @@ public sealed class CommunityCatalogViewModel : ObservableObject
         catch(Exception error){_loaded=false;Notice=FocusMinecraftLauncher.Infrastructure.Runtime.RuntimeSupport.Error(error);}
         await QueryAsync();
     }
+    /// <summary>把实例的版本与加载器落到筛选控件上；控件不认识的值会被忽略，随后照常查询。</summary>
+    public void ApplyFilter(string gameVersion, string loader)
+    {
+        if(loader.Length>0 && UsesEnvironment && Environments.Contains(loader,StringComparer.OrdinalIgnoreCase)) Environment=loader;
+        var known=VersionFilter.Series.SelectMany(series=>series.Versions).Any(choice=>choice.Number.Equals(gameVersion,StringComparison.OrdinalIgnoreCase));
+        // 选中版本会自己触发查询；版本不可选或已经是当前值时补一次查询，让加载器条件也生效。
+        if(known && !VersionFilter.SelectedVersion.Equals(gameVersion,StringComparison.OrdinalIgnoreCase)){VersionFilter.Select(gameVersion);return;}
+        _page=1;_ = QueryAsync();
+    }
     private async Task QueryAsync()
     {
         var revision=++_revision;_busy=true;Notice="正在加载资源";Refresh();CommandManager.InvalidateRequerySuggested();

@@ -8,7 +8,7 @@
 
 <Grid>
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-    <fluent:TextBox Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}" Tag="搜索名称、描述、文件名或标签" AutomationProperties.Name="搜索当前实例的 Mod" IsEnabled="{Binding SupportsMods}"/>
+    <fluent:TextBox Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}" Tag="搜索名称、描述、文件名或标签" AutomationProperties.Name="搜索当前游戏的 Mod" IsEnabled="{Binding SupportsMods}"/>
     <WrapPanel Grid.Row="1" Margin="0,12,0,0"><fluent:Button Content="重新读取" Command="{Binding Reload}" Style="{StaticResource QuietButton}" Margin="0,0,8,8"/>
         <fluent:Button Content="打开 Mod 文件夹" Command="{Binding OpenFolder}" Margin="0,0,8,8"/>
         <fluent:Button Content="从文件安装" Command="{Binding InstallFiles}" Margin="0,0,8,8"/>
@@ -20,7 +20,7 @@
         <ProgressBar IsIndeterminate="True" Visibility="{Binding IsLoading, Converter={StaticResource BoolVisibility}}" Margin="0,12,0,0" AutomationProperties.Name="读取 Mod 列表"/>
         <TextBlock Text="{Binding Notice}" Style="{StaticResource Caption}" Margin="0,8,0,0" Visibility="{Binding Notice, Converter={StaticResource TextVisibility}}"/>
     </StackPanel>
-    <ListBox Grid.Row="3" ItemsSource="{Binding FilteredItems}" Visibility="{Binding ShowList, Converter={StaticResource BoolVisibility}}" KeyboardNavigation.TabNavigation="Continue" AutomationProperties.Name="当前实例 Mod 列表">
+    <ListBox Grid.Row="3" ItemsSource="{Binding FilteredItems}" Visibility="{Binding ShowList, Converter={StaticResource BoolVisibility}}" KeyboardNavigation.TabNavigation="Continue" AutomationProperties.Name="当前游戏 Mod 列表">
         <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}"><Setter Property="Padding" Value="0"/><Setter Property="Focusable" Value="False"/></Style></ListBox.ItemContainerStyle>
         <ListBox.ItemTemplate><DataTemplate>
             <Border BorderBrush="{DynamicResource SubtleBorder}" BorderThickness="0,0,0,1" Padding="4,12">

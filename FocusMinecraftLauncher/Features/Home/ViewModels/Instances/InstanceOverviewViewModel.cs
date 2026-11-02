@@ -13,7 +13,7 @@ public sealed class InstanceOverviewViewModel : ObservableObject
     private string _name, _description, _category, _nameError="", _notice="";
     private ImageSource? _icon;
     private string _iconPath="";
-    private bool _favorite, _confirm;
+    private bool _favorite;
     public PreviewInstance Instance { get; }
     public string Name { get=>_name;set { Set(ref _name,value);NameError="";Notice=""; } }
     public string Description { get=>_description;set { Set(ref _description,value);Notice=""; } }
@@ -23,7 +23,6 @@ public sealed class InstanceOverviewViewModel : ObservableObject
     public ImageSource DisplayIcon => Icon ?? Instance.FallbackIconImage ?? Instance.DefaultIcon;
     public string NameError { get=>_nameError;private set=>Set(ref _nameError,value); }
     public string Notice { get=>_notice;private set=>Set(ref _notice,value); }
-    public bool ConfirmRemove { get=>_confirm;set=>Set(ref _confirm,value); }
     public bool HasLoaderVersion => Instance.Loader!="原版";
     public UiCommand OpenFolder { get; }
     public UiCommand Repair { get; }
@@ -32,15 +31,12 @@ public sealed class InstanceOverviewViewModel : ObservableObject
     public UiCommand ClearIcon { get; }
     public UiCommand Save { get; }
     public UiCommand RequestRemove { get; }
-    public UiCommand CancelRemove { get; }
-    public UiCommand RemovePreview { get; }
     public InstanceOverviewViewModel(PreviewSession session,PreviewInstance instance,Action back)
     {
         _session=session;Instance=instance;_name=instance.Name;_description=instance.Description;_category=instance.Category;_favorite=instance.IsFavorite;_icon=instance.IconImage;
         ChooseIcon=new(_=>PickIcon());ClearIcon=new(_=>{Icon=null;_iconPath="";});
         Save=new(async _=>await SaveDraftAsync(),_=>session.Instances.Contains(instance));
-        RequestRemove=new(_=>ConfirmRemove=true,_=>!session.IsBusy && session.Instances.Contains(instance));
-        CancelRemove=new(_=>ConfirmRemove=false);
+        RequestRemove=new(async _=>await RemoveAsync(back),_=>!session.IsBusy && !session.IsLoading && session.Instances.Contains(instance));
         OpenFolder=new(p=>
         {
             try {Infrastructure.Runtime.RuntimeSupport.OpenFolder(p is string folder&&folder.Length>0?Path.Combine(instance.GameDirectory,folder):instance.GameDirectory);}
@@ -60,19 +56,25 @@ public sealed class InstanceOverviewViewModel : ObservableObject
             }
             catch(Exception error){Notice=Infrastructure.Runtime.RuntimeSupport.Error(error);}
         });
-        RemovePreview=new(async _=>
+    }
+    /// <summary>两个主题按钮给出明确选择；只有确认后才提交回收站操作，取消不改动任何游戏文件。</summary>
+    private async Task RemoveAsync(Action back)
+    {
+        var scope = Instance.UsesGameIsolation
+            ? "该版本文件夹及其中的存档、Mod 和配置将移入回收站。"
+            : "仅将该版本文件夹移入回收站，共享目录中的存档、Mod 和配置会保留。";
+        if (!Presentation.Dialogs.MessageDialog.Confirm("确认删除游戏？", $"“{Instance.Name}”\n\n{scope}", "删除游戏", "保留游戏")) return;
+        try
         {
-            try
-            {
-                var folder=Path.GetFullPath(instance.Folder);var versions=Path.GetFullPath(Path.Combine(instance.Root,"versions"));
-                if(!string.Equals(Path.GetDirectoryName(folder),versions,StringComparison.OrdinalIgnoreCase)||File.GetAttributes(folder).HasFlag(FileAttributes.ReparsePoint))throw new IOException("实例目录不符合安全删除范围。");
-                var reader=new FMCore.Versions.MinecraftVersionReader();var all=await reader.GetVersionsAsync(instance.Root);
-                if(all.Any(v=>v.Id!=instance.Id&&reader.GetInheritanceChain(v,all).Any(parent=>parent.Id==instance.Id)))throw new InvalidOperationException("其他实例仍依赖此版本，请先在这些实例中执行“检查并补全文件”，完成独立转换后再删除。");
-                await Task.Run(()=>Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(folder,Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin));
-                await session.RefreshInstancesAsync();ConfirmRemove=false;back();
-            }
-            catch(Exception error){Notice=Infrastructure.Runtime.RuntimeSupport.Error(error);}
-        },_=>ConfirmRemove&&!session.IsBusy&&session.Instances.Contains(instance));
+            await _session.RemoveInstanceAsync(Instance);
+            back();
+        }
+        catch (OperationCanceledException) { Notice="已取消删除游戏。"; }
+        catch (Exception error)
+        {
+            Notice=Infrastructure.Runtime.RuntimeSupport.Error(error);
+            _session.NotifyTask("删除失败："+Notice,true);
+        }
     }
     private void PickIcon()
     {
@@ -89,7 +91,7 @@ public sealed class InstanceOverviewViewModel : ObservableObject
     /// <summary>保存显示名称和来源旁的个性化字段，不改名已有实例目录。</summary>
     private async Task SaveDraftAsync()
     {
-        if(string.IsNullOrWhiteSpace(Name)){NameError="请输入实例名称。";return;}
+        if(string.IsNullOrWhiteSpace(Name)){NameError="请输入游戏名称。";return;}
         try
         {
             Infrastructure.Runtime.ModpackArchive.EnsureInstanceWritePath(Instance);

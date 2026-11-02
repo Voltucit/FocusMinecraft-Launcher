@@ -1,3 +1,6 @@
 <Solution>
   <Project Path="FocusMinecraftLauncher/FocusMinecraftLauncher.csproj" />
+  <Project Path="FMLauncher.UpdateShared/FMLauncher.UpdateShared.csproj" />
+  <Project Path="FMLauncher.Updater/FMLauncher.Updater.csproj" />
+  <Project Path="Build/FMLauncher.UpdateTools/FMLauncher.UpdateTools.csproj" />
 </Solution>

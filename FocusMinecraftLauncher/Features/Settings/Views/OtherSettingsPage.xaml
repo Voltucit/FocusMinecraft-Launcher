@@ -5,6 +5,13 @@
              Focusable="False">
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,24">
         <StackPanel>
+            <Border Style="{StaticResource GlassCard}" VerticalAlignment="Top" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="启动器更新" Style="{StaticResource SectionTitle}" Margin="0,0,0,4"/>
+                    <ui:SettingRow Title="检查更新"><CheckBox Content="启动时自动检查" IsChecked="{Binding Updates.AutoCheck, Mode=TwoWay}" AutomationProperties.Name="启动时自动检查启动器更新"/></ui:SettingRow>
+                    <ui:SettingRow Title="下载更新"><CheckBox Content="发现新版后自动下载" IsChecked="{Binding Updates.AutoDownload, Mode=TwoWay}" AutomationProperties.Name="自动下载启动器更新"/></ui:SettingRow>
+                </StackPanel>
+            </Border>
             <Border Style="{StaticResource GlassCard}" VerticalAlignment="Top">
                 <StackPanel>
                     <TextBlock Text="下载" Style="{StaticResource SectionTitle}" Margin="0,0,0,4"/>

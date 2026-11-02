@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Input;
 using FocusMinecraftLauncher.Common;
 using FocusMinecraftLauncher.Features.Downloads.Models;
+using FocusMinecraftLauncher.Preview;
 
 namespace FocusMinecraftLauncher.Features.Downloads.ViewModels;
 
@@ -85,7 +86,7 @@ public sealed class ResourceDetailViewModel : ObservableObject, IDisposable
     public UiCommand Back { get; }
     public UiCommand CopyName { get; }
 
-    public ResourceDetailViewModel(ResourceEntryViewModel entry, Action back, Action<ResourceFileItem> preview, Action<string> showImage)
+    public ResourceDetailViewModel(ResourceEntryViewModel entry, Action back, Action<ResourceFileItem> preview, Action<string> showImage, ResourceFilter? filter = null)
     {
         Entry = entry; _preview = preview;
         LoaderTabs = [new("", "全部"), .. (Project.UsesEnvironment
@@ -101,7 +102,19 @@ public sealed class ResourceDetailViewModel : ObservableObject, IDisposable
         VersionFilter = new(Project.Files.SelectMany(file => file.GameVersions), BuildGroups);
         Gallery = Project.Gallery.Select((key, i) => new GalleryImageViewModel(key, "资源图片 " + (i + 1), showImage)).ToArray();
         entry.PropertyChanged += EntryChanged;
+        if (filter != null) ApplyFilter(filter);
         BuildGroups(); RefreshDependencies();
+    }
+    /// <summary>沿用实例上下文：先定加载器，再选游戏版本；项目没有该版本时保留全部并说明原因。</summary>
+    private void ApplyFilter(ResourceFilter filter)
+    {
+        if (Project.UsesEnvironment && filter.Loader.Length > 0
+            && LoaderTabs.Any(tab => tab.Key.Equals(filter.Loader, StringComparison.OrdinalIgnoreCase))) SelectedLoader = filter.Loader;
+        if (filter.GameVersion.Length == 0) return;
+        var known = VersionFilter.Series.SelectMany(series => series.Versions)
+            .Any(choice => choice.Number.Equals(filter.GameVersion, StringComparison.OrdinalIgnoreCase));
+        if (known) VersionFilter.Select(filter.GameVersion);
+        else Notice = $"该项目没有标注兼容 Minecraft {filter.GameVersion} 的文件，已显示全部版本。";
     }
     private void EntryChanged(object? sender, PropertyChangedEventArgs e)
     {

@@ -48,7 +48,8 @@ public sealed partial class PreviewSession
             if (convert)
             {
                 ModpackArchive.EnsureInstanceWritePath(instance);
-                var gameVersion = chain.Last().Id;
+                // 整合包把完整启动信息写进自己的版本文件时没有继承链，此时不能把整合包名当成游戏版本存下来。
+                var gameVersion = InstanceStore.IsMinecraftVersion(instance.Version) ? instance.Version : chain.Last().Id;
                 instance.Options = await InstanceStore.UpdateAsync(instance, options =>
                 {
                     if (chain.Count > 1 || string.IsNullOrWhiteSpace(options.GameVersion)) options.GameVersion = gameVersion;

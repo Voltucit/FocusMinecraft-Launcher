@@ -12,8 +12,8 @@
         <fluent:Button Content="返回主页" Command="{Binding ReturnHome}" Style="{StaticResource QuietButton}" VerticalAlignment="Top" Margin="-10,0,16,0"/>
         <StackPanel Grid.Column="1"><TextBlock Text="{Binding Instance.Name}" Style="{StaticResource PageTitle}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding Instance.Name}"/><TextBlock Text="{Binding Metadata}" Style="{StaticResource Caption}" Margin="0,6,0,0"/></StackPanel>
     </Grid>
-    <TextBlock Grid.Row="1" Text="此实例已不在当前列表中，请返回主页重新选择。" Style="{StaticResource ErrorMessage}" Margin="0,0,0,16" Visibility="{Binding IsAvailable, Converter={StaticResource NotVisibility}}"/>
-    <TabControl Grid.Row="2" SelectedIndex="{Binding SelectedTab, Mode=TwoWay}" IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="当前实例管理">
+    <TextBlock Grid.Row="1" Text="此游戏已不在当前列表中，请返回主页重新选择。" Style="{StaticResource ErrorMessage}" Margin="0,0,0,16" Visibility="{Binding IsAvailable, Converter={StaticResource NotVisibility}}"/>
+    <TabControl Grid.Row="2" SelectedIndex="{Binding SelectedTab, Mode=TwoWay}" IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="当前游戏管理">
         <TabItem Header="概览"><views:InstanceOverviewPage DataContext="{Binding Overview}"/></TabItem>
         <TabItem Header="设置"><views:InstanceLaunchSettingsPage DataContext="{Binding Settings}"/></TabItem>
         <TabItem Header="Mod 管理"><views:InstanceModsPage DataContext="{Binding Mods}"/></TabItem>

@@ -4,7 +4,7 @@
  xmlns:ui="clr-namespace:FocusMinecraftLauncher.Presentation.Controls"
  xmlns:home="clr-namespace:FocusMinecraftLauncher.Features.Home.Views"
  xmlns:instances="clr-namespace:FocusMinecraftLauncher.Features.Home.Views.Instances"
- SizeChanged="ResizePage" Unloaded="CloseMenus" Focusable="False">
+ SizeChanged="ResizePage" Unloaded="PageUnloaded" Focusable="False">
     <UserControl.Resources>
         <Style x:Key="ModeSegment" TargetType="RadioButton">
             <Setter Property="MinHeight" Value="36"/><Setter Property="Foreground" Value="{DynamicResource MutedText}"/>
@@ -22,75 +22,7 @@
                 </ControlTemplate.Triggers>
             </ControlTemplate></Setter.Value></Setter>
         </Style>
-        <Style x:Key="AccountAction" TargetType="fluent:Button" BasedOn="{StaticResource {x:Type fluent:Button}}">
-            <Setter Property="Padding" Value="4,10"/><Setter Property="Margin" Value="4,0"/><Setter Property="MinHeight" Value="64"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource SubtleBorder}"/>
-        </Style>
-        <Style x:Key="ActionIcon" TargetType="Path">
-            <Setter Property="Width" Value="20"/><Setter Property="Height" Value="20"/><Setter Property="Stretch" Value="Uniform"/>
-            <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=fluent:Button}}"/><Setter Property="StrokeThickness" Value="1.5"/>
-            <Setter Property="StrokeStartLineCap" Value="Round"/><Setter Property="StrokeEndLineCap" Value="Round"/><Setter Property="StrokeLineJoin" Value="Round"/>
-        </Style>
-        <Style x:Key="AccountMenu" TargetType="ContextMenu">
-            
-            <Setter Property="ui:ThemeVisuals.IsSoft" Value="{DynamicResource SoftEnabled}"/>
-            <Setter Property="ui:ThemeVisuals.IsFlat" Value="{DynamicResource FlatEnabled}"/>
-
-            <Setter Property="Foreground" Value="{DynamicResource AppText}"/><Setter Property="Background" Value="{DynamicResource PopupSurface}"/>
-            <Setter Property="FontFamily" Value="Segoe UI Variable Text, Microsoft YaHei UI"/><Setter Property="FontSize" Value="14"/>
-            <Setter Property="MinWidth" Value="240"/><Setter Property="MaxHeight" Value="480"/>
-            <Setter Property="DataContext" Value="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"/>
-            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ContextMenu">
-                <Border Background="{TemplateBinding Background}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="{DynamicResource OutlineThickness}" CornerRadius="{DynamicResource Radius12}" Padding="4">
-                    <ScrollViewer CanContentScroll="True" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/></ScrollViewer>
-                </Border>
-            </ControlTemplate></Setter.Value></Setter>
-        <Style.Triggers><DataTrigger Binding="{Binding Path=(ui:ThemeVisuals.IsFlat), RelativeSource={RelativeSource Self}}" Value="True"><Setter Property="HasDropShadow" Value="False"/></DataTrigger>
-            <DataTrigger Binding="{Binding Path=(ui:ThemeVisuals.IsSoft), RelativeSource={RelativeSource Self}}" Value="True"><Setter Property="Template" Value="{DynamicResource SoftContextMenuTemplate}"/><Setter Property="HasDropShadow" Value="False"/></DataTrigger>
-
-            
-</Style.Triggers>
-        </Style>
-        <Style x:Key="AccountMenuItem" TargetType="MenuItem">
-            <Setter Property="Foreground" Value="{DynamicResource AppText}"/><Setter Property="MinHeight" Value="36"/>
-            <Setter Property="Padding" Value="12,8"/><Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
-            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="MenuItem">
-                <Border x:Name="Frame" Background="Transparent" CornerRadius="{DynamicResource Radius7}" Padding="{TemplateBinding Padding}">
-                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                        <Path x:Name="Check" Data="M0,5 L4,9 11,1" Stroke="{DynamicResource AppText}" StrokeThickness="1.6" Width="12" Height="10" VerticalAlignment="Center" Visibility="Collapsed"/>
-                        <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
-                    </Grid>
-                </Border>
-                <ControlTemplate.Triggers>
-                    <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Frame" Property="Background" Value="{DynamicResource ControlHover}"/></Trigger>
-                    <MultiDataTrigger><MultiDataTrigger.Conditions><Condition Binding="{Binding Path=(ui:ThemeVisuals.IsFlat), RelativeSource={RelativeSource Self}}" Value="True"/><Condition Binding="{Binding IsHighlighted, RelativeSource={RelativeSource Self}}" Value="True"/></MultiDataTrigger.Conditions><Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource FlatBlack}"/><Setter TargetName="Frame" Property="BorderThickness" Value="2"/></MultiDataTrigger>
-                    <Trigger Property="IsChecked" Value="True"><Setter TargetName="Check" Property="Visibility" Value="Visible"/></Trigger>
-                    <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="{DynamicResource MutedText}"/></Trigger>
-                </ControlTemplate.Triggers>
-            </ControlTemplate></Setter.Value></Setter>
-        </Style>
-        <Style x:Key="MenuHeading" TargetType="MenuItem" BasedOn="{StaticResource AccountMenuItem}">
-            <Setter Property="IsEnabled" Value="False"/><Setter Property="FontSize" Value="12"/><Setter Property="MinHeight" Value="28"/>
-        </Style>
-        <Style x:Key="CapeMenuItem" TargetType="MenuItem" BasedOn="{StaticResource AccountMenuItem}">
-            <Setter Property="Header" Value="{Binding Alias}"/><Setter Property="IsCheckable" Value="True"/><Setter Property="IsChecked" Value="{Binding IsActive, Mode=OneWay}"/>
-            <Setter Property="Command" Value="{Binding Command}"/><Setter Property="CommandParameter" Value="{Binding}"/>
-            <Setter Property="AutomationProperties.Name" Value="{Binding Alias}"/>
-            <Style.Triggers><DataTrigger Binding="{Binding Id}" Value=""><Setter Property="IsEnabled" Value="False"/></DataTrigger></Style.Triggers>
-        </Style>
-        <Style x:Key="SwitchMenuItem" TargetType="MenuItem" BasedOn="{StaticResource AccountMenuItem}">
-            <Setter Property="Header" Value="{Binding Title}"/><Setter Property="Command" Value="{Binding Command}"/><Setter Property="CommandParameter" Value="{Binding Parameter}"/>
-            <Setter Property="IsCheckable" Value="{Binding IsAccount}"/><Setter Property="IsChecked" Value="{Binding Account.IsCurrent, Mode=OneWay, FallbackValue=False}"/>
-            <Setter Property="AutomationProperties.Name" Value="{Binding Title}"/>
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsPlaceholder}" Value="True"><Setter Property="IsEnabled" Value="False"/></DataTrigger>
-                <DataTrigger Binding="{Binding IsSeparator}" Value="True">
-                    <Setter Property="IsEnabled" Value="False"/><Setter Property="Focusable" Value="False"/><Setter Property="MinHeight" Value="8"/>
-                    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="MenuItem"><Border Height="1" Background="{DynamicResource SubtleBorder}" Margin="8,4"/></ControlTemplate></Setter.Value></Setter>
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-        <Style x:Key="MenuSeparator" TargetType="Separator"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Separator"><Border Height="1" Margin="8,4" Background="{DynamicResource SubtleBorder}"/></ControlTemplate></Setter.Value></Setter></Style>
+        <!-- 头像动作按钮与账号/披风菜单样式已移到 Presentation\Resources\Controls.xaml，供独立 UserControl 复用。 -->
     <DataTemplate x:Key="HomeContentEntry">
                         <Border BorderBrush="{DynamicResource SubtleBorder}" BorderThickness="0,0,0,1" Padding="0,8,0,16" Margin="0,0,0,16">
                             <Expander IsExpanded="{Binding IsExpanded, Mode=TwoWay}">
@@ -120,41 +52,16 @@
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" VerticalContentAlignment="Center">
                         <ScrollViewer.Style><Style TargetType="ScrollViewer"><Setter Property="Margin" Value="0,16"/><Style.Triggers><DataTrigger Binding="{Binding IsCompactHeight}" Value="True"><Setter Property="Margin" Value="0,8"/></DataTrigger></Style.Triggers></Style></ScrollViewer.Style>
                         <StackPanel VerticalAlignment="Center">
-                            <ui:PlayerHead Width="{Binding AvatarSize}" Height="{Binding AvatarSize}" Source="{Binding Session.CurrentAccount.HeadImage}" HorizontalAlignment="Center" ToolTip="{Binding PlayerName}" AutomationProperties.Name="当前玩家头像"/>
+                            <Button x:Name="ClassicAvatar" Style="{StaticResource AvatarAction}" Click="OpenClassicAccountActions" HorizontalAlignment="Center" ToolTip="{Binding PlayerName}" AutomationProperties.Name="玩家头像与账号操作">
+                                <ui:PlayerHead Width="{Binding AvatarSize}" Height="{Binding AvatarSize}" Source="{Binding Session.CurrentAccount.HeadImage}"/>
+                            </Button>
+                            <home:AccountActionsView x:Name="ClassicActions" Margin="0,4,0,0"/>
                             <TextBlock Text="{Binding PlayerName}" FontSize="24" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip="{Binding PlayerName}" TextAlignment="Center">
                                 <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Margin" Value="0,16,0,0"/><Style.Triggers><DataTrigger Binding="{Binding IsCompactHeight}" Value="True"><Setter Property="Margin" Value="0,8,0,0"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
                             </TextBlock>
                             <TextBlock Text="{Binding AccountState}" Style="{StaticResource Muted}" TextAlignment="Center" Margin="0,8,0,0" Visibility="{Binding AccountState, Converter={StaticResource TextVisibility}}"/>
                             <fluent:Button Content="{Binding AddAccountText}" Command="{Binding AddAccount}" HorizontalAlignment="Center" Margin="0,16,0,0" Visibility="{Binding HasCurrentAccount, Converter={StaticResource NotVisibility}}"/>
                             <fluent:Button Content="重新登录" Command="{Binding Relogin}" HorizontalAlignment="Center" Margin="0,12,0,0" Visibility="{Binding NeedsLogin, Converter={StaticResource BoolVisibility}}"/>
-                            <UniformGrid Columns="3">
-                                <UniformGrid.Style><Style TargetType="UniformGrid"><Setter Property="Margin" Value="-4,24,-4,0"/><Style.Triggers><DataTrigger Binding="{Binding IsCompactHeight}" Value="True"><Setter Property="Margin" Value="-4,12,-4,0"/></DataTrigger></Style.Triggers></Style></UniformGrid.Style>
-                                <fluent:Button x:Name="AppearanceButton" Style="{StaticResource AccountAction}" Click="OpenMenu" ToolTip="皮肤与披风" AutomationProperties.Name="皮肤与披风菜单" IsEnabled="{Binding HasCurrentAccount}">
-                                    <StackPanel><Path Style="{StaticResource ActionIcon}" Data="M6,2 L3,4 1,8 5,10 5,18 15,18 15,10 19,8 17,4 14,2 C13,6 7,6 6,2 Z"/><TextBlock Text="皮肤披风" FontSize="12" TextAlignment="Center" Margin="0,8,0,0"/></StackPanel>
-                                    <fluent:Button.ContextMenu><ContextMenu Style="{StaticResource AccountMenu}" ItemContainerStyle="{StaticResource AccountMenuItem}">
-                                        <MenuItem Header="皮肤" Style="{StaticResource MenuHeading}"/>
-                                        <MenuItem Header="刷新皮肤" Command="{Binding RefreshSkin}" ToolTip="{Binding SkinRefreshHint}"/>
-                                        <MenuItem Header="保存皮肤文件" Command="{Binding SaveSkin}" ToolTip="保存已获取的官方皮肤图片"/>
-                                        <MenuItem Header="上传本地皮肤" Command="{Binding UploadLocalSkin}" ToolTip="把 PNG 存成 CustomSkinLoader 的本地皮肤，离线账号也能在游戏中显示"/>
-                                        <MenuItem Header="移除本地皮肤" Command="{Binding RemoveLocalSkin}" ToolTip="删除已保存的本地皮肤文件"/>
-                                        <Separator Style="{StaticResource MenuSeparator}"/>
-                                        <MenuItem Header="披风" Style="{StaticResource MenuHeading}" Visibility="{Binding Session.MicrosoftMode, Converter={StaticResource BoolVisibility}}"/>
-                                        <MenuItem x:Name="RefreshCapesItem" Header="刷新披风列表" Command="{Binding RefreshCapes}" Visibility="{Binding Session.MicrosoftMode, Converter={StaticResource BoolVisibility}}" ToolTip="重新读取账号当前拥有的披风"/>
-                                    </ContextMenu></fluent:Button.ContextMenu>
-                                </fluent:Button>
-                                <fluent:Button x:Name="ProfileButton" Style="{StaticResource AccountAction}" Click="OpenMenu" ToolTip="账号资料" AutomationProperties.Name="账号资料菜单" IsEnabled="{Binding HasCurrentAccount}">
-                                    <StackPanel><Path Style="{StaticResource ActionIcon}" Data="M14,6 A4,4 0 1 1 6,6 A4,4 0 1 1 14,6 M3,18 C3,11 17,11 17,18"/><TextBlock Text="账号资料" FontSize="12" TextAlignment="Center" Margin="0,8,0,0"/></StackPanel>
-                                    <fluent:Button.ContextMenu><ContextMenu MinWidth="300" Style="{StaticResource AccountMenu}" ItemContainerStyle="{StaticResource AccountMenuItem}">
-                                        <MenuItem Header="修改玩家名（前往官网）" Command="{Binding OpenProfile}" Visibility="{Binding Session.MicrosoftMode, Converter={StaticResource BoolVisibility}}"/>
-                                        <MenuItem Header="修改昵称" Command="{Binding RenameOffline}" Visibility="{Binding Session.OfflineMode, Converter={StaticResource BoolVisibility}}"/>
-                                        <MenuItem Header="修改密码（前往 Microsoft）" Command="{Binding OpenPassword}" Visibility="{Binding Session.MicrosoftMode, Converter={StaticResource BoolVisibility}}"/>
-                                    </ContextMenu></fluent:Button.ContextMenu>
-                                </fluent:Button>
-                                <fluent:Button x:Name="SwitchButton" Style="{StaticResource AccountAction}" Click="OpenMenu" ToolTip="切换当前模式下的账号" AutomationProperties.Name="账号切换菜单" IsEnabled="{Binding CanChangeIdentity}">
-                                    <StackPanel><Path Style="{StaticResource ActionIcon}" Data="M2,5 H17 M13,1 L17,5 13,9 M18,15 H3 M7,11 L3,15 7,19"/><TextBlock Text="账号切换" FontSize="12" TextAlignment="Center" Margin="0,8,0,0"/></StackPanel>
-                                    <fluent:Button.ContextMenu><ContextMenu Style="{StaticResource AccountMenu}" ItemContainerStyle="{StaticResource SwitchMenuItem}" ItemsSource="{Binding AccountMenu}"/></fluent:Button.ContextMenu>
-                                </fluent:Button>
-                            </UniformGrid>
                             <TextBlock Text="{Binding SkinStatus}" Style="{StaticResource Caption}" TextAlignment="Center" Margin="0,8,0,0" Visibility="{Binding SkinStatus, Converter={StaticResource TextVisibility}}" AutomationProperties.LiveSetting="Polite"/>
                             <TextBlock Text="{Binding LocalSkinStatus}" Style="{StaticResource Caption}" TextAlignment="Center" Margin="0,2,0,0" Visibility="{Binding LocalSkinStatus, Converter={StaticResource TextVisibility}}" AutomationProperties.LiveSetting="Polite"/>
                             <TextBlock Text="{Binding Notice}" Style="{StaticResource Muted}" Margin="0,12,0,0" MaxHeight="64" ToolTip="{Binding Notice}" AutomationProperties.LiveSetting="Polite" Visibility="{Binding Notice, Converter={StaticResource TextVisibility}}"/>

@@ -8,9 +8,15 @@
         <TextBlock Text="{Binding WelcomeText}" Style="{StaticResource PageTitle}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                    ToolTip="{Binding WelcomeText}" Margin="0,0,0,24"/>
         <Grid Grid.Row="2">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-            <ui:PlayerHead Width="{Binding SimpleAvatarSize}" Height="{Binding SimpleAvatarSize}" Source="{Binding Session.CurrentAccount.HeadImage}"
-                           VerticalAlignment="Center" HorizontalAlignment="Left" ToolTip="{Binding PlayerName}" AutomationProperties.Name="当前玩家头像"/>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Button x:Name="AvatarButton" Style="{StaticResource AvatarAction}" Click="OpenAccountActions"
+                    VerticalAlignment="Center" HorizontalAlignment="Left" ToolTip="皮肤披风、账号资料、账号切换"
+                    AutomationProperties.Name="玩家头像与账号操作">
+                <ui:PlayerHead Width="{Binding SimpleAvatarSize}" Height="{Binding SimpleAvatarSize}" Source="{Binding Session.CurrentAccount.HeadImage}"/>
+            </Button>
+            <!-- 留白布局：动作行留在头像右侧滑出，展开时只占用右侧空隙，不挤压头像。 -->
+            <home:AccountActionsView x:Name="MinimalActions" Mode="Horizontal" Grid.Column="1"
+                                     HorizontalAlignment="Left" VerticalAlignment="Center" Margin="16,0,0,0"/>
             <home:HomeLaunchPanel Grid.Column="2" Width="{Binding LaunchPanelWidth}" FeedbackMaxHeight="{Binding CenteredFeedbackHeight}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
         </Grid>
     </Grid>

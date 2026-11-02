@@ -1,0 +1,19 @@
+<Project>
+  <PropertyGroup>
+    <UpdatePublicKeyFile Condition="'$(UpdatePublicKeyFile)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)update-public.pem'))</UpdatePublicKeyFile>
+    <EmbeddedUpdaterDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\obj\$(Configuration)\embedded-updater\'))</EmbeddedUpdaterDirectory>
+    <EmbeddedUpdaterFile>$(EmbeddedUpdaterDirectory)FMLauncher.Updater.exe</EmbeddedUpdaterFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <_UpdaterSource Include="$(MSBuildThisFileDirectory)..\..\FMLauncher.Updater\*.cs;$(MSBuildThisFileDirectory)..\..\FMLauncher.Updater\*.csproj;$(MSBuildThisFileDirectory)..\..\FMLauncher.UpdateShared\*.cs;$(MSBuildThisFileDirectory)..\..\FMLauncher.UpdateShared\*.csproj;$(MSBuildThisFileFullPath)"/>
+    <_UpdaterSource Include="$(UpdatePublicKeyFile)" Condition="Exists('$(UpdatePublicKeyFile)')"/>
+    <EmbeddedResource Include="$(EmbeddedUpdaterFile)" LogicalName="FMLauncher.EmbeddedUpdater"/>
+    <EmbeddedResource Include="$(UpdatePublicKeyFile)" LogicalName="FMLauncher.UpdatePublicKey" Condition="Exists('$(UpdatePublicKeyFile)')"/>
+  </ItemGroup>
+  <!-- 临时更新器独立发布为自包含单文件，再嵌入主程序；安装目录不分发辅助 EXE。 -->
+  <Target Name="PublishEmbeddedUpdater" BeforeTargets="PrepareForBuild" Inputs="@(_UpdaterSource)" Outputs="$(EmbeddedUpdaterFile)" Condition="'$(DesignTimeBuild)' != 'true'">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)..\..\FMLauncher.Updater\FMLauncher.Updater.csproj" Targets="Restore;Publish"
+             RemoveProperties="TargetFramework;TargetFrameworks"
+             Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=true;PublishSingleFile=true;PublishTrimmed=false;PublishReadyToRun=false;IncludeNativeLibrariesForSelfExtract=true;EnableCompressionInSingleFile=true;DebugType=None;PublishDir=$(EmbeddedUpdaterDirectory);UpdatePublicKeyFile=$(UpdatePublicKeyFile)"/>
+  </Target>
+</Project>

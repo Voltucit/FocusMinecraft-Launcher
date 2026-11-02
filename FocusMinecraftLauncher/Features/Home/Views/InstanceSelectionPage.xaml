@@ -4,6 +4,26 @@
  xmlns:ui="clr-namespace:FocusMinecraftLauncher.Presentation.Controls"
  xmlns:local="clr-namespace:FocusMinecraftLauncher.Features.Home.Views"
  Focusable="False">
+    <UserControl.Resources>
+        <!-- 读取时列表会被禁用；沿用主题背景，避免系统模板切换到浅色禁用底色。 -->
+        <Style x:Key="InstanceSelectionList" TargetType="ListBox" BasedOn="{StaticResource {x:Type ListBox}}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBox">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" SnapsToDevicePixels="True">
+                            <ScrollViewer x:Name="PART_ScrollViewer" Focusable="False" Padding="{TemplateBinding Padding}"
+                                          CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
+                                          HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                          VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}">
+                                <ItemsPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                            </ScrollViewer>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
     <Grid Margin="32,24">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <Grid Margin="0,0,0,24">
@@ -19,14 +39,24 @@
             <Grid>
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <TextBlock Text="文件夹列表" Style="{StaticResource SectionTitle}" Margin="0,0,0,12"/>
-                <ListBox Grid.Row="1" ItemsSource="{Binding Folders}" SelectedItem="{Binding SelectedFolder, Mode=TwoWay}"
+                <ListBox Grid.Row="1" Style="{StaticResource InstanceSelectionList}" ItemsSource="{Binding Folders}" SelectedItem="{Binding SelectedFolder, Mode=TwoWay}"
                          IsSynchronizedWithCurrentItem="False" IsEnabled="{Binding CanChangeSelection}" AutomationProperties.Name="游戏文件夹列表">
                     <ListBox.ItemTemplate><DataTemplate>
-                        <StackPanel>
-                            <TextBlock Text="{Binding Name}" FontWeight="Medium" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
-                            <TextBlock Text="{Binding FullPath}" Style="{StaticResource Caption}" TextWrapping="NoWrap"
-                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding FullPath}" Margin="0,4,0,0"/>
-                        </StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="{Binding Name}" FontWeight="Medium" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
+                                <TextBlock Text="{Binding FullPath}" Style="{StaticResource Caption}" TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding FullPath}" Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                                <fluent:Button Content="删除" Style="{StaticResource QuietButton}" FontSize="11" Padding="6,2" MinWidth="0"
+                                               Command="{Binding DataContext.RemoveFolder, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                               CommandParameter="{Binding}" ToolTip="从文件夹列表移除，不会删除磁盘上的文件"
+                                               Visibility="{Binding CanRemove, Converter={StaticResource BoolVisibility}}"
+                                               AutomationProperties.Name="从列表删除该文件夹"/>
+                            </StackPanel>
+                        </Grid>
                     </DataTemplate></ListBox.ItemTemplate>
                 </ListBox>
                 <StackPanel Grid.Row="2" Margin="0,16,0,0">
@@ -38,17 +68,17 @@
             <Border Grid.Column="1" Width="1" Background="{DynamicResource SubtleBorder}" Margin="12,0"/>
             <Grid Grid.Column="2">
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                <fluent:TextBox Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" Tag="搜索实例、版本或加载器"
+                <fluent:TextBox Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" Tag="搜索游戏、版本或加载器"
                                 AutomationProperties.Name="搜索游戏版本" Margin="0,0,0,16"/>
                 <Grid Grid.Row="1">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                    <ScrollViewer x:Name="VersionList" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                                   Visibility="{Binding ShowGroups, Converter={StaticResource BoolVisibility}}" Padding="0,0,8,0">
                         <ItemsControl ItemsSource="{Binding Groups}">
                             <ItemsControl.ItemTemplate><DataTemplate>
                                 <Border Style="{StaticResource GlassCard}" Padding="16" Margin="0,0,0,16">
                                     <ui:AnimatedExpander IsExpanded="{Binding IsExpanded, Mode=TwoWay}" AutomationProperties.Name="{Binding Header}">
                                         <ui:AnimatedExpander.Header><TextBlock Text="{Binding Header}" Style="{StaticResource SectionTitle}"/></ui:AnimatedExpander.Header>
-                                        <ListBox ItemsSource="{Binding Versions}" SelectedItem="{Binding SelectedInstance, Mode=TwoWay}"
+                                        <ListBox Style="{StaticResource InstanceSelectionList}" ItemsSource="{Binding Versions}" SelectedItem="{Binding SelectedInstance, Mode=TwoWay}"
                                                  IsSynchronizedWithCurrentItem="False" KeyDown="ChooseWithKeyboard"
                                                  ScrollViewer.VerticalScrollBarVisibility="Disabled" Margin="0,8,0,0"
                                                  IsEnabled="{Binding DataContext.CanChangeSelection, RelativeSource={RelativeSource AncestorType=local:InstanceSelectionPage}}"
@@ -66,16 +96,19 @@
                             </DataTemplate></ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
-                    <StackPanel Visibility="{Binding StateText, Converter={StaticResource TextVisibility}}" Margin="16,12">
-                        <TextBlock Text="{Binding StateText}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite">
-                            <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource Muted}">
-                                <Style.Triggers><DataTrigger Binding="{Binding HasError}" Value="True"><Setter Property="Foreground" Value="{DynamicResource ErrorText}"/></DataTrigger></Style.Triggers>
-                            </Style></TextBlock.Style>
-                        </TextBlock>
-                        <ProgressBar IsIndeterminate="True" Margin="0,12,0,0" Visibility="{Binding IsLoading, Converter={StaticResource BoolVisibility}}"/>
-                        <fluent:Button Content="重新读取" Command="{Binding Session.RefreshInstances}" HorizontalAlignment="Left" Margin="0,12,0,0"
-                                       Visibility="{Binding HasError, Converter={StaticResource BoolVisibility}}"/>
-                    </StackPanel>
+                    <Border Style="{StaticResource GlassCard}" Padding="16" Margin="0,0,0,16" VerticalAlignment="Top"
+                            Visibility="{Binding StateText, Converter={StaticResource TextVisibility}}">
+                        <StackPanel>
+                            <TextBlock Text="{Binding StateText}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite">
+                                <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource Muted}">
+                                    <Style.Triggers><DataTrigger Binding="{Binding HasError}" Value="True"><Setter Property="Foreground" Value="{DynamicResource ErrorText}"/></DataTrigger></Style.Triggers>
+                                </Style></TextBlock.Style>
+                            </TextBlock>
+                            <ProgressBar IsIndeterminate="True" Margin="0,12,0,0" Visibility="{Binding IsLoading, Converter={StaticResource BoolVisibility}}"/>
+                            <fluent:Button Content="重新读取" Command="{Binding Session.RefreshInstances}" HorizontalAlignment="Left" Margin="0,12,0,0"
+                                           Visibility="{Binding HasError, Converter={StaticResource BoolVisibility}}"/>
+                        </StackPanel>
+                    </Border>
                 </Grid>
                 <TextBlock Grid.Row="2" Text="{Binding Notice}" Style="{StaticResource Muted}" Margin="0,12,0,0"
                            AutomationProperties.LiveSetting="Polite" Visibility="{Binding Notice, Converter={StaticResource TextVisibility}}"/>

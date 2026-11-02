@@ -67,12 +67,14 @@ public sealed class InstanceLaunchSettingsViewModel : ObservableObject, IDisposa
     public InstanceLaunchSettingsViewModel(PreviewSession session,PreviewInstance instance)
     {
         _session=session;Instance=instance;
-        JavaDetection = new(path => JavaPath = path);
+        JavaDetection = new(path => JavaPath = path, () => session.FileSource == FMCore.Downloads.DownloadSource.BmclApi);
+        JavaDetection.RecommendedMajor = instance.RequiredJava;
         BrowseJava=new(_=>{var d=new OpenFileDialog{Filter="Java|java.exe;javaw.exe"};if(d.ShowDialog()==true)JavaPath=d.FileName;}, _=>!UseGlobalJava);
         ClearJava=new(_=>JavaPath="", _=>!UseGlobalJava && !string.IsNullOrWhiteSpace(JavaPath));
         MemoryAllocation.PropertyChanged += MemoryChanged;
         Save=new(async _=>await SaveDraftAsync(),_=>!_saving);Restore=new(_=>{LoadStored();RestoreSaved();},_=>!_saving);session.PropertyChanged+=GlobalChanged;
         RecommendedJavaVersion = instance.RequiredJava?.ToString();
+        MemoryAllocation.ModCount = Infrastructure.Runtime.RuntimeSupport.ModCount(instance);
         LoadStored(); RestoreSaved(); JavaDetection.UpdateSelection(JavaPath); Notice = "";
     }
     /// <summary>全局设置变化只更新继承展示，不覆盖实例独立编辑草稿。</summary>
@@ -108,7 +110,7 @@ public sealed class InstanceLaunchSettingsViewModel : ObservableObject, IDisposa
             });
             Instance.Options=options;
             _saved=new(UseGlobalJava,UseGlobalMemory,UseGlobalWindow,UseGlobalArguments,JavaPath,MemoryAllocation.MemoryMb,Width,Height,Fullscreen,JvmArguments,GameArguments,MemoryAllocation.IsAutomatic,MemoryAllocation.OptimizeBeforeLaunch);
-            Notice="已保存此实例的启动设置。";
+            Notice="已保存此游戏的启动设置。";
         }
         catch(Exception error){Notice=Infrastructure.Runtime.RuntimeSupport.Error(error);}
         finally{_saving=false;System.Windows.Input.CommandManager.InvalidateRequerySuggested();}
@@ -124,8 +126,8 @@ public sealed class InstanceLaunchSettingsViewModel : ObservableObject, IDisposa
         JavaPath=_saved.Java;MemoryAllocation.LoadMemoryMb(_saved.MemoryMb);
         MemoryAllocation.IsAutomatic=_saved.AutomaticMemory;MemoryAllocation.OptimizeBeforeLaunch=_saved.OptimizeMemory;
         Width=_saved.Width;Height=_saved.Height;Fullscreen=_saved.Fullscreen;JvmArguments=_saved.Jvm;GameArguments=_saved.Game;
-        JavaError=WindowError="";Notice="已恢复保存的实例设置。";
+        JavaError=WindowError="";Notice="已恢复保存的游戏设置。";
     }
     public void Dispose() { _session.PropertyChanged-=GlobalChanged;MemoryAllocation.PropertyChanged-=MemoryChanged; }
-    private sealed record SettingsDraft(bool GlobalJava=true,bool GlobalMemory=true,bool GlobalWindow=true,bool GlobalArguments=true,string Java="",int MemoryMb=4096,string Width="1280",string Height="720",bool Fullscreen=false,string Jvm="",string Game="",bool AutomaticMemory=false,bool OptimizeMemory=false);
+    private sealed record SettingsDraft(bool GlobalJava=true,bool GlobalMemory=true,bool GlobalWindow=true,bool GlobalArguments=true,string Java="",int MemoryMb=4096,string Width="1280",string Height="720",bool Fullscreen=false,string Jvm="",string Game="",bool AutomaticMemory=true,bool OptimizeMemory=false);
 }

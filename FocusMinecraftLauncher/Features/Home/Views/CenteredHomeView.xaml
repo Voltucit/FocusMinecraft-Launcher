@@ -6,8 +6,12 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" VerticalContentAlignment="Center">
     <Grid Margin="32">
         <StackPanel Width="360" HorizontalAlignment="Center" VerticalAlignment="Center">
-            <ui:PlayerHead Width="{Binding AvatarSize}" Height="{Binding AvatarSize}" Source="{Binding Session.CurrentAccount.HeadImage}"
-                           HorizontalAlignment="Center" ToolTip="{Binding PlayerName}" AutomationProperties.Name="当前玩家头像"/>
+            <Button x:Name="AvatarButton" Style="{StaticResource AvatarAction}" Click="OpenAccountActions"
+                    HorizontalAlignment="Center" ToolTip="皮肤披风、账号资料、账号切换"
+                    AutomationProperties.Name="玩家头像与账号操作">
+                <ui:PlayerHead Width="{Binding AvatarSize}" Height="{Binding AvatarSize}" Source="{Binding Session.CurrentAccount.HeadImage}"/>
+            </Button>
+            <home:AccountActionsView x:Name="CenteredActions" Margin="0,4,0,0"/>
             <TextBlock Text="{Binding WelcomeText}" Style="{StaticResource PageTitle}" TextAlignment="Center" TextWrapping="NoWrap"
                        TextTrimming="CharacterEllipsis" ToolTip="{Binding WelcomeText}" Margin="0,16,0,24"/>
             <home:HomeLaunchPanel FeedbackMaxHeight="{Binding CenteredFeedbackHeight}"/>

@@ -57,9 +57,14 @@
                         <TextBlock Text="Microsoft 授权" Style="{StaticResource SectionTitle}"/>
                         <TextBlock Text="{Binding Session.LoginProgress}" TextWrapping="Wrap" Margin="0,12,0,0" AutomationProperties.LiveSetting="Polite"/>
                         <StackPanel Visibility="{Binding Session.LoginCode, Converter={StaticResource TextVisibility}}" Margin="0,16,0,0">
-                            <TextBlock Text="在浏览器授权页面输入此代码" Style="{StaticResource Caption}"/>
-                            <TextBox Text="{Binding Session.LoginCode, Mode=OneWay}" IsReadOnly="True" FontSize="24" FontWeight="SemiBold" Margin="0,8,0,0" AutomationProperties.Name="Microsoft 授权代码"/>
-                            <TextBox Text="{Binding Session.LoginUri, Mode=OneWay}" IsReadOnly="True" Margin="0,8,0,0" AutomationProperties.Name="Microsoft 授权网址"/>
+                            <TextBlock Text="{Binding Session.LoginHint}" Style="{StaticResource Muted}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
+                            <Border Margin="0,10,0,0" Padding="18,10" Background="{DynamicResource ControlHover}" BorderBrush="{DynamicResource SubtleBorder}" BorderThickness="1" CornerRadius="{DynamicResource ControlCornerRadius}">
+                                <DockPanel>
+                                    <fluent:Button DockPanel.Dock="Right" Content="复制代码" Command="{Binding CopyLoginCode}" Style="{StaticResource QuietButton}" Margin="16,0,0,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding Session.LoginCode, Mode=OneWay}" FontFamily="Consolas" FontSize="26" FontWeight="SemiBold" Foreground="{DynamicResource AppText}" VerticalAlignment="Center" AutomationProperties.Name="Microsoft 授权代码"/>
+                                </DockPanel>
+                            </Border>
+                            <TextBlock Text="{Binding Session.LoginUri, Mode=OneWay}" Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap" AutomationProperties.Name="Microsoft 授权网址"/>
                         </StackPanel>
                         <WrapPanel Margin="0,16,0,0"><fluent:Button Content="打开授权页面" Command="{Binding OpenLogin}" Margin="0,0,12,0"/><fluent:Button Content="取消登录" Command="{Binding CancelLogin}" Style="{StaticResource QuietButton}"/></WrapPanel>
                     </StackPanel>

@@ -94,7 +94,7 @@ public sealed class InstanceExportViewModel : ObservableObject, IDisposable
         _loading=true;CommandManager.InvalidateRequerySuggested();
         try
         {
-            Stage="扫描实例文件";
+            Stage="扫描游戏文件";
             Instance.Options=InstanceStore.Read(Instance);
             var files=await Task.Run(()=>ModpackArchive.Files(gameDirectory, !isolated).Select(f=>Path.GetRelativePath(gameDirectory,f).Replace('\\','/')).Where(f=>!ModpackArchive.Private(f)&&f!=InstanceStore.FileName&&f!=Instance.Id+".json"&&f!=Instance.Id+".jar"&&!f.StartsWith("natives/")&&!f.StartsWith(".fmcore")).Order(StringComparer.OrdinalIgnoreCase).ToArray());
             if (_disposed) return;
@@ -132,7 +132,7 @@ public sealed class InstanceExportViewModel : ObservableObject, IDisposable
             var shaderConfig=Group("section:shader-config","光影配置");AddFiles(shaderConfig,_allFiles.Where(ShaderConfig),"",false);
             if(shaderConfig.Children.Count>0)shaders.Add(shaderConfig);if(shaders.Children.Count>0)Content.Add(shaders);
             var saves=Group("section:saves","单人存档");AddFiles(saves,_allFiles.Where(path=>path.StartsWith("saves/",StringComparison.OrdinalIgnoreCase)),"saves/",false);if(saves.Children.Count>0)Content.Add(saves);
-            var other=Group("section:other","其他实例文件");AddFiles(other,_allFiles.Where(path=>!assigned.Contains(path)),"",false);if(other.Children.Count>0)Content.Add(other);
+            var other=Group("section:other","其他游戏文件");AddFiles(other,_allFiles.Where(path=>!assigned.Contains(path)),"",false);if(other.Children.Count>0)Content.Add(other);
             foreach(var node in Content.SelectMany(n=>n.Walk()))node.PropertyChanged+=NodeChanged;
             Stage="";UpdateConflicts();Refresh();
         }
@@ -165,7 +165,7 @@ public sealed class InstanceExportViewModel : ObservableObject, IDisposable
     private async Task ExportAsync()
     {
         NameError=string.IsNullOrWhiteSpace(Name)?"请输入整合包名称。":"";VersionError=string.IsNullOrWhiteSpace(Version)?"请输入整合包版本。":"";
-        IncludesError=InvalidRule(Includes)?"包含规则必须为实例内相对路径。":"";ExcludesError=InvalidRule(Excludes)?"排除规则必须为实例内相对路径。":"";
+        IncludesError=InvalidRule(Includes)?"包含规则必须为游戏内相对路径。":"";ExcludesError=InvalidRule(Excludes)?"排除规则必须为游戏内相对路径。":"";
         UpdateConflicts();if(NameError.Length+VersionError.Length+RulesError.Length>0||HasConflicts){AdvancedExpanded=HasConflicts||RulesError.Length>0;return;}
         var files=ResolveSelection();
         if(PrivacyWarning.Length>0&&MessageBox.Show(PrivacyWarning,"导出整合包",MessageBoxButton.OKCancel,MessageBoxImage.Warning)!=MessageBoxResult.OK)return;

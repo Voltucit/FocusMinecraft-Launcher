@@ -57,8 +57,10 @@ public sealed partial class PreviewSession
     public async Task SelectRootAsync(string root)
     {
         root = Path.GetFullPath(root);
+        // 不在这里清空实例列表：先保留旧条目，等新目录扫描完成后由刷新逻辑逐条替换，
+        // 避免切换文件夹时列表瞬间清空、页面出现空白帧。
         if (!string.Equals(root, SelectedRoot, StringComparison.OrdinalIgnoreCase))
-        { _selectedRoot = root; _restoreId = ""; CurrentInstance = null; Instances.Clear(); Changed(nameof(SelectedRoot)); SaveSelectedInstance(); }
+        { _selectedRoot = root; _restoreId = ""; CurrentInstance = null; Changed(nameof(SelectedRoot)); SaveSelectedInstance(); }
         await RefreshInstancesAsync();
     }
     public void RememberFolder(string path)
@@ -69,6 +71,16 @@ public sealed partial class PreviewSession
             var list = root["gameFolders"] as JsonArray ?? new JsonArray();
             if (!list.Any(item => string.Equals(LauncherConfiguration.Text(item), path, StringComparison.OrdinalIgnoreCase))) list.Add(path);
             if (list.Parent == null) root["gameFolders"] = list;
+        });
+    }
+    /// <summary>忘记用户添加过的父目录；只移除记录，不触碰磁盘上的文件。</summary>
+    public void ForgetFolder(string path)
+    {
+        var full = Path.GetFullPath(path);
+        _configuration.ChangeLauncher(root =>
+        {
+            if (root["gameFolders"] is not JsonArray list) return;
+            foreach (var item in list.Where(item => string.Equals(LauncherConfiguration.Text(item), full, StringComparison.OrdinalIgnoreCase)).ToArray()) list.Remove(item);
         });
     }
     /// <summary>重新查询同一份实例目录；修订号阻止较早查询覆盖用户刚切换的目录，安装中的实例不提前登记。</summary>
@@ -106,7 +118,7 @@ public sealed partial class PreviewSession
             _restoreId = "";
         }
         catch (OperationCanceledException) { }
-        catch (Exception error) { if (revision == _refreshRevision) { InstanceError = RuntimeSupport.Error(error); Log("读取实例：" + InstanceError); } }
+        catch (Exception error) { if (revision == _refreshRevision) { InstanceError = RuntimeSupport.Error(error); Log("读取游戏：" + InstanceError); } }
         finally { if (revision == _refreshRevision) { IsLoading = false; Signal(); } }
     }
     public async Task InitializeRuntimeAsync() => await RefreshInstancesAsync();
@@ -130,6 +142,8 @@ public sealed partial class PreviewSession
     }
     public PreviewTask Enqueue(PreviewTaskKind kind, string name, string version, string root, string instanceId, Func<PreviewTask, CancellationToken, Task> run)
     {
+        if (IsInstallingLauncherUpdate) throw new InvalidOperationException("正在安装启动器更新，请稍后重试。");
+        if (IsRemovingInstance) throw new InvalidOperationException("正在删除游戏，请稍后重试。");
         if (IsApplyingIsolation) throw new InvalidOperationException("正在应用版本隔离设置，请稍后重试。");
         var item = new PreviewTask(kind, name, version) { Root = root, InstanceId = instanceId };
         _retryOperations[item] = run; Tasks.Insert(0, item); _active = item;
@@ -164,13 +178,18 @@ public sealed partial class PreviewSession
                 NotifyInstanceContentChanged(task.Root, task.InstanceId);
         }
     }
-    public bool HasPendingWrites=>_operations.Any(pair=>!pair.Key.IsRunningGame);
-    /// <summary>退出时等待下载和安装取消清理完成；已运行的 Java 进程继续运行。</summary>
+    public bool HasPendingWrites=>IsRemovingInstance || _operations.Any(pair=>!pair.Key.IsRunningGame);
+    /// <summary>退出时等待下载和安装取消清理、回收站操作完成；已运行的 Java 进程继续运行。</summary>
     public async Task StopPendingWritesAsync()
     {
+        var removal = _instanceRemoval;
         var pending=_operations.Where(pair=>!pair.Key.IsRunningGame).ToArray();
         foreach(var pair in pending){pair.Value.Cancel();pair.Key.Stage="正在取消";pair.Key.Refresh();}
         await Task.WhenAll(pending.Where(pair=>_executions.ContainsKey(pair.Key)).Select(pair=>_executions[pair.Key]));
+        // 回收站操作开始后不强制中断；退出前等待它完成，失败由删除入口反馈。
+        if (removal != null)
+            try { await removal; }
+            catch (Exception error) { Log("等待删除游戏结束：" + RuntimeSupport.Error(error)); }
     }
     private void Cancel(PreviewTask? task)
     {
@@ -327,15 +346,20 @@ public sealed partial class PreviewSession
             // 恢复缺少的父版本后才能得到完整 Java 声明，此时重新按核心元数据选择。
             if (requiredJava != instance.RequiredJava)
                 javaCandidates = await RuntimeSupport.ReadLaunchJavaCandidatesAsync(instance, settings, global, token);
+            // 缺少所需版本时先问用户：下载官方运行时，还是改用已安装的更高版本。
+            javaCandidates = await ResolveJavaAsync(instance, settings, global, javaCandidates, task, token);
             // 缺少匹配版本时使用更高版本的 Java 兜底；这类兜底启动失败要额外弹框说明原因。
-            var fallbackJava = instance.RequiredJava is { } required && javaCandidates[0].MajorVersion > required;
+            var fallbackJava = instance.RequiredJava is { } required && javaCandidates.Count > 0 && javaCandidates[0].MajorVersion > required;
+            if (javaCandidates.Count == 0)
+                throw new InvalidOperationException(instance.RequiredJava is { } missing ? $"未找到 Java {missing} 或更高版本，请安装并选择可用的 Java。" : "未找到可用的 Java，请先安装并选择 Java。");
             Report(task, "检查启动配置");
             try
             {
+            // 自动内存按“可选用的内存”计算，先释放启动器占用再读取，读数才反映真实可用量。
+            if (settings.GlobalMemory ? global.OptimizeMemory : settings.OptimizeMemory) RuntimeSupport.ReleaseLauncherMemory();
             var selectedLauncher = await RuntimeSupport.SelectCheckedLauncherAsync(instance,account.RuntimeAccount,settings,global,token,javaCandidates);
             var launcher = selectedLauncher.Launcher;
             token.ThrowIfCancellationRequested();
-            if (settings.GlobalMemory ? global.OptimizeMemory : settings.OptimizeMemory) RuntimeSupport.ReleaseLauncherMemory();
             var code = await launcher.LaunchAsync(p => PostUi(() =>
             {
                 if (!task.IsActive) return;
@@ -354,5 +378,46 @@ public sealed partial class PreviewSession
                     $"没有找到与游戏匹配的 Java {instance.RequiredJava}，已改用 Java {used} 启动，但这次启动没有成功。\n\n{RuntimeSupport.Error(error)}");
                 throw;
             }
+    }
+    /// <summary>缺少实例所需的 Java 时让用户选择：下载官方运行时、改用已安装的更高版本，或取消启动。</summary>
+    private async Task<IReadOnlyList<FMCore.Java.JavaInfo>> ResolveJavaAsync(PreviewInstance instance, InstanceOptions settings, PreviewSettings global, IReadOnlyList<FMCore.Java.JavaInfo> candidates, PreviewTask task, CancellationToken token)
+    {
+        // 手动指定过 Java 就尊重用户选择；不会因为版本不匹配就擅自下载。
+        var manual = settings.GlobalJava ? global.JavaPath : settings.JavaPath;
+        if (!string.IsNullOrWhiteSpace(manual) || instance.RequiredJava is not { } required) return candidates;
+        if (candidates.Any(java => java.MajorVersion == required)) return candidates;
+
+        var higher = candidates.Where(java => java.MajorVersion > required).OrderBy(java => java.MajorVersion).FirstOrDefault();
+        var canDownload = JavaBootstrap.CanInstall(required);
+        if (higher is null && !canDownload)
+            throw new InvalidOperationException($"未找到 Java {required} 或更高版本，请安装并选择可用的 Java。");
+
+        var choice = Presentation.Dialogs.JavaRuntimeDialog.Ask(required, higher?.MajorVersion, canDownload);
+        if (choice == Presentation.Dialogs.JavaRuntimeChoice.Cancel) throw new OperationCanceledException("已取消启动。");
+        if (choice == Presentation.Dialogs.JavaRuntimeChoice.Download)
+        {
+            Report(task, $"下载 Java {required}");
+            var installed = await JavaBootstrap.InstallAsync(required, FileSource == DownloadSource.BmclApi, progress => ReportJavaInstall(task, progress), token);
+            return [installed, .. candidates];
+        }
+        return [higher!, .. candidates.Where(java => !ReferenceEquals(java, higher))];
+    }
+    /// <summary>把核心的 Java 下载进度映射到启动任务上，让任务记录显示百分比与速度。</summary>
+    private void ReportJavaInstall(PreviewTask task, FMCore.Java.JavaInstallProgress progress)
+    {
+        PostUi(() =>
+        {
+            if (!task.IsActive) return;
+            task.Stage = progress.Message;
+            if (progress.Download is { } download)
+            {
+                task.Total = download.TotalBytes;
+                task.Bytes = download.ProcessedBytes;
+                task.BytesPerSecond = download.BytesPerSecond;
+                task.CompletedFiles = download.CompletedFiles;
+                task.TotalFiles = download.TotalFiles;
+            }
+            task.Refresh(); Signal();
+        });
     }
 }

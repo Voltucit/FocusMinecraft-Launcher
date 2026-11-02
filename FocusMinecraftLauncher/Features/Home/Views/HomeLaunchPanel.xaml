@@ -23,15 +23,13 @@
         </Style>
     </UserControl.Resources>
     <StackPanel>
-        <TextBlock Text="{Binding InstanceName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip="{Binding InstanceName}"
-                   Margin="0,0,0,8" Visibility="{Binding ShowInstanceName, Converter={StaticResource BoolVisibility}}"/>
         <fluent:Button Style="{StaticResource PrimaryButton}" Command="{Binding Primary}" MinHeight="72"
                        HorizontalContentAlignment="Stretch" ToolTip="{Binding LaunchButtonHint}"
                        AutomationProperties.Name="{Binding LaunchButtonName}">
             <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <TextBlock Text="{Binding PrimaryText}" FontSize="16" FontWeight="SemiBold" TextAlignment="Center" TextTrimming="CharacterEllipsis"
                            Style="{StaticResource LaunchLabel}"/>
-                <TextBlock Grid.Row="1" Text="{Binding TargetVersion}" FontSize="12" Margin="0,4,0,0"
+                <TextBlock Grid.Row="1" Text="{Binding LaunchSubtitle}" FontSize="12" Margin="0,4,0,0"
                            TextAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding TargetVersion}"
                            Style="{StaticResource LaunchVersionLabel}"/>
             </Grid>
@@ -58,7 +56,7 @@
         <Grid Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
             <fluent:Button Content="版本选择" Command="{Binding OpenInstances}"/>
             <fluent:Button Grid.Column="2" Content="版本设置" Command="{Binding OpenInstanceSettings}" IsEnabled="{Binding CanOpenInstanceSettings}"
-                           ToolTip="{Binding InstanceSettingsHint}" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="当前实例的版本设置"/>
+                           ToolTip="{Binding InstanceSettingsHint}" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="当前游戏的版本设置"/>
         </Grid>
     </StackPanel>
 </UserControl>

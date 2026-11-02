@@ -8,11 +8,12 @@ public sealed class MoreViewModel : ObservableObject
     public PreviewSession Session {get;}
     private string _notice="";
     public string Notice {get=>_notice;private set=>Set(ref _notice,value);}
-    public string Version=>typeof(App).Assembly.GetName().Version?.ToString(3)??"";
+    public LauncherUpdateViewModel Updates { get; }
+    public string Version=>Updates.Version;
     public UiCommand ExportLog {get;}
     public MoreViewModel(PreviewSession session)
     {
-        Session=session;
+        Session=session; Updates=((App)System.Windows.Application.Current).Updates;
         ExportLog=new(async _=>
         {
             var dialog=new SaveFileDialog{Title="导出启动器日志",Filter="文本日志|*.log",DefaultExt=".log",AddExtension=true,FileName="FMLauncher-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".log"};

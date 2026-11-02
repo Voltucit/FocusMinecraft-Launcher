@@ -9,7 +9,7 @@
                             <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <Image Source="{Binding Game.Image}" Width="32" Height="32" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Left"/>
                                 <StackPanel Grid.Column="1" Margin="0,0,12,0"><TextBlock Text="{Binding Game.Number}" FontWeight="Medium" TextTrimming="CharacterEllipsis" ToolTip="{Binding Game.Number}"/><WrapPanel Margin="0,4,0,0"><TextBlock Text="{Binding Game.Kind}" FontSize="12" Foreground="{DynamicResource MutedText}" Margin="0,0,16,0"/><TextBlock Text="{Binding Game.DateText}" FontSize="12" Foreground="{DynamicResource MutedText}"/></WrapPanel></StackPanel>
-                                <TextBlock Grid.Column="2" Text="{Binding ActionText}" VerticalAlignment="Center" Margin="12,0,0,0"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Foreground" Value="{DynamicResource AccentText}"/><Style.Triggers><DataTrigger Binding="{Binding IsInstalled}" Value="True"><Setter Property="Foreground" Value="{DynamicResource MutedText}"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
+                                <TextBlock Grid.Column="2" Text="安装" Foreground="{DynamicResource AccentText}" VerticalAlignment="Center" Margin="12,0,0,0"/>
                             </Grid>
                         </fluent:Button>
                     </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
