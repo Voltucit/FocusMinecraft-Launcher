@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
@@ -111,6 +112,18 @@ public static class RuntimeSupport
         };
         return Regex.Replace(text,@"(?i)\b[A-Z]:[\\/][^\r\n""<>|；，。]*","相关文件");
     }
+    /// <summary>把字节数写成 1.2 GB / 340 MB 这类短文本，用于进度与列表。</summary>
+    public static string FormatSize(long bytes)
+    {
+        const double kilo = 1024, mega = kilo * 1024, giga = mega * 1024;
+        return bytes switch
+        {
+            >= (long)giga => (bytes / giga).ToString("0.0", CultureInfo.InvariantCulture) + " GB",
+            >= (long)mega => (bytes / mega).ToString("0.0", CultureInfo.InvariantCulture) + " MB",
+            >= (long)kilo => (bytes / kilo).ToString("0", CultureInfo.InvariantCulture) + " KB",
+            _ => bytes + " B"
+        };
+    }
     public static (double Total, double Available) Memory()
     {
         var state = new MemoryStatus { Length = (uint)Marshal.SizeOf<MemoryStatus>() };
@@ -148,6 +161,17 @@ public static class RuntimeSupport
         if (!automatic) return configured;
         var reading = Memory();
         return AutomaticMemoryMb(reading.Total, reading.Available, modCount);
+    }
+    /// <summary>当前进程是否以管理员身份运行：此时 Windows 会拦截来自资源管理器的拖放。</summary>
+    public static bool IsElevated { get; } = ReadElevation();
+    private static bool ReadElevation()
+    {
+        try
+        {
+            using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+            return new System.Security.Principal.WindowsPrincipal(identity).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+        }
+        catch (Exception) { return false; }
     }
     public static void ReleaseLauncherMemory() { GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); }
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern IntPtr CommandLineToArgvW(string command, out int count);

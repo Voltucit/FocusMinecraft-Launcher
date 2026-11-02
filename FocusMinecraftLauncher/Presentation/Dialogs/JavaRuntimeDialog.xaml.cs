@@ -20,7 +20,7 @@ public partial class JavaRuntimeDialog : Window
         InitializeComponent();
         Title = "需要 Java " + required;
         System.Windows.Automation.AutomationProperties.SetName(this, Title);
-        Headline.Text = "这个实例需要 Java " + required;
+        Headline.Text = "这个游戏需要 Java " + required;
 
         var body = "启动器在本机没有找到 Java " + required + "。";
         if (canDownload && higher is { } higherVersion)

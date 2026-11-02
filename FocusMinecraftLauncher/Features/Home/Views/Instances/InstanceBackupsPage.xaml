@@ -1,0 +1,43 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.Home.Views.Instances.InstanceBackupsPage"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:ui="clr-namespace:FocusMinecraftLauncher.Presentation.Controls" Focusable="False">
+
+<Grid>
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+
+    <StackPanel Margin="0,0,0,12">
+        <ui:SettingRow Title="自动备份" Description="启动游戏前先把 Mod、配置与存档打包，出错时可以整体还原。">
+            <fluent:ToggleSwitch IsChecked="{Binding AutoBackup, Mode=TwoWay}" OnContent="已开启" OffContent="已关闭" AutomationProperties.Name="启动前自动备份"/>
+        </ui:SettingRow>
+        <ui:SettingRow Title="保留份数" Description="超出数量时删除最旧的一份；手动备份同样计入。">
+            <ui:AnimatedComboBox ItemsSource="{Binding RetentionChoices}" SelectedItem="{Binding Retention, Mode=TwoWay}" Width="120" HorizontalAlignment="Left" AutomationProperties.Name="备份保留份数"/>
+        </ui:SettingRow>
+        <WrapPanel Margin="0,8,0,0"><fluent:Button Content="创建备份" Command="{Binding Create}" Style="{StaticResource PrimaryButton}" Margin="0,0,8,8"/><fluent:Button Content="还原所选" Command="{Binding Restore}" Margin="0,0,8,8"/><fluent:Button Content="删除所选" Command="{Binding RequestRemove}" Visibility="{Binding ConfirmRemove, Converter={StaticResource NotVisibility}}" Margin="0,0,8,8"/><fluent:Button Content="确认删除" Command="{Binding Remove}" Visibility="{Binding ConfirmRemove, Converter={StaticResource BoolVisibility}}" Margin="0,0,8,8"/><fluent:Button Content="取消" Command="{Binding CancelRemove}" Visibility="{Binding ConfirmRemove, Converter={StaticResource BoolVisibility}}" Style="{StaticResource QuietButton}" Margin="0,0,8,8"/><fluent:Button Content="刷新" Command="{Binding Reload}" Style="{StaticResource QuietButton}" Margin="0,0,8,8"/><fluent:Button Content="打开备份文件夹" Command="{Binding OpenFolder}" Style="{StaticResource QuietButton}" Margin="0,0,8,8"/></WrapPanel>
+    </StackPanel>
+
+    <Border Grid.Row="1" BorderBrush="{DynamicResource SubtleBorder}" BorderThickness="1" CornerRadius="{DynamicResource CardCornerRadius}" Background="{DynamicResource Surface}">
+        <Grid>
+            <ListBox ItemsSource="{Binding Items}" Background="Transparent" BorderThickness="0" Padding="4" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="备份列表">
+                <ListBox.ItemTemplate><DataTemplate>
+                    <Grid Margin="8,10"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,0,12,0" AutomationProperties.Name="{Binding Title}"/>
+                        <StackPanel Grid.Column="1"><TextBlock Text="{Binding Title}" FontWeight="Medium"/><TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}" Margin="0,4,0,0"/></StackPanel>
+                    </Grid>
+                </DataTemplate></ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock Text="{Binding StateText}" Style="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" TextWrapping="Wrap" TextAlignment="Center" Visibility="{Binding HasItems, Converter={StaticResource NotVisibility}}"/>
+        </Grid>
+    </Border>
+
+    <Border Grid.Row="2" BorderBrush="{DynamicResource SubtleBorder}" BorderThickness="0,1,0,0" Padding="0,12,0,0" Margin="0,12,0,0">
+        <StackPanel>
+            <TextBlock Text="{Binding Notice}" TextWrapping="Wrap" Margin="0,0,0,8" Visibility="{Binding Notice, Converter={StaticResource TextVisibility}}" AutomationProperties.LiveSetting="Polite"/>
+            <TextBlock Text="{Binding Stage}" Style="{StaticResource Caption}" TextWrapping="Wrap" Visibility="{Binding Stage, Converter={StaticResource TextVisibility}}"/>
+            <ProgressBar IsIndeterminate="True" Margin="0,10,0,0" Visibility="{Binding IsBusy, Converter={StaticResource BoolVisibility}}" AutomationProperties.Name="备份进度"/>
+            <fluent:Button Content="取消" Command="{Binding Cancel}" Style="{StaticResource QuietButton}" HorizontalAlignment="Left" Margin="0,10,0,0" Visibility="{Binding IsBusy, Converter={StaticResource BoolVisibility}}"/>
+        </StackPanel>
+    </Border>
+</Grid>
+
+</UserControl>

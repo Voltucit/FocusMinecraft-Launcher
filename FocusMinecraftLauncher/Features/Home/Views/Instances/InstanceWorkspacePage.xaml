@@ -17,6 +17,8 @@
         <TabItem Header="概览"><views:InstanceOverviewPage DataContext="{Binding Overview}"/></TabItem>
         <TabItem Header="设置"><views:InstanceLaunchSettingsPage DataContext="{Binding Settings}"/></TabItem>
         <TabItem Header="Mod 管理"><views:InstanceModsPage DataContext="{Binding Mods}"/></TabItem>
+        <TabItem Header="备份"><views:InstanceBackupsPage DataContext="{Binding Backups}"/></TabItem>
+        <TabItem Header="日志"><views:InstanceLogsPage DataContext="{Binding Logs}"/></TabItem>
         <TabItem Header="导出"><views:InstanceExportPage DataContext="{Binding Export}"/></TabItem>
     </TabControl>
 </Grid>

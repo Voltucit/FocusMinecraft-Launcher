@@ -125,11 +125,10 @@ public sealed class ResourceEntryViewModel : ObservableObject
         {
             if (ReferenceEquals(_selectedFile, value)) return;
             _selectedFile = value; RefreshDependencies();
-            Changed(nameof(SelectedFile)); Changed(nameof(DependencySummary));
+            Changed(nameof(SelectedFile));
         }
     }
     public string DependencyStatus => _loadingDetails?"正在读取资源详情":_dependencyError.Length>0?_dependencyError:SelectedFile?.DependencyText ?? "前置信息未提供";
-    public string DependencySummary => SelectedFile == null ? DependencyStatus : SelectedFile.ResourceVersion + "：" + DependencyStatus;
     public UiCommand OpenDetails { get; }
     public UiCommand ChooseVersion { get; }
     public ResourceEntryViewModel(ResourceProject project, ResourceCatalog catalog, Action<string, bool> open)
@@ -142,10 +141,10 @@ public sealed class ResourceEntryViewModel : ObservableObject
     private async Task EnsureExpandedAsync()
     {
         if(_loadingDetails||HasFiles)return;
-        _loadingDetails=true;Changed(nameof(DependencyStatus));Changed(nameof(DependencySummary));
+        _loadingDetails=true;Changed(nameof(DependencyStatus));
         try { UpdateProject(await _catalog.LoadAsync(Project.Id)); }
         catch(Exception error){_dependencyError=FocusMinecraftLauncher.Infrastructure.Runtime.RuntimeSupport.Error(error);}
-        finally{_loadingDetails=false;Changed(nameof(DependencyStatus));Changed(nameof(DependencySummary));}
+        finally{_loadingDetails=false;Changed(nameof(DependencyStatus));}
     }
     private async void RefreshDependencies()
     {
@@ -156,6 +155,6 @@ public sealed class ResourceEntryViewModel : ObservableObject
         Dependencies.Clear();
         foreach (var dependency in SelectedFile?.EffectiveDependencies ?? [])
             if (_catalog.Find(dependency.ProjectId) is { } project) Dependencies.Add(new(project, dependency, _open));
-        Changed(nameof(HasDependencies)); Changed(nameof(DependencyStatus));Changed(nameof(DependencySummary));
+        Changed(nameof(HasDependencies)); Changed(nameof(DependencyStatus));
     }
 }

@@ -20,7 +20,7 @@
                     TickFrequency="0.5" SmallChange="0.5" LargeChange="1" IsSnapToTickEnabled="True"
                     IsMoveToPointEnabled="True" IsEnabled="{Binding CanAdjustMemory}" MinHeight="40" Margin="0,12,0,0"
                     Foreground="{DynamicResource PrimaryBackground}" FocusVisualStyle="{StaticResource FocusVisual}"
-                    AutomationProperties.Name="游戏内存分配，单位 GB" ToolTip="{Binding AllocationText}"/>
+                    AutomationProperties.Name="游戏内存分配，单位 GB"/>
             <Grid Margin="0,0,0,16">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <TextBlock Text="{Binding MinimumMemoryGb, StringFormat={}{0:0.0} GB}" Style="{StaticResource Caption}"/>
@@ -43,7 +43,8 @@
                             <Run Text=" / " Foreground="{DynamicResource MutedText}"/>
                             <Run Text="{Binding TotalMemoryText, Mode=OneWay}" Foreground="{DynamicResource MutedText}" d:Text="16 GB"/>
                         </TextBlock>
-                        <TextBlock Grid.Column="1" Text="{Binding AllocationText}" FontWeight="SemiBold" Margin="16,0,0,0"/>
+                        <TextBlock Grid.Column="1" Text="{Binding AllocationText}" FontWeight="SemiBold" Margin="16,0,0,0"
+                                   Visibility="{Binding AllocationText, Converter={StaticResource TextVisibility}}"/>
                     </Grid>
                     <TextBlock Text="{Binding AvailableMemoryText}" Style="{StaticResource Caption}" Margin="0,8,0,0"/>
                 </StackPanel>

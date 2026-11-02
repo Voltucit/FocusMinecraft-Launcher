@@ -13,6 +13,8 @@ public sealed class InstanceWorkspaceViewModel : ObservableObject, IDisposable
     public InstanceOverviewViewModel Overview { get; }
     public InstanceLaunchSettingsViewModel Settings { get; }
     public InstanceModsViewModel Mods { get; }
+    public InstanceBackupsViewModel Backups { get; }
+    public InstanceLogsViewModel Logs { get; }
     public InstanceExportViewModel Export { get; }
     public UiCommand ReturnHome { get; }
     public bool IsAvailable => _session.Instances.Contains(Instance);
@@ -23,7 +25,7 @@ public sealed class InstanceWorkspaceViewModel : ObservableObject, IDisposable
         {
             if(!Set(ref _tab,value))return;
             if(value==2)_ = Mods.LoadAsync();
-            if(value==3)_ = Export.RefreshFilesAsync();
+            if(value==5)_ = Export.RefreshFilesAsync();
         }
     }
     public string Metadata => Instance.VersionText + " / " + Instance.ComponentsText;
@@ -31,6 +33,7 @@ public sealed class InstanceWorkspaceViewModel : ObservableObject, IDisposable
     {
         _session=session;Instance=instance;_gameDirectory=instance.GameDirectory;ReturnHome=new(_=>back());
         Overview=new(session,instance,back);Settings=new(session,instance);Mods=new(session,instance);
+        Backups=new(session,instance);Logs=new(instance);
         Export=new(session,instance,Mods);session.PropertyChanged+=SessionChanged;
     }
     private void SessionChanged(object? sender,PropertyChangedEventArgs e)
@@ -41,5 +44,5 @@ public sealed class InstanceWorkspaceViewModel : ObservableObject, IDisposable
         if(!IsAvailable && Export.IsBusy)Export.Cancel.Execute(null);
     }
     public void Dispose()
-    { _session.PropertyChanged-=SessionChanged;Settings.Dispose();Mods.Dispose();Export.Dispose(); }
+    { _session.PropertyChanged-=SessionChanged;Settings.Dispose();Mods.Dispose();Backups.Dispose();Logs.Dispose();Export.Dispose(); }
 }

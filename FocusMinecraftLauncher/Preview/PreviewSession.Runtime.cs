@@ -352,6 +352,17 @@ public sealed partial class PreviewSession
             var fallbackJava = instance.RequiredJava is { } required && javaCandidates.Count > 0 && javaCandidates[0].MajorVersion > required;
             if (javaCandidates.Count == 0)
                 throw new InvalidOperationException(instance.RequiredJava is { } missing ? $"未找到 Java {missing} 或更高版本，请安装并选择可用的 Java。" : "未找到可用的 Java，请先安装并选择 Java。");
+            // 启动前自动备份：失败只写日志，不阻断启动。
+            if (GameBackupService.ShouldBackup(instance))
+            {
+                Report(task, "自动备份");
+                try
+                {
+                    await GameBackupService.CreateAsync(instance, "启动前自动备份", true, new Progress<string>(text => Report(task, text)), token);
+                    GameBackupService.Prune(instance, settings.BackupRetention);
+                }
+                catch (Exception error) when (error is not OperationCanceledException) { Log("自动备份失败：" + RuntimeSupport.Error(error)); }
+            }
             Report(task, "检查启动配置");
             try
             {

@@ -39,7 +39,7 @@ public sealed class MemoryAllocationViewModel : ObservableObject
         }
     }
     public int MemoryMb => (int)Math.Round(AllocatedMemoryGb * 1024);
-    public string AllocationText => IsAutomatic ? "按 Mod 数量与可用内存自动分配" : Format(AllocatedMemoryGb);
+    public string AllocationText => IsAutomatic ? string.Empty : Format(AllocatedMemoryGb);
 
     /// <summary>实例页已知 Mod 数量时用于估算；全局设置留空，只给通用说明。</summary>
     public int? ModCount

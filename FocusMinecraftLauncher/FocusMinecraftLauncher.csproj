@@ -10,7 +10,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="FocusMinecraftCore" Version="2.0.5" />
+      <PackageReference Include="FocusMinecraftCore" Version="2.0.6" />
       <PackageReference Include="WPF-UI" Version="4.3.0" />
       <ProjectReference Include="..\FMLauncher.UpdateShared\FMLauncher.UpdateShared.csproj" />
     </ItemGroup>
@@ -33,7 +33,7 @@
         <Description>Minecraft 启动器</Description>
 
         <!-- 软件版本号 -->
-        <Version Condition="'$(Version)' == ''">2.0.2</Version>
+        <Version Condition="'$(Version)' == ''">2.0.3</Version>
         <ReleaseNumber>$([System.Text.RegularExpressions.Regex]::Match('$(Version)', '^\d+\.\d+\.\d+').Value)</ReleaseNumber>
 
         <!-- 程序集版本 -->

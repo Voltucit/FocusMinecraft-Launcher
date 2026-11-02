@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -42,16 +43,73 @@ public partial class MainWindow : FluentWindow
         DataContext = _navigation;
         PresentPage();
     }
-    /// <summary>关闭控件库自定义边框的缩放命中区域，保留标题栏拖动和最小化。</summary>
+
+    /// <summary>首帧之前按窗口所在显示器的工作区定尺寸，避免 1440×900 顶出小屏幕或超宽屏留白过多。</summary>
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        FitWindowToScreen(false);
+    }
+
+    /// <summary>换到不同缩放的显示器后，只在窗口超出新工作区时再调整，保留用户自己拖出的大小。</summary>
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        FitWindowToScreen(true);
+    }
+
+    /// <summary>上限 1440×900、下限取窗口最小尺寸，四周为任务栏与边框留 24 px。</summary>
+    private void FitWindowToScreen(bool onlyWhenOverflowing)
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero) return;
+        var monitor = MonitorFromWindow(handle, MonitorDefaultToNearest);
+        if (monitor == IntPtr.Zero) return;
+        var information = new MonitorInformation { Size = Marshal.SizeOf<MonitorInformation>() };
+        if (!GetMonitorInfo(monitor, ref information)) return;
+
+        // 工作区是物理像素，除以当前 DPI 才是 WPF 的 DIP。
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var width = (information.Work.Right - information.Work.Left) / dpi.DpiScaleX - 48;
+        var height = (information.Work.Bottom - information.Work.Top) / dpi.DpiScaleY - 48;
+        if (onlyWhenOverflowing && Width <= width && Height <= height) return;
+
+        Width = Math.Clamp(width, MinWidth, 1440);
+        Height = Math.Clamp(height, MinHeight, 900);
+    }
+
+    private const uint MonitorDefaultToNearest = 2;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRectangle
+    {
+        public int Left, Top, Right, Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct MonitorInformation
+    {
+        public int Size;
+        public NativeRectangle Monitor;
+        public NativeRectangle Work;
+        public uint Flags;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr handle, uint flags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInformation information);
+    /// <summary>保留 6 px 的原生缩放入口，标题栏拖动仍由下面的命中处理负责。</summary>
     protected override void SetWindowChrome()
     {
         base.SetWindowChrome();
         if (WindowChrome.GetWindowChrome(this) is not { } chrome) return;
         var fixedChrome = (WindowChrome)chrome.CloneCurrentValue();
-        fixedChrome.ResizeBorderThickness = new Thickness(0);
+        fixedChrome.ResizeBorderThickness = new Thickness(6);
         WindowChrome.SetWindowChrome(this, fixedChrome);
     }
-    /// <summary>覆盖 TitleBar 保留的最小缩放边缘，按钮和图标的原生处理继续由控件库负责。</summary>
+    /// <summary>标题栏区域按拖动处理，其余位置交回 WindowChrome，让窗口边缘可以拖动缩放。</summary>
     private void FixedWindowHitTest(object? sender, Wpf.Ui.Controls.HwndProcEventArgs e)
     {
         const int wmNcHitTest = 0x0084, htClient = 1, htCaption = 2;
@@ -64,10 +122,11 @@ public partial class MainWindow : FluentWindow
             && AppTitleBar.Template.FindName("PART_Icon", AppTitleBar) is UIElement icon
             && new Rect(icon.RenderSize).Contains(icon.PointFromScreen(screenPoint))) return;
 
-        // 标题栏按钮在此事件前已由 WPF UI 命中；这里只保留空白标题栏拖动，其余区域交给 WPF。
+        // 标题栏按钮在此事件前已由 WPF UI 命中；这里只处理标题栏，窗口边缘留给 WindowChrome 缩放。
         var titlePoint = AppTitleBar.PointFromScreen(screenPoint);
-        var overTitleBar = new Rect(AppTitleBar.RenderSize).Contains(titlePoint);
-        e.ReturnValue = (nint)(overTitleBar && !e.IsMouseOverDetectedHeaderContent ? htCaption : htClient);
+        if (!new Rect(AppTitleBar.RenderSize).Contains(titlePoint)) return;
+
+        e.ReturnValue = (nint)(e.IsMouseOverDetectedHeaderContent ? htClient : htCaption);
         e.Handled = true;
     }
     private void ToggleSidebar(object sender, RoutedEventArgs e) => _navigation.IsExpanded = !_navigation.IsExpanded;
@@ -105,18 +164,36 @@ public partial class MainWindow : FluentWindow
         catch(Exception error){_navigation.Session.NotifyTask(Infrastructure.Runtime.RuntimeSupport.Error(error),true);}
     }
     private static bool IsPack(string path)=>System.IO.File.Exists(path)&&(path.EndsWith(".mrpack",StringComparison.OrdinalIgnoreCase)||path.EndsWith(".zip",StringComparison.OrdinalIgnoreCase));
+    /// <summary>拖拽目标是 Mod 管理页时让事件继续冒泡，由该页把 jar 装进当前实例。</summary>
+    private static bool IsModsDrop(object? source,DragEventArgs e)=>
+        e.Data.GetDataPresent(DataFormats.FileDrop)
+        && e.Data.GetData(DataFormats.FileDrop) is string[] files
+        && files.Length>0
+        && files.All(path=>path.EndsWith(".jar",StringComparison.OrdinalIgnoreCase))
+        && FindModsPage(source)!=null;
+    private static Features.Home.Views.Instances.InstanceModsPage? FindModsPage(object? source)
+    {
+        for(var node=source as DependencyObject;node!=null;)
+        {
+            if(node is Features.Home.Views.Instances.InstanceModsPage page)return page;
+            node=node is Visual or System.Windows.Media.Media3D.Visual3D?VisualTreeHelper.GetParent(node):LogicalTreeHelper.GetParent(node);
+        }
+        return null;
+    }
     private void WindowDragOver(object sender,DragEventArgs e)
     {
         if(!e.Data.GetDataPresent(DataFormats.FileDrop))return;
+        if(IsModsDrop(e.OriginalSource,e))return;
         var files=e.Data.GetData(DataFormats.FileDrop) as string[];
         e.Effects=files is {Length:1}&&IsPack(files[0])&&!_navigation.Session.IsBusy?DragDropEffects.Copy:DragDropEffects.None;e.Handled=true;
     }
     private async void WindowDrop(object sender,DragEventArgs e)
     {
         if(!e.Data.GetDataPresent(DataFormats.FileDrop))return;
+        if(IsModsDrop(e.OriginalSource,e))return;
         e.Handled=true;
         if(e.Data.GetData(DataFormats.FileDrop) is string[] {Length:1} files&&IsPack(files[0])&&!_navigation.Session.IsBusy)await _navigation.Session.ImportModpackAsync(files[0]);
-        else _navigation.Session.NotifyTask("请一次拖入一个整合包，并等待当前任务结束。",true);
+        else _navigation.Session.NotifyTask("请一次拖入一个整合包，或把 Mod 拖到 Mod 管理页，并等待当前任务结束。",true);
     }
     /// <summary>贴靠形成窄窗口时收起导航，恢复宽度后还原此前选择，为内容保留空间。</summary>
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)

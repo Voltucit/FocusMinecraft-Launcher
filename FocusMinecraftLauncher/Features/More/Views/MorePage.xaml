@@ -8,8 +8,7 @@
     <StackPanel HorizontalAlignment="Stretch">
         <TextBlock Text="更多" Style="{StaticResource PageTitle}" Margin="0,0,0,32"/>
         <TextBlock Text="关于" Style="{StaticResource SectionTitle}"/>
-        <ui:SettingRow Title="FMLauncher"><TextBlock Text="{Binding Version}" Style="{StaticResource Muted}"/></ui:SettingRow>
-        <ui:SettingRow Title="应用框架"><TextBlock Text="WPF / .NET 10" Style="{StaticResource Muted}"/></ui:SettingRow>
+        <ui:SettingRow Title="FocusMinecraft!Launcher"><TextBlock Text="{Binding Version}" Style="{StaticResource Muted}"/></ui:SettingRow>
         <ui:SettingRow Title="启动器更新">
             <StackPanel>
                 <TextBlock Text="{Binding Updates.Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
@@ -28,7 +27,38 @@
                 </Expander>
             </StackPanel>
         </ui:SettingRow>
-        <Expander Header="键盘操作" Margin="0,12,0,0"><StackPanel Margin="0,8,0,16"><TextBlock Text="Tab 切换控件，方向键选择列表项，Enter 或空格执行操作。" Style="{StaticResource Muted}"/><TextBlock Text="Esc 收起侧栏。" Style="{StaticResource Muted}" Margin="0,8,0,0"/></StackPanel></Expander>
+        <Expander Header="特别鸣谢" Margin="0,12,0,0" Visibility="{Binding HasAcknowledgments, Converter={StaticResource BoolVisibility}}">
+            <StackPanel Margin="0,8,0,16">
+                <!-- 条目数据在 MoreViewModel.Acknowledgments 里添加，那里留了一行可直接复制的示例。
+                     每个条目按“头像 → 名字 → 介绍 → 个人主页”显示；主页为空时不显示右侧按钮。 -->
+                <ItemsControl ItemsSource="{Binding Acknowledgments}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Width="40" Height="40" CornerRadius="20" Background="{DynamicResource ControlHover}" Margin="0,0,12,0">
+                                    <!-- 用 ImageBrush 填充圆角边框，图片会被裁成圆形；直接用 Image 不会跟随圆角。 -->
+                                    <Border CornerRadius="20" AutomationProperties.Name="{Binding Name}">
+                                        <Border.Background>
+                                            <ImageBrush ImageSource="{Binding Avatar}" Stretch="UniformToFill"/>
+                                        </Border.Background>
+                                    </Border>
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding Introduction}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                </StackPanel>
+                                <fluent:Button Grid.Column="2" Content="主页" Style="{StaticResource QuietButton}" VerticalAlignment="Center" Margin="12,0,0,0" Visibility="{Binding HasPage, Converter={StaticResource BoolVisibility}}" Command="{Binding DataContext.OpenAcknowledgmentPage, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding Page}"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Expander>
         <Expander Header="本次日志" Margin="0,8,0,0"><Grid Margin="0,8,0,16"><ListBox ItemsSource="{Binding Session.Logs}" MaxHeight="240" AutomationProperties.Name="启动器事件日志"><ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap" Style="{StaticResource Caption}"/></DataTemplate></ListBox.ItemTemplate></ListBox><TextBlock Text="暂无日志" Style="{StaticResource Muted}" Visibility="{Binding Session.Logs.Count, Converter={StaticResource ZeroVisibility}}"/></Grid></Expander>
         <WrapPanel Margin="0,24,0,0"><fluent:Button Content="导出日志" Command="{Binding ExportLog}"/><TextBlock Text="{Binding Notice}" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="16,0,0,0"/></WrapPanel>
 

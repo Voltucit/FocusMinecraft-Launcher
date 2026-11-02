@@ -1,0 +1,43 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.Home.Views.Instances.InstanceLogsPage"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:ui="clr-namespace:FocusMinecraftLauncher.Presentation.Controls" Focusable="False">
+
+<Grid>
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+
+    <WrapPanel Margin="0,0,0,12"><fluent:Button Content="重新读取" Command="{Binding Reload}" Margin="0,0,8,8"/><fluent:Button Content="打开日志文件夹" Command="{Binding OpenFolder}" Style="{StaticResource QuietButton}" Margin="0,0,8,8"/><fluent:Button Content="复制诊断结果" Command="{Binding CopyReport}" Style="{StaticResource QuietButton}" Margin="0,0,8,8"/></WrapPanel>
+
+    <Grid Grid.Row="1">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="360"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+
+        <StackPanel Margin="0,0,16,0">
+            <TextBlock Text="崩溃原因" Style="{StaticResource SectionTitle}"/>
+            <TextBlock Text="{Binding StateText}" Style="{StaticResource Caption}" Margin="0,8,0,12" TextWrapping="Wrap"/>
+            <ListBox ItemsSource="{Binding Findings}" SelectedItem="{Binding SelectedFinding}" Background="Transparent" BorderThickness="0" MaxHeight="260" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="崩溃原因列表">
+                <ListBox.ItemTemplate><DataTemplate>
+                    <StackPanel Margin="8,8"><TextBlock Text="{Binding Title}" FontWeight="Medium"/><TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0"/></StackPanel>
+                </DataTemplate></ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock Text="{Binding SelectedAdvice}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,8,0,0" Visibility="{Binding HasAdvice, Converter={StaticResource BoolVisibility}}"/>
+
+            <TextBlock Text="崩溃报告" Style="{StaticResource SectionTitle}" Margin="0,24,0,0"/>
+            <ListBox ItemsSource="{Binding Crashes}" SelectedItem="{Binding SelectedCrash}" Background="Transparent" BorderThickness="0" MaxHeight="220" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="崩溃报告列表" Visibility="{Binding HasCrashes, Converter={StaticResource BoolVisibility}}">
+                <ListBox.ItemTemplate><DataTemplate>
+                    <StackPanel Margin="8,8"><TextBlock Text="{Binding Title}" FontWeight="Medium" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}" Margin="0,4,0,0"/></StackPanel>
+                </DataTemplate></ListBox.ItemTemplate>
+            </ListBox>
+            <fluent:Button Content="打开所在文件夹" Command="{Binding OpenCrash}" Style="{StaticResource QuietButton}" HorizontalAlignment="Left" Margin="0,8,0,0" Visibility="{Binding HasCrashes, Converter={StaticResource BoolVisibility}}"/>
+            <TextBlock Text="没有崩溃报告。" Style="{StaticResource Caption}" Margin="0,8,0,0" Visibility="{Binding HasCrashes, Converter={StaticResource NotVisibility}}"/>
+        </StackPanel>
+
+        <Border Grid.Column="1" BorderBrush="{DynamicResource SubtleBorder}" BorderThickness="1" CornerRadius="{DynamicResource CardCornerRadius}" Background="{DynamicResource Surface}" Padding="1">
+            <TextBox Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource MutedText}" FontFamily="Consolas, Cascadia Mono, monospace" FontSize="12" Padding="12" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Visibility="{Binding HasText, Converter={StaticResource BoolVisibility}}" AutomationProperties.Name="日志末尾内容"/>
+        </Border>
+        <TextBlock Grid.Column="1" Text="{Binding StateText}" Style="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" TextWrapping="Wrap" TextAlignment="Center" Visibility="{Binding HasText, Converter={StaticResource NotVisibility}}"/>
+    </Grid>
+
+    <TextBlock Grid.Row="2" Text="{Binding Notice}" TextWrapping="Wrap" Margin="0,12,0,0" Visibility="{Binding Notice, Converter={StaticResource TextVisibility}}" AutomationProperties.LiveSetting="Polite"/>
+</Grid>
+
+</UserControl>

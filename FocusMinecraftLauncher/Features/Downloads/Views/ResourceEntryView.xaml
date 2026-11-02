@@ -18,9 +18,7 @@
             <Border Background="{DynamicResource Surface}" CornerRadius="{DynamicResource ControlCornerRadius}" Padding="12">
                 <StackPanel>
                     <TextBlock Text="{Binding Project.Description}" Style="{StaticResource ResourceDescription}" Margin="0,0,0,12"/>
-                    <TextBlock Text="文件版本" Style="{StaticResource CommunityFilterLabel}"/>
-                    <ui:AnimatedComboBox Style="{StaticResource CommunityCombo}" ItemsSource="{Binding Project.Files}" SelectedItem="{Binding SelectedFile, Mode=TwoWay}" DisplayMemberPath="Label" IsEnabled="{Binding HasFiles}" AutomationProperties.Name="展开内容的文件版本" Margin="0,0,0,8"/>
-                    <TextBlock Text="{Binding DependencySummary}" Style="{StaticResource ResourceBody}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{Binding DependencyStatus}" Style="{StaticResource ResourceBody}" Margin="0,0,0,8"/>
                     <ui:AnimatedExpander Header="前置资源" Style="{StaticResource CommunityExpander}" IsExpanded="{Binding IsDependenciesExpanded, Mode=TwoWay}" Visibility="{Binding HasDependencies, Converter={StaticResource BoolVisibility}}">
                         <ItemsControl ItemsSource="{Binding Dependencies}" ItemTemplate="{StaticResource DependencyRow}"/>
                     </ui:AnimatedExpander>
