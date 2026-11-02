@@ -34,5 +34,8 @@ account_config.json
 # The release public key is required by client and CI builds
 !/Build/Updates/update-public.pem
 
+# Microsoft login configuration stays local; CI injects it from Actions Secrets
+/FocusMinecraftLauncher/Infrastructure/Authentication/ClientID.cs
+
 # Keep these shared ignore rules visible to source control
 !/.gitignore

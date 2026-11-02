@@ -1,7 +1,9 @@
 <Project>
   <PropertyGroup>
     <UpdatePublicKeyFile Condition="'$(UpdatePublicKeyFile)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)update-public.pem'))</UpdatePublicKeyFile>
-    <EmbeddedUpdaterDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\obj\$(Configuration)\embedded-updater\'))</EmbeddedUpdaterDirectory>
+    <EmbeddedUpdaterSelfContained>false</EmbeddedUpdaterSelfContained>
+    <EmbeddedUpdaterSelfContained Condition="'$(SelfContained)' == 'true'">true</EmbeddedUpdaterSelfContained>
+    <EmbeddedUpdaterDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\obj\$(Configuration)\embedded-updater\$(EmbeddedUpdaterSelfContained)\'))</EmbeddedUpdaterDirectory>
     <EmbeddedUpdaterFile>$(EmbeddedUpdaterDirectory)FMLauncher.Updater.exe</EmbeddedUpdaterFile>
   </PropertyGroup>
   <ItemGroup>
@@ -10,10 +12,11 @@
     <EmbeddedResource Include="$(EmbeddedUpdaterFile)" LogicalName="FMLauncher.EmbeddedUpdater"/>
     <EmbeddedResource Include="$(UpdatePublicKeyFile)" LogicalName="FMLauncher.UpdatePublicKey" Condition="Exists('$(UpdatePublicKeyFile)')"/>
   </ItemGroup>
-  <!-- 临时更新器独立发布为自包含单文件，再嵌入主程序；安装目录不分发辅助 EXE。 -->
+  <!-- 默认复用启动器已依赖的 .NET 10 运行时，不重复内嵌运行库。
+       显式自包含发布时保留更新器的独立运行能力；按模式分开缓存，避免复用错误产物。 -->
   <Target Name="PublishEmbeddedUpdater" BeforeTargets="PrepareForBuild" Inputs="@(_UpdaterSource)" Outputs="$(EmbeddedUpdaterFile)" Condition="'$(DesignTimeBuild)' != 'true'">
     <MSBuild Projects="$(MSBuildThisFileDirectory)..\..\FMLauncher.Updater\FMLauncher.Updater.csproj" Targets="Restore;Publish"
              RemoveProperties="TargetFramework;TargetFrameworks"
-             Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=true;PublishSingleFile=true;PublishTrimmed=false;PublishReadyToRun=false;IncludeNativeLibrariesForSelfExtract=true;EnableCompressionInSingleFile=true;DebugType=None;PublishDir=$(EmbeddedUpdaterDirectory);UpdatePublicKeyFile=$(UpdatePublicKeyFile)"/>
+             Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=$(EmbeddedUpdaterSelfContained);PublishSingleFile=true;PublishTrimmed=false;PublishReadyToRun=false;IncludeNativeLibrariesForSelfExtract=true;EnableCompressionInSingleFile=$(EmbeddedUpdaterSelfContained);DebugType=None;PublishDir=$(EmbeddedUpdaterDirectory);UpdatePublicKeyFile=$(UpdatePublicKeyFile)"/>
   </Target>
 </Project>

@@ -1,0 +1,28 @@
+<Project>
+  <PropertyGroup>
+    <_LocalMicrosoftClientIdFile>$(MSBuildProjectDirectory)\Infrastructure\Authentication\ClientID.cs</_LocalMicrosoftClientIdFile>
+    <_GenerateMicrosoftClientId Condition="'$(FMLAUNCHER_MICROSOFT_CLIENT_ID)' != '' or !Exists('$(_LocalMicrosoftClientIdFile)')">true</_GenerateMicrosoftClientId>
+    <_GeneratedMicrosoftClientIdFile>$(MSBuildProjectDirectory)\obj\$(Configuration)\authentication\MicrosoftClientId.g.cs</_GeneratedMicrosoftClientIdFile>
+  </PropertyGroup>
+  <!-- 本地沿用未提交的配置；CI 仅在已忽略的 obj 目录生成源码，不把应用 ID 写入仓库。 -->
+  <ItemGroup Condition="'$(_GenerateMicrosoftClientId)' == 'true'">
+    <Compile Remove="Infrastructure\Authentication\ClientID.cs"/>
+    <Compile Include="$(_GeneratedMicrosoftClientIdFile)"/>
+  </ItemGroup>
+  <Target Name="GenerateMicrosoftClientIdConfiguration" BeforeTargets="PrepareForBuild"
+          Condition="'$(_GenerateMicrosoftClientId)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+    <Error Condition="'$(FMLAUNCHER_MICROSOFT_CLIENT_ID)' == ''"
+           Text="缺少 Microsoft 登录配置。请在 Actions Repository secrets 中添加 FMLAUNCHER_MICROSOFT_CLIENT_ID，值为应用的公共 Client ID；本地也可使用被忽略的 ClientID.cs。"/>
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(FMLAUNCHER_MICROSOFT_CLIENT_ID)', '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'))"
+           Text="FMLAUNCHER_MICROSOFT_CLIENT_ID 格式无效，请填写应用 ID，不要填写 Client Secret 或文件路径。"/>
+    <ItemGroup>
+      <_MicrosoftClientIdSourceLine Include="// &lt;auto-generated /&gt;"/>
+      <_MicrosoftClientIdSourceLine Include="namespace FocusMinecraftLauncher.Infrastructure.Authentication%3B"/>
+      <_MicrosoftClientIdSourceLine Include="internal static class ClientIDS { internal const string MicrosoftClientId = &quot;$(FMLAUNCHER_MICROSOFT_CLIENT_ID)&quot;%3B }"/>
+    </ItemGroup>
+    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(_GeneratedMicrosoftClientIdFile)'))"/>
+    <WriteLinesToFile File="$(_GeneratedMicrosoftClientIdFile)" Lines="@(_MicrosoftClientIdSourceLine)"
+                      Overwrite="true" WriteOnlyWhenDifferent="true" Encoding="UTF-8"/>
+    <ItemGroup><FileWrites Include="$(_GeneratedMicrosoftClientIdFile)"/></ItemGroup>
+  </Target>
+</Project>

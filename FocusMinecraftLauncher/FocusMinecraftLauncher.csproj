@@ -53,5 +53,6 @@
     </PropertyGroup>
 
 
+    <Import Project="..\Build\Authentication\MicrosoftClientId.targets" />
     <Import Project="..\Build\Updates\EmbeddedUpdater.targets" />
 </Project>

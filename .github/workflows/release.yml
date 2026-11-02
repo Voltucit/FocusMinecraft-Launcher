@@ -106,6 +106,7 @@ jobs:
         shell: pwsh
         env:
           FMLAUNCHER_UPDATE_PRIVATE_KEY: ${{ secrets.FMLAUNCHER_UPDATE_PRIVATE_KEY }}
+          FMLAUNCHER_MICROSOFT_CLIENT_ID: ${{ secrets.FMLAUNCHER_MICROSOFT_CLIENT_ID }}
         run: |
           & .\Build\Publish-Launcher.ps1 -Version $env:APP_VERSION
 
