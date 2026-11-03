@@ -26,6 +26,17 @@
             </StackPanel>
         </ui:SettingRow>
         <ui:SettingRow Title="内存分配"><ui:MemoryAllocationPanel DataContext="{Binding MemoryAllocation}"/></ui:SettingRow>
+        <ui:SettingRow Title="authlib-injector" Description="外置账号启动所需，留空由启动器下载">
+            <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <fluent:TextBox Text="{Binding AuthlibInjectorPath, UpdateSourceTrigger=PropertyChanged}" Tag="自动下载"
+                                    AutomationProperties.Name="authlib-injector JAR 路径，留空自动下载"/>
+                    <fluent:Button Grid.Column="1" Content="浏览" Command="{Binding BrowseAuthlibInjector}" Margin="8,0,0,0"/>
+                    <fluent:Button Grid.Column="2" Content="清除" Command="{Binding ClearAuthlibInjector}" Style="{StaticResource QuietButton}" Margin="8,0,0,0"/>
+                </Grid>
+            </StackPanel>
+        </ui:SettingRow>
         <ui:SettingRow Title="版本隔离" Description="切换目录，不移动已有存档或 Mod">
             <ui:AnimatedComboBox ItemsSource="{Binding IsolationOptions}" DisplayMemberPath="Name" SelectedValuePath="Mode" SelectedValue="{Binding VersionIsolation, Mode=TwoWay}" AutomationProperties.Name="游戏目录隔离方式"/>
         </ui:SettingRow>

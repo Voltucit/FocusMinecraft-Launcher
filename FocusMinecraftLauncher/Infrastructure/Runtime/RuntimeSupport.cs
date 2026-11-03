@@ -35,6 +35,8 @@ public static class RuntimeSupport
     {
         var ordered=javaCandidates??await ReadLaunchJavaCandidatesAsync(instance,settings,global,token);
         string reason="";
+        // 外置账号必须带上 authlib-injector；缺少时按设置下载或直接报出路径问题。
+        var authlibInjector=account is FMCore.Accounts.YggdrasilAccount?await AuthlibInjectorService.EnsureAsync(global.AuthlibInjectorPath,null,token):null;
         var memory=MemoryMb(settings.GlobalMemory?global.AutomaticMemory:settings.AutomaticMemory,settings.GlobalMemory?global.MemoryMb:settings.MemoryMb,ModCount(instance));
         var jvmArguments = LaunchJvmArguments(instance, account, settings.GlobalArguments ? global.JvmArguments : settings.JvmArguments);
         foreach(var java in ordered)
@@ -44,7 +46,7 @@ public static class RuntimeSupport
             {
                 Account=account,
                 GameCoreConfig=new(){Root=instance.Root,Version=instance.Id,GameDirectory=instance.GameDirectory,GameArguments=Arguments(settings.GlobalArguments?"":settings.GameArguments)},
-                JavaConfig=new(){JavaPath=java.Executable,MaxMemoryMb=memory,JvmArguments=jvmArguments},
+                JavaConfig=new(){JavaPath=java.Executable,MaxMemoryMb=memory,JvmArguments=jvmArguments,AuthlibInjectorPath=authlibInjector},
                 GameWindowConfig=settings.GlobalWindow?null:new(){Width=settings.Width,Height=settings.Height,Fullscreen=settings.Fullscreen}
             });
             var check=await launcher.CheckAsync(cancellationToken:token);

@@ -152,6 +152,7 @@ public partial class MainWindow : FluentWindow
             await _navigation.Session.InitializeRuntimeAsync();
             _ = _settings.JavaDetection.DetectOnceAsync();
             await _navigation.Session.RestoreMicrosoftAccountsAsync();
+            await _navigation.Session.RestoreYggdrasilAccountsAsync();
             if(((App)Application.Current).RequestedLaunchId is {Length:>0} id)
             {
                 var root=((App)Application.Current).RequestedLaunchRoot;

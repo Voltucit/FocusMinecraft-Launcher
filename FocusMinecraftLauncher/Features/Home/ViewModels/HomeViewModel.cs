@@ -123,7 +123,7 @@ public sealed class HomeViewModel : ObservableObject, IDisposable
         Accounts = new(_ => session.Navigate(MainPage.Accounts));
         AddAccount = new(_ => OpenAccountEditor(), _ => CanChangeIdentity);
         Relogin = new(async _ => { session.Navigate(MainPage.Accounts); await session.LoginMicrosoftAsync(session.CurrentAccount); }, _ => CanChangeIdentity && NeedsLogin);
-        UseAccount = new(p => { session.CurrentAccount = (PreviewAccount)p!; session.CurrentAccount.Refresh(); Notice = ""; }, p => p is PreviewAccount a && session.Accounts.Contains(a) && a.IsMicrosoft == session.MicrosoftMode && CanChangeIdentity);
+        UseAccount = new(p => { session.CurrentAccount = (PreviewAccount)p!; session.CurrentAccount.Refresh(); Notice = ""; }, p => p is PreviewAccount a && session.Accounts.Contains(a) && a.IsOnline == session.MicrosoftMode && CanChangeIdentity);
         OpenInstances = new(_ => { InstanceSelection.Open(); IsManagingInstance=false; IsSelectingInstance = true; }, _ => CanChangeIdentity);
         ReturnHome = new(_ => { IsSelectingInstance=false;IsManagingInstance=false; });
         OpenInstanceSettings=new(_=>OpenWorkspace(),_=>CanOpenInstanceSettings);
@@ -266,6 +266,7 @@ public sealed class HomeViewModel : ObservableObject, IDisposable
     {
         if (e.PropertyName is nameof(PreviewSession.ShowLauncherUpdates) or nameof(PreviewSession.ShowGameUpdates)) LoadSelectedUpdates();
         if(e.PropertyName==nameof(PreviewSession.CurrentAccount)){CapeOptions.Clear();EnsureCapesLoaded();}
+        if(e.PropertyName==nameof(PreviewSession.ProfileRevision)){CapeOptions.Clear();EnsureCapesLoaded();}
         if (e.PropertyName == nameof(PreviewSession.HomeLayout))
         { IsSelectingInstance = false; IsManagingInstance = false; }
         UpdateAccountMenu(); Refresh();
@@ -277,7 +278,7 @@ public sealed class HomeViewModel : ObservableObject, IDisposable
     /// <summary>只在来源或账号列表改变时重建菜单，任务进度通知不会打断菜单键盘选择。</summary>
     private void UpdateAccountMenu()
     {
-        var accounts = Session.Accounts.Where(a => a.IsMicrosoft == Session.MicrosoftMode).ToArray();
+        var accounts = Session.Accounts.Where(a => a.IsOnline == Session.MicrosoftMode).ToArray();
         if (AccountMenu.Count > 0 && _menuMode == Session.MicrosoftMode && _menuAccounts.SequenceEqual(accounts)&&_menuAccountNames.SequenceEqual(accounts.Select(account=>account.Name))) return;
         _menuMode = Session.MicrosoftMode; _menuAccounts = accounts;
         _menuAccountNames=accounts.Select(account=>account.Name).ToArray();

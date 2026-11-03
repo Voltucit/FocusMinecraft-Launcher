@@ -1,4 +1,5 @@
 using System.IO;
+using System.Net.Http;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -58,6 +59,54 @@ public static class ModpackArchive
                 || url.Host.Equals("forgecdn.net", StringComparison.OrdinalIgnoreCase)
                 || url.Host.EndsWith(".forgecdn.net", StringComparison.OrdinalIgnoreCase));
     private static bool ReservedName(string name)=>System.Text.RegularExpressions.Regex.IsMatch(name.Split('.')[0],@"\A(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])\z",System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    /// <summary>只有 modrinth.index.json 的是 Modrinth 包；只有 manifest.json 的是 CurseForge 包，后者需要联网补下载地址。</summary>
+    public static async Task<PackManifest> ReadAsync(string path, CancellationToken token)
+    {
+        using (var archive = ZipFile.OpenRead(path))
+            if (archive.GetEntry("manifest.json") != null && archive.GetEntry("modrinth.index.json") == null)
+                return await ReadCurseForgeAsync(path, token);
+        return Read(path);
+    }
+
+    /// <summary>CurseForge 的 manifest.json 只记录工程与文件编号，按编号逐个取回地址和校验值。</summary>
+    private static async Task<PackManifest> ReadCurseForgeAsync(string path, CancellationToken token)
+    {
+        using var archive = ZipFile.OpenRead(path);
+        var entry = archive.GetEntry("manifest.json") ?? throw new InvalidDataException("此文件不是可识别的整合包。");
+        if (entry.Length > 16 * 1024 * 1024) throw new InvalidDataException("整合包索引过大。");
+        using var reader = new StreamReader(entry.Open(), System.Text.Encoding.UTF8);
+        var json = JsonNode.Parse(reader.ReadToEnd()) ?? throw new InvalidDataException("整合包索引无效。");
+        var minecraft = json["minecraft"] as JsonObject ?? throw new InvalidDataException("整合包缺少游戏版本声明。");
+        var version = minecraft["version"]?.GetValue<string>() ?? throw new InvalidDataException("缺少 Minecraft 版本。");
+        var loaderId = (minecraft["modLoaders"] as JsonArray)?.Select(item => item?["id"]?.GetValue<string>()).FirstOrDefault(id => !string.IsNullOrWhiteSpace(id)) ?? "";
+        var separator = loaderId.IndexOf('-');
+        var loader = separator > 0 ? loaderId[..separator] : "";
+        var loaderVersion = separator > 0 ? loaderId[(separator + 1)..] : "";
+        var client = new CurseForgeClient();
+        var folders = new Dictionary<long, string>();
+        var files = new List<PackFile>();
+        foreach (var item in json["files"] as JsonArray ?? throw new InvalidDataException("整合包文件列表无效。"))
+        {
+            var projectId = item?["projectID"]?.GetValue<long>() ?? 0;
+            var fileId = item?["fileID"]?.GetValue<long>() ?? 0;
+            if (projectId <= 0 || fileId <= 0) continue;
+            CurseForgeFile file;
+            try { file = await client.GetFileAsync(projectId, fileId, token); }
+            catch (Exception error) when (error is HttpRequestException or InvalidDataException or IOException) { throw new InvalidDataException($"整合包资源 {projectId}/{fileId} 无法从镜像取回。"); }
+            if (file.DownloadUrl.Length == 0 || file.Sha1 is not { Length: 40 }) throw new InvalidDataException("整合包资源缺少下载地址或校验值。");
+            if (!folders.TryGetValue(projectId, out var folder))
+            {
+                try { folders[projectId] = folder = (await client.GetModAsync(projectId, token)).ClassId switch { 12 => "resourcepacks", 6552 => "shaderpacks", 6945 => "datapacks", _ => "mods" }; }
+                catch (Exception error) when (error is HttpRequestException or InvalidDataException or IOException) { folders[projectId] = folder = "mods"; }
+            }
+            var relative = folder + "/" + file.FileName;
+            _ = ValidateRelative(relative);
+            files.Add(new(relative, [CurseForgeClient.Rewrite(file.DownloadUrl)], file.Sha1, "", file.FileLength, item?["required"]?.GetValue<bool>() == false ? "optional" : "required"));
+        }
+        return new(json["name"]?.GetValue<string>() ?? "Modpack", "", version,
+            loader switch { "fabric" => "Fabric", "forge" => "Forge", "neoforge" => "NeoForge", _ => "原版" }, loaderVersion, files);
+    }
+
     public static PackManifest Read(string path)
     {
         using var archive = ZipFile.OpenRead(path);
@@ -116,7 +165,7 @@ public static class ModpackArchive
         foreach (var file in files)
         {
             await using var stream = File.OpenRead(SafePath(instance.GameDirectory, file.Path));
-            if (!Convert.ToHexString(await SHA512.HashDataAsync(stream, token)).Equals(file.Sha512, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("整合包资源 SHA-512 校验失败：" + file.Path);
+            if (file.Sha512.Length > 0 && !Convert.ToHexString(await SHA512.HashDataAsync(stream, token)).Equals(file.Sha512, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("整合包资源 SHA-512 校验失败：" + file.Path);
             if (AllowedDownload(file.Urls[0])) options.ResourcesFor(instance)[file.Path.Replace('\\','/')] = new("", "", file.Urls[0], file.Sha1, file.Sha512, file.Size, Path.GetFileName(file.Path));
         }
         foreach(var item in overrides)

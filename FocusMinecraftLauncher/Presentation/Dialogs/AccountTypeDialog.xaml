@@ -1,0 +1,148 @@
+<Window x:Class="FocusMinecraftLauncher.Presentation.Dialogs.AccountTypeDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:ui="clr-namespace:FocusMinecraftLauncher.Presentation.Controls"
+        xmlns:visual="clr-namespace:FocusMinecraftLauncher.Presentation.Controls"
+        Width="440" SizeToContent="Height"
+        WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" ShowActivated="True"
+        FontFamily="Segoe UI Variable Text, Microsoft YaHei UI" FontSize="14"
+        Foreground="{DynamicResource AppText}"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
+        visual:ThemeVisuals.IsSoft="{DynamicResource SoftEnabled}"
+        visual:ThemeVisuals.IsFlat="{DynamicResource FlatEnabled}">
+    <Window.Resources>
+        <Style x:Key="DialogSurface" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource AppBackground}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SubtleBorder}"/>
+            <Setter Property="BorderThickness" Value="{DynamicResource OutlineThickness}"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource CardCornerRadius}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsSoft), RelativeSource={RelativeSource Self}}" Value="True">
+                    <Setter Property="BorderThickness" Value="0"/>
+                    <Setter Property="Effect" Value="{DynamicResource SoftPopupShadow}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="TypeCard" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource Surface}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SubtleBorder}"/>
+            <Setter Property="BorderThickness" Value="{DynamicResource OutlineThickness}"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius12}"/>
+            <Setter Property="Padding" Value="14,12"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ControlHover}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="TypeCardSelected" TargetType="Border" BasedOn="{StaticResource TypeCard}">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentText}"/>
+            <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
+        </Style>
+        <Style x:Key="IconTile" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource ControlHover}"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius10}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsSoft), RelativeSource={RelativeSource Self}}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource SoftIconBackground}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="ChoiceTitle" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="Medium"/>
+        </Style>
+        <Style x:Key="ChoiceNote" TargetType="TextBlock" BasedOn="{StaticResource Caption}">
+            <Setter Property="Margin" Value="0,4,0,0"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </Window.Resources>
+    <Border Style="{StaticResource DialogSurface}" Margin="20" MouseLeftButtonDown="DragWindow" KeyboardNavigation.TabNavigation="Cycle"
+            TextElement.Foreground="{DynamicResource AppText}">
+        <StackPanel Margin="28,24,28,20">
+            <TextBlock Text="添加账号" FontSize="20" FontWeight="SemiBold"/>
+            <TextBlock x:Name="Subtitle" Text="选择账号类型。" Style="{StaticResource Muted}" Margin="0,6,0,20" TextWrapping="Wrap"/>
+
+            <StackPanel x:Name="TypeStep">
+                <Border x:Name="MicrosoftCard" Style="{StaticResource TypeCard}" Tag="Microsoft" MouseLeftButtonDown="PickType" KeyDown="PickTypeKey" Focusable="True"
+                        AutomationProperties.Name="Microsoft 正版账号">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <Border Style="{StaticResource IconTile}" Width="34" Height="34" VerticalAlignment="Top">
+                            <Path Width="16" Height="16" Stretch="Uniform" Fill="{DynamicResource AccentText}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                  Data="M4,4 H10 A1,1 0 0 1 11,5 V13 A1,1 0 0 1 10,14 H4 A1,1 0 0 1 3,13 V5 A1,1 0 0 1 4,4 Z M12,6 H16 V14 H12 Z"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                            <TextBlock Text="Microsoft 正版账号" Style="{StaticResource ChoiceTitle}"/>
+                            <TextBlock Text="用微软账号登录，可进正版服务器、读取皮肤与披风。" Style="{StaticResource ChoiceNote}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <Border x:Name="OfflineCard" Style="{StaticResource TypeCard}" Tag="Offline" MouseLeftButtonDown="PickType" KeyDown="PickTypeKey" Focusable="True"
+                        AutomationProperties.Name="离线账号">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <Border Style="{StaticResource IconTile}" Width="34" Height="34" VerticalAlignment="Top">
+                            <Path Width="16" Height="16" Stretch="Uniform" Fill="{DynamicResource AccentText}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                  Data="M8,2 A3,3 0 1 1 8,8 A3,3 0 1 1 8,2 Z M3,14 C3,11.2 5.2,9 8,9 C10.8,9 13,11.2 13,14 Z"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                            <TextBlock Text="离线账号" Style="{StaticResource ChoiceTitle}"/>
+                            <TextBlock Text="只用一个玩家名称，不需要密码，也不能进入正版服务器。" Style="{StaticResource ChoiceNote}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <Border x:Name="YggdrasilCard" Style="{StaticResource TypeCard}" Tag="Yggdrasil" MouseLeftButtonDown="PickType" KeyDown="PickTypeKey" Focusable="True"
+                        AutomationProperties.Name="外置账号">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <Border Style="{StaticResource IconTile}" Width="34" Height="34" VerticalAlignment="Top">
+                            <Path Width="16" Height="16" Stretch="Uniform" Fill="{DynamicResource AccentText}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                  Data="M2,8 L8,2 L14,8 L8,14 Z M8,5.4 L4.6,8 L8,10.6 L11.4,8 Z"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                            <TextBlock Text="外置账号" Style="{StaticResource ChoiceTitle}"/>
+                            <TextBlock Text="用 LittleSkin 或其它 Yggdrasil 服务的账号。" Style="{StaticResource ChoiceNote}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+
+            <StackPanel x:Name="FormStep" Visibility="Collapsed">
+                <StackPanel x:Name="OfflineForm">
+                    <TextBlock Text="玩家名称" Style="{StaticResource FieldLabel}"/>
+                    <fluent:TextBox x:Name="NameBox" MaxLength="16" AutomationProperties.Name="离线玩家名称"/>
+                    <TextBlock Text="同一台电脑上，离线名称不能和已有账号重复。" Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                </StackPanel>
+                <StackPanel x:Name="YggdrasilForm" Visibility="Collapsed">
+                    <TextBlock Text="验证服务" Style="{StaticResource FieldLabel}"/>
+                    <ui:AnimatedComboBox x:Name="ServerPreset" AutomationProperties.Name="验证服务预设"/>
+                    <fluent:TextBox x:Name="ServerBox" Margin="0,8,0,0" Visibility="Collapsed" AutomationProperties.Name="验证服务地址"/>
+                    <TextBlock Text="账号" Style="{StaticResource FieldLabel}" Margin="0,16,0,0"/>
+                    <fluent:TextBox x:Name="AccountBox" AutomationProperties.Name="外置账号邮箱或用户名"/>
+                    <TextBlock Text="密码" Style="{StaticResource FieldLabel}" Margin="0,16,0,0"/>
+                    <PasswordBox x:Name="PasswordInput" AutomationProperties.Name="外置账号密码"/>
+                    <TextBlock Text="密码只发给验证服务，不会保存在本机。" Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                </StackPanel>
+                <StackPanel x:Name="MicrosoftForm" Visibility="Collapsed">
+                    <TextBlock Text="继续后会在浏览器中打开 Microsoft 登录页，授权码会自动复制到剪贴板。" Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                </StackPanel>
+            </StackPanel>
+
+            <TextBlock x:Name="ErrorText" Style="{StaticResource ErrorMessage}" Margin="0,12,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>
+
+            <Grid Margin="0,20,0,0">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                    <fluent:Button x:Name="BackButton" Content="返回" Style="{StaticResource QuietButton}" Click="GoBack" Visibility="Collapsed"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <fluent:Button Content="取消" Style="{StaticResource QuietButton}" IsCancel="True" Click="Decline" Margin="0,0,8,0"/>
+                    <fluent:Button x:Name="ContinueButton" Content="继续" Style="{StaticResource PrimaryButton}" IsDefault="True" Click="Continue" MinWidth="96"/>
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+    </Border>
+</Window>

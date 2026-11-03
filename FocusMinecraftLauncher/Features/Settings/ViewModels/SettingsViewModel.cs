@@ -9,7 +9,7 @@ namespace FocusMinecraftLauncher.Features.Settings.ViewModels;
 /// <summary>管理全局设置的编辑、校验与程序目录配置保存。</summary>
 public sealed class SettingsViewModel : ObservableObject
 {
-    private string _java, _jvm, _javaError = "", _notice = "";
+    private string _java, _jvm, _authlib = "", _javaError = "", _notice = "";
     private bool _saving, _importingBackground;
     public string BackgroundActionText => _importingBackground ? "正在读取…" : "选择图片";
     private bool _themeSettingsExpanded;
@@ -49,6 +49,8 @@ public sealed class SettingsViewModel : ObservableObject
     public MemoryAllocationViewModel MemoryAllocation { get; } = new();
     public JavaDetectionViewModel JavaDetection { get; }
     public string JvmArguments { get => _jvm; set { if (Set(ref _jvm, value)) Notice = ""; } }
+    /// <summary>外置账号使用的 authlib-injector；留空表示由启动器下载并维护。</summary>
+    public string AuthlibInjectorPath { get => _authlib; set { if (Set(ref _authlib, value)) { Notice = ""; System.Windows.Input.CommandManager.InvalidateRequerySuggested(); } } }
     public string JavaError { get => _javaError; private set => Set(ref _javaError, value); }
     public string Notice { get => _notice; private set => Set(ref _notice, value); }
     public IReadOnlyList<Presentation.ThemeColorPreset> FlatColorPresets => Presentation.UiTheme.FlatColorPresets;
@@ -57,6 +59,8 @@ public sealed class SettingsViewModel : ObservableObject
     public UiCommand Restore { get; }
     public UiCommand BrowseJava { get; }
     public UiCommand ClearJava { get; }
+    public UiCommand BrowseAuthlibInjector { get; }
+    public UiCommand ClearAuthlibInjector { get; }
     public UiCommand BrowseBackground { get; }
     public UiCommand ResetBackground { get; }
     public SettingsViewModel(PreviewSession session)
@@ -65,6 +69,7 @@ public sealed class SettingsViewModel : ObservableObject
         Session = session;
         _isolation = session.SavedSettings.VersionIsolation;
         _java = string.IsNullOrWhiteSpace(session.SavedSettings.JavaPath) || session.SavedSettings.JavaPath.Trim() == "自动选择" ? "" : session.SavedSettings.JavaPath;
+        _authlib = session.SavedSettings.AuthlibInjectorPath;
         MemoryAllocation.LoadMemoryMb(session.SavedSettings.MemoryMb);
         MemoryAllocation.IsAutomatic = session.SavedSettings.AutomaticMemory; MemoryAllocation.OptimizeBeforeLaunch = session.SavedSettings.OptimizeMemory; _jvm = session.SavedSettings.JvmArguments;
         MemoryAllocation.PropertyChanged += (_, e) =>
@@ -79,10 +84,11 @@ public sealed class SettingsViewModel : ObservableObject
             MemoryAllocation.LoadMemoryMb(session.SavedSettings.MemoryMb);
         MemoryAllocation.IsAutomatic = session.SavedSettings.AutomaticMemory; MemoryAllocation.OptimizeBeforeLaunch = session.SavedSettings.OptimizeMemory;
             MemoryAllocation.IsAutomatic = session.SavedSettings.AutomaticMemory; MemoryAllocation.OptimizeBeforeLaunch = session.SavedSettings.OptimizeMemory;
-            JvmArguments = session.SavedSettings.JvmArguments; JavaError = ""; Notice = "已恢复已保存的设置。";
-        });
+            JvmArguments = session.SavedSettings.JvmArguments; AuthlibInjectorPath = session.SavedSettings.AuthlibInjectorPath; JavaError = ""; Notice = "已恢复已保存的设置。";        });
         BrowseJava = new(_ => { var dialog = new OpenFileDialog { Filter = "Java|java.exe;javaw.exe" }; if (dialog.ShowDialog() == true) JavaPath = dialog.FileName; });
         ClearJava = new(_ => JavaPath = "", _ => !IsJavaAutoSelected);
+        BrowseAuthlibInjector = new(_ => { var dialog = new OpenFileDialog { Filter = "authlib-injector|*.jar", Title = "选择 authlib-injector" }; if (dialog.ShowDialog() == true) AuthlibInjectorPath = dialog.FileName; });
+        ClearAuthlibInjector = new(_ => AuthlibInjectorPath = "", _ => AuthlibInjectorPath.Length > 0);
         BrowseBackground = new(async _ =>
         {
             var dialog = new OpenFileDialog { Title = "选择背景图片", Filter = "图片|*.png;*.jpg;*.jpeg;*.bmp", CheckFileExists = true, Multiselect = false };
@@ -124,7 +130,8 @@ public sealed class SettingsViewModel : ObservableObject
                 try { await FMCore.Java.JavaReader.GetJavaInfoAsync(JavaPath.Trim()); }
                 catch(Exception error){JavaError=Infrastructure.Runtime.RuntimeSupport.Error(error);return;}
             }
-            var saved = await Session.SaveGlobalSettingsAsync(new() { VersionIsolation = VersionIsolation, JavaPath = JavaPath.Trim(), GameDirectory = Session.SavedSettings.GameDirectory, MemoryMb = memory, AutomaticMemory = MemoryAllocation.IsAutomatic, OptimizeMemory = MemoryAllocation.OptimizeBeforeLaunch, JvmArguments = JvmArguments });
+            if(AuthlibInjectorPath.Trim().Length>0 && !File.Exists(AuthlibInjectorPath.Trim())){JavaError="authlib-injector 文件不存在，请重新选择或留空自动下载。";return;}
+            var saved = await Session.SaveGlobalSettingsAsync(new() { VersionIsolation = VersionIsolation, JavaPath = JavaPath.Trim(), GameDirectory = Session.SavedSettings.GameDirectory, MemoryMb = memory, AutomaticMemory = MemoryAllocation.IsAutomatic, OptimizeMemory = MemoryAllocation.OptimizeBeforeLaunch, JvmArguments = JvmArguments, AuthlibInjectorPath = AuthlibInjectorPath.Trim() });
             Notice = !saved ? "设置未保存，请检查程序目录的写入权限后重试。" : "已保存全局设置。";
         }
         catch(Exception error){Notice=Infrastructure.Runtime.RuntimeSupport.Error(error);}

@@ -82,6 +82,74 @@ public sealed class OfficialSkinService(string configurationDirectory)
         return result;
     }
 
+    /// <summary>从外置验证服务的档案接口读取皮肤；纹理地址由服务在档案属性里给出。</summary>
+    public async Task<SkinImage?> FetchYggdrasilAsync(Uri apiRoot, Guid uuid, CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(20));
+        var root = apiRoot.ToString().TrimEnd('/') + "/";
+        using var profileRequest = new HttpRequestMessage(HttpMethod.Get, new Uri(root + "sessionserver/session/minecraft/profile/" + uuid.ToString("N")));
+        byte[] profile;
+        try { profile = await ReadResponseAsync(profileRequest, 256 * 1024, timeout.Token).ConfigureAwait(false); }
+        // 部分验证服务对没有皮肤或未注册的档案返回空响应。
+        catch (JsonException) { return ClearSkinCache(uuid); }
+        string? address;
+        using (var document = JsonDocument.Parse(profile)) address = ReadYggdrasilSkin(document.RootElement);
+        if (string.IsNullOrEmpty(address)) return ClearSkinCache(uuid);
+        if (!Uri.TryCreate(new Uri(root), address, out var texture) || texture.Scheme is not ("http" or "https") || texture.UserInfo.Length != 0
+            || (apiRoot.Scheme == Uri.UriSchemeHttps && texture.Scheme != Uri.UriSchemeHttps))
+            throw new InvalidDataException("验证服务返回的皮肤地址不受支持。");
+        using var skinRequest = new HttpRequestMessage(HttpMethod.Get, texture);
+        var png = await ReadResponseAsync(skinRequest, 1024 * 1024, timeout.Token).ConfigureAwait(false);
+        var result = await Task.Run(() => Decode(png), timeout.Token).ConfigureAwait(false);
+        try
+        {
+            Directory.CreateDirectory(_cacheDirectory);
+            var temporary = CachePath(uuid) + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                await File.WriteAllBytesAsync(temporary, png, timeout.Token).ConfigureAwait(false);
+                timeout.Token.ThrowIfCancellationRequested();
+                File.Move(temporary, CachePath(uuid), true);
+            }
+            finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        { return result with { CacheSaved = false }; }
+        return result;
+    }
+
+    /// <summary>在 Yggdrasil 档案里找到皮肤纹理地址：properties 里的 textures 属性是 Base64 编码的 JSON。</summary>
+    private static string? ReadYggdrasilSkin(JsonElement profile)
+    {
+        if (!profile.TryGetProperty("properties", out var properties) || properties.ValueKind != JsonValueKind.Array) return null;
+        foreach (var property in properties.EnumerateArray())
+        {
+            if (!property.TryGetProperty("name", out var name) || name.GetString() != "textures") continue;
+            if (!property.TryGetProperty("value", out var value) || value.GetString() is not { Length: > 0 } encoded) continue;
+            byte[] decoded;
+            try { decoded = Convert.FromBase64String(encoded.Trim()); }
+            catch (FormatException) { continue; }
+            try
+            {
+                using var document = JsonDocument.Parse(decoded);
+                if (document.RootElement.TryGetProperty("textures", out var textures)
+                    && textures.TryGetProperty("SKIN", out var skin)
+                    && skin.TryGetProperty("url", out var url)) return url.GetString();
+            }
+            catch (JsonException) { continue; }
+        }
+        return null;
+    }
+
+    /// <summary>没有可用皮肤时清掉旧缓存，避免继续显示上一次的皮肤。</summary>
+    private SkinImage? ClearSkinCache(Guid uuid)
+    {
+        try { File.Delete(CachePath(uuid)); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { System.Diagnostics.Trace.TraceWarning("旧皮肤缓存未清理：{0}", error.GetType().Name); }
+        return null;
+    }
+
     /// <summary>读取当前正版账号拥有的披风，仅向 Minecraft 官方档案发送授权。</summary>
     public async Task<IReadOnlyList<CapeEntry>> GetCapesAsync(MicrosoftAccount account,CancellationToken cancellationToken)
     {

@@ -10,7 +10,7 @@ namespace FocusMinecraftLauncher.Preview;
 public sealed partial class PreviewSession : ObservableObject, IDisposable
 {
     private PreviewAccount? _account;
-    private PreviewAccount? _lastMicrosoftAccount, _lastOfflineAccount;
+    private PreviewAccount? _lastMicrosoftAccount, _lastOfflineAccount, _defaultAccount;
     private bool _microsoftMode;
     private PreviewInstance? _instance;
     private PreviewTask? _active, _launch;
@@ -37,11 +37,21 @@ public sealed partial class PreviewSession : ObservableObject, IDisposable
             if (value != null)
             {
                 value.IsCurrent = true;
-                _microsoftMode = value.IsMicrosoft;
-                if (value.IsMicrosoft) _lastMicrosoftAccount = value; else _lastOfflineAccount = value;
+                _microsoftMode = value.IsOnline;
+                if (value.IsOnline) _lastMicrosoftAccount = value; else _lastOfflineAccount = value;
             }
             Signal(); SaveAccountSelection();
         }
+    }
+    /// <summary>默认账号排在列表最前，启动器打开时优先进选它。</summary>
+    public PreviewAccount? DefaultAccount => _defaultAccount;
+    public void SetDefaultAccount(PreviewAccount? account)
+    {
+        if (account != null && !Accounts.Contains(account)) throw new InvalidOperationException("这个账号已被移除。");
+        _defaultAccount = account;
+        foreach (var item in Accounts) item.IsDefault = ReferenceEquals(item, account);
+        if (account != null && Accounts.IndexOf(account) > 0) Accounts.Move(Accounts.IndexOf(account), 0);
+        SaveAccountSelection(); Signal();
     }
     /// <summary>保存身份来源和各来源选择，不转换或重新创建账号。</summary>
     public bool MicrosoftMode
@@ -154,5 +164,7 @@ public sealed class PreviewSettings
     public bool AutomaticMemory { get; set; } = true;
     public bool OptimizeMemory { get; set; }
     public string JvmArguments { get; set; } = "";
+    /// <summary>外置账号启动所需的 authlib-injector；留空时由启动器下载到自己的目录。</summary>
+    public string AuthlibInjectorPath { get; set; } = "";
     public PreviewSettings Copy() => (PreviewSettings)MemberwiseClone();
 }

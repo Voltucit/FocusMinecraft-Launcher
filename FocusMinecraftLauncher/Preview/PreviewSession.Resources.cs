@@ -135,6 +135,65 @@ public sealed partial class PreviewSession
         });
     }
 
+    /// <summary>CurseForge 文件走镜像直链：必需前置按工程编号递归补齐，已存在的同名文件不覆盖。</summary>
+    public void DownloadCurseForgeResource(ResourceFileItem file, PreviewInstance? instance)
+    {
+        if(file.Download==null)throw new InvalidOperationException("这个文件没有可用下载信息。");
+        var pack=file.Section==DownloadSection.Modpacks;
+        if(!pack&&instance==null)throw new InvalidOperationException("请先选择目标游戏。");
+        if(!pack&&!file.GameVersions.Contains(instance!.Version))throw new InvalidOperationException("所选文件不支持目标 Minecraft 版本，请选择其他文件。");
+        if(instance!=null&&Tasks.Any(t=>t.IsActive&&string.Equals(InstanceStore.Key(t.Root,t.InstanceId),InstanceStore.Key(instance.Root,instance.Id),StringComparison.OrdinalIgnoreCase)))throw new InvalidOperationException("目标游戏正在运行或处理其他任务。");
+        var root=instance?.Root??SelectedRoot;
+        var targetId=instance?.Id??file.ProjectId;
+        if(Tasks.Any(t=>t.IsActive&&t.Kind==PreviewTaskKind.Resource&&t.Name==file.FileName&&t.Root==root&&t.InstanceId==targetId))throw new InvalidOperationException("这个文件已加入下载列表。");
+        Enqueue(PreviewTaskKind.Resource, file.FileName, string.Join(" / ", file.GameVersions), root, targetId, async (task, token) =>
+        {
+            if(pack)
+            {
+                var archive=Path.Combine(_configuration.ConfigDirectory,"Downloads","curseforge",file.FileName);
+                Directory.CreateDirectory(Path.GetDirectoryName(archive)!);
+                await FileDownloader.DownloadManyAsync([new DownloadRequest{Url=file.Download.Url,FilePath=archive,Size=file.Download.Size,Sha1=file.Download.Sha1??""}],1,_=>{ },token);
+                await ImportModpackAsync(archive,file.ProjectId,file.Id);
+                return;
+            }
+            var selected=instance!;ModpackArchive.EnsureInstanceWritePath(selected);
+            var client=new CurseForgeClient();
+            var pending=new Queue<ResourceFileItem>();pending.Enqueue(file);
+            var visited=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            while(pending.Count>0)
+            {
+                token.ThrowIfCancellationRequested();
+                var item=pending.Dequeue();
+                if(!visited.Add(item.FileName))continue;
+                var relative=CurseForgeFolder(item.Section)+"/"+item.FileName;
+                var destination=ModpackArchive.SafePath(selected.GameDirectory,relative);
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                if(!File.Exists(destination))
+                {
+                    Report(task,"下载 "+item.FileName);
+                    await FileDownloader.DownloadManyAsync([new DownloadRequest{Url=item.Download!.Url,FilePath=destination,Size=item.Download.Size,Sha1=item.Download.Sha1??""}],2,_=>{ },token);
+                }
+                foreach(var dependency in item.CurseForgeDependencies?.Where(item=>item.Required)??[])
+                {
+                    var candidates=await client.GetFilesAsync(dependency.ModId,selected.Version,selected.Loader,token);
+                    var best=candidates.Where(file=>!string.IsNullOrWhiteSpace(file.DownloadUrl)&&!file.FileName.EndsWith(".pom",StringComparison.OrdinalIgnoreCase)&&!file.FileName.EndsWith(".module",StringComparison.OrdinalIgnoreCase)).OrderByDescending(file=>file.Date).FirstOrDefault();
+                    if(best==null)throw new InvalidDataException($"前置资源 {dependency.ModId} 在 {selected.Version} / {selected.Loader} 没有可用文件。");
+                    pending.Enqueue(CurseForgeItem(dependency.ModId,best,item.Section));
+                }
+            }
+            NotifyTask(file.FileName+"下载完成",false);
+        });
+    }
+    private static string CurseForgeFolder(DownloadSection section)=>section switch
+    {
+        DownloadSection.Shaders=>"shaderpacks",
+        DownloadSection.Resourcepacks=>"resourcepacks",
+        DownloadSection.Datapacks=>"datapacks",
+        _=>"mods"
+    };
+    private static ResourceFileItem CurseForgeItem(long modId,CurseForgeFile file,DownloadSection section)=>new("cf:"+file.Id,file.DisplayName.Length>0?file.DisplayName:file.FileName,file.FileName,file.GameVersions,
+        file.Loaders.Length>0?string.Join(" / ",file.Loaders):null,file.Date,file.FileLength,file.Downloads,null)
+        {ProjectId="cf-"+modId,Section=section,Loaders=file.Loaders,Download=new ResourceDownload(file.FileName,CurseForgeClient.Rewrite(file.DownloadUrl),file.FileLength,file.Sha1),CurseForgeDependencies=file.Dependencies};
     private sealed record PackImportRequest(PackManifest Manifest, string Root, string InstanceName);
 
     /// <summary>文件选择和主窗口拖放共用校验及确认；安装失败不登记为可用实例。</summary>
@@ -154,7 +213,7 @@ public sealed partial class PreviewSession
     }
     private async Task<PackImportRequest?> PrepareModpackImportAsync(string path,string root,CancellationToken token)
     {
-        var manifest=await Task.Run(()=>ModpackArchive.Read(path),token);
+        var manifest=await ModpackArchive.ReadAsync(path,token);
         token.ThrowIfCancellationRequested();
         var name=string.Join("_",manifest.Name.Split(Path.GetInvalidFileNameChars())).Trim().TrimEnd('.');
         if(name.Length==0)name="Modpack";

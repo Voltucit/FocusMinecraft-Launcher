@@ -13,6 +13,7 @@ namespace FocusMinecraftLauncher.Infrastructure.Runtime;
 public static class ModUpdateService
 {
     private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(30) };
+    private static readonly CurseForgeClient CurseForge = new();
     /// <summary>一次检查的结论；下载字段用于直接替换旧文件，不需要用户再打开网页。</summary>
     public sealed record ModUpdate(
         string FileName,
@@ -39,21 +40,34 @@ public static class ModUpdateService
         if (!Directory.Exists(directory)) return [];
 
         var hashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var fingerprints = new Dictionary<uint, string>();
         foreach (var file in Directory.EnumerateFiles(directory, "*.jar"))
         {
             token.ThrowIfCancellationRequested();
             try
             {
-                await using var stream = File.OpenRead(file);
-                hashes[Convert.ToHexString(await SHA1.HashDataAsync(stream, token)).ToLowerInvariant()] = file;
+                var bytes = await File.ReadAllBytesAsync(file, token);
+                hashes[Convert.ToHexString(SHA1.HashData(bytes)).ToLowerInvariant()] = file;
+                fingerprints[Murmur2(bytes)] = file;
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
         }
         if (hashes.Count == 0) return [];
 
+        var results = new List<ModUpdate>();
         var installed = await MatchInstalledAsync(hashes, progress, token);
-        if (installed.Count == 0) return [];
+        if (installed.Count > 0) results.AddRange(await CheckModrinthAsync(instance, installed, progress, token));
 
+        var matched = installed.Select(item => item.FileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var remaining = fingerprints.Where(pair => !matched.Contains(Path.GetFileName(pair.Value))).ToDictionary(pair => pair.Key, pair => pair.Value);
+        if (remaining.Count > 0) results.AddRange(await CheckCurseForgeAsync(instance, remaining, progress, token));
+
+        progress?.Report($"检查完成：{results.Count} 个 Mod 有可用更新。");
+        return results.OrderBy(update => update.FileName, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static async Task<IReadOnlyList<ModUpdate>> CheckModrinthAsync(PreviewInstance instance, List<(string FileName, string ProjectId, string VersionId, string Version)> installed, IProgress<string>? progress, CancellationToken token)
+    {
         var results = new List<ModUpdate>();
         var gate = new SemaphoreSlim(ProjectParallelism);
         var projects = installed.GroupBy(item => item.ProjectId, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -68,10 +82,7 @@ public static class ModUpdateService
                 lock (results)
                 {
                     foreach (var item in group)
-                    {
-                        results.Add(new(item.FileName, group.Key, item.Version, found.Version,
-                            found.Url, found.FileName, found.Sha1, found.VersionId, item.VersionId));
-                    }
+                        results.Add(new(item.FileName, group.Key, item.Version, found.Version, found.Url, found.FileName, found.Sha1, found.VersionId, item.VersionId));
                 }
             }
             catch (Exception error) when (error is HttpRequestException or TaskCanceledException or InvalidOperationException or JsonException) { }
@@ -82,9 +93,78 @@ public static class ModUpdateService
             }
         }).ToArray();
         await Task.WhenAll(tasks);
+        return results;
+    }
 
-        progress?.Report($"检查完成：{results.Count} 个 Mod 有 Modrinth 记录。");
-        return results.OrderBy(update => update.FileName, StringComparer.OrdinalIgnoreCase).ToArray();
+    /// <summary>Modrinth 查不到的 jar 用 CurseForge 指纹接口再匹配一次；匹配结果只认“同一游戏版本 + 加载器下最新的文件”。</summary>
+    private static async Task<IReadOnlyList<ModUpdate>> CheckCurseForgeAsync(PreviewInstance instance, Dictionary<uint, string> remaining, IProgress<string>? progress, CancellationToken token)
+    {
+        var results = new List<ModUpdate>();
+        var prints = remaining.Keys.ToArray();
+        for (var offset = 0; offset < prints.Length; offset += BatchSize)
+        {
+            token.ThrowIfCancellationRequested();
+            var batch = prints.Skip(offset).Take(BatchSize).ToArray();
+            progress?.Report($"正在核对 CurseForge 文件 {offset + 1}-{offset + batch.Length}/{prints.Length}");
+            var body = JsonSerializer.Serialize(new { fingerprints = batch });
+            using var request = new HttpRequestMessage(HttpMethod.Post, "https://mod.mcimirror.top/curseforge/v1/fingerprints")
+            {
+                Content = new StringContent(body, Encoding.UTF8, "application/json")
+            };
+            using var response = await Client.SendAsync(request, token);
+            if (!response.IsSuccessStatusCode) continue;
+            await using var stream = await response.Content.ReadAsStreamAsync(token);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: token);
+            if (!document.RootElement.TryGetProperty("data", out var data) || !data.TryGetProperty("exactMatches", out var matches)) continue;
+            // 接口按请求顺序返回，没有匹配的位置是 null，据此把结果对回本地文件。
+            var position = 0;
+            foreach (var match in matches.EnumerateArray())
+            {
+                var local = position < batch.Length ? remaining[batch[position]] : "";
+                position++;
+                if (match.ValueKind != JsonValueKind.Object || local.Length == 0) continue;
+                if (!match.TryGetProperty("file", out var file)) continue;
+                var modId = file.TryGetProperty("modId", out var id) ? id.GetInt64() : 0;
+                var fileId = file.TryGetProperty("id", out var fid) ? fid.GetInt64() : 0;
+                if (modId == 0 || fileId == 0) continue;
+                try
+                {
+                    var candidates = await CurseForge.GetFilesAsync(modId, instance.Version, instance.Loader, token);
+                    // 作者关闭第三方分发时下载地址为空，这种文件不能当作可更新的目标。
+                    var latest = candidates.Where(item => !string.IsNullOrWhiteSpace(item.DownloadUrl)).OrderByDescending(item => item.Date).FirstOrDefault();
+                    if (latest == null || latest.Id == fileId) continue;
+                    results.Add(new(Path.GetFileName(local), "cf-" + modId, Text(file, "displayName") ?? "", latest.DisplayName,
+                        CurseForgeClient.Rewrite(latest.DownloadUrl), latest.FileName, latest.Sha1 ?? "", latest.Id.ToString(), fileId.ToString()));
+                }
+                catch (Exception error) when (error is HttpRequestException or TaskCanceledException or InvalidOperationException or JsonException) { }
+            }
+        }
+        return results;
+    }
+
+    /// <summary>CurseForge 的指纹算法：MurmurHash2（seed 1），与官方客户端一致。</summary>
+    private static uint Murmur2(byte[] data)
+    {
+        const uint m = 0x5bd1e995;
+        const int r = 24;
+        var length = data.Length;
+        var hash = 1u ^ (uint)length;
+        var index = 0;
+        while (length - index >= 4)
+        {
+            var chunk = (uint)(data[index] | data[index + 1] << 8 | data[index + 2] << 16 | data[index + 3] << 24);
+            chunk *= m; chunk ^= chunk >> r; chunk *= m;
+            hash *= m; hash ^= chunk;
+            index += 4;
+        }
+        switch (length - index)
+        {
+            case 3: hash ^= (uint)data[index + 2] << 16; goto case 2;
+            case 2: hash ^= (uint)data[index + 1] << 8; goto case 1;
+            case 1: hash ^= data[index]; hash *= m; break;
+        }
+        hash ^= hash >> 13; hash *= m; hash ^= hash >> 15;
+        return hash;
     }
 
     /// <summary>批量把 SHA-1 换成本地文件对应的版本信息（项目 id、版本 id、版本号）。</summary>

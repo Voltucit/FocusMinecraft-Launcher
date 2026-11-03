@@ -163,7 +163,7 @@ public sealed class DownloadPreviewViewModel : ObservableObject
         Dependencies = file?.EffectiveDependencies?.Select(dependency => catalog?.Find(dependency.ProjectId) is { } project ? new DependencyViewModel(project,dependency,open!) : null).OfType<DependencyViewModel>().ToArray() ?? [];
         Confirm=new(_=>
         {
-            try { if(file!=null) { session.DownloadResource(file, SelectedInstance); _submitted=true; System.Windows.Input.CommandManager.InvalidateRequerySuggested(); Message="已加入下载列表";Changed(nameof(Message)); } }
+            try { if(file!=null) { if(file.IsCurseForge)session.DownloadCurseForgeResource(file, SelectedInstance);else session.DownloadResource(file, SelectedInstance); _submitted=true; System.Windows.Input.CommandManager.InvalidateRequerySuggested(); Message="已加入下载列表";Changed(nameof(Message)); } }
             catch(Exception error){Message=Infrastructure.Runtime.RuntimeSupport.Error(error);Changed(nameof(Message));}
         },_=>!_submitted&&file!=null&&(!SelectInstance||SelectedInstance!=null));
     }

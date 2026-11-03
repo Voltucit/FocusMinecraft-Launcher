@@ -6,6 +6,8 @@ using FocusMinecraftLauncher.Presentation;
 namespace FocusMinecraftLauncher.Features.Downloads.Models;
 
 public enum DownloadSection { Vanilla = 0, Tasks = 1, Mods = 2, Modpacks = 3, Datapacks = 4, Resourcepacks = 5, Shaders = 6 }
+/// <summary>资源的提供方；两个来源的模型在界面上合并，安装路径按来源分派。</summary>
+public enum ResourceSource { Modrinth = 0, CurseForge = 1 }
 public sealed record DownloadNavigation(DownloadSection? Section, string Title)
 {
     public bool IsHeading => Section == null;
@@ -25,6 +27,8 @@ public sealed record ResourceProject(string Id, DownloadSection Category, string
     public IReadOnlyList<ResourceFileItem> Files { get; set; } = [];
     public string[] Gallery { get; init; } = [];
     public string Body { get; init; } = "";
+    /// <summary>CurseForge 项目没有独立的图标字段，这里保留原始图标地址供异步加载。</summary>
+    public string? IconUrl { get; init; }
     public ImageSource? LoadedImage { get; set; }
     public ImageSource Image => LoadedImage ?? ResourceArtwork.Get(ImageKey);
     public string AliasText => string.Join(" / ", Aliases.Where(a => !a.Equals(Name, StringComparison.OrdinalIgnoreCase)));
@@ -51,6 +55,9 @@ public sealed record ResourceProject(string Id, DownloadSection Category, string
 
 public sealed record ResourceDependency(string ProjectId, string Requirement, bool Required, string[] GameVersions, string? Environment, string Note);
 
+/// <summary>与来源无关的下载描述：CurseForge 文件用它携带地址与校验值，安装流程不需要认识具体来源的 DTO。</summary>
+public sealed record ResourceDownload(string FileName, string Url, long Size, string? Sha1);
+
 /// <summary>具体文件的版本、下载量和前置信息，与项目总下载量分别存储。</summary>
 public sealed record ResourceFileItem(string Id, string ResourceVersion, string FileName, string[] GameVersions,
     string? Environment, DateOnly Date, long? Bytes, long? Downloads, IReadOnlyList<ResourceDependency>? Dependencies)
@@ -59,6 +66,12 @@ public sealed record ResourceFileItem(string Id, string ResourceVersion, string 
     public FMCore.ModsResources.ModrinthFile? DownloadFile { get; init; }
     public string ProjectId { get; init; } = "";
     public string[] Loaders { get; init; } = [];
+    /// <summary>来源项目所属分类，安装时决定落到 mods / shaderpacks / resourcepacks / datapacks。</summary>
+    public DownloadSection Section { get; init; } = DownloadSection.Mods;
+    /// <summary>CurseForge 等非 Modrinth 来源用它对携带下载信息；Modrinth 文件仍走核心客户端。</summary>
+    public ResourceDownload? Download { get; init; }
+    public IReadOnlyList<Infrastructure.Runtime.CurseForgeDependency>? CurseForgeDependencies { get; init; }
+    public bool IsCurseForge => Download != null;
     public IReadOnlyList<ResourceDependency>? ResolvedDependencies { get; set; }
     public IReadOnlyList<ResourceDependency>? EffectiveDependencies => ResolvedDependencies ?? Dependencies;
     public string Label => ResourceVersion + " / " + CompatibilityText + (Environment == null ? "" : " / " + Environment);

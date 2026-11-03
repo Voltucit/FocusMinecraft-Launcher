@@ -31,6 +31,10 @@
             <Rectangle Margin="-3" Stroke="{DynamicResource FocusRing}" StrokeThickness="2" RadiusX="{DynamicResource FocusCornerRadius}" RadiusY="{DynamicResource FocusCornerRadius}"/>
         </ControlTemplate></Setter.Value></Setter>
     </Style>
+    <!-- 滚动容器自己不该抢焦点环：内容区一旦拿到焦点，整块页面会被描上一圈边框。 -->
+    <Style TargetType="ScrollViewer">
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+    </Style>
     <Style TargetType="TextBlock">
         <Setter Property="FontSize" Value="14"/>
     </Style>
@@ -109,6 +113,12 @@
     </Style>
     <Style x:Key="DangerButton" TargetType="fluent:Button" BasedOn="{StaticResource QuietButton}">
         <Setter Property="Foreground" Value="{DynamicResource ErrorText}"/>
+    </Style>
+    <!-- 单独出现、需要被认成按钮的危险操作：保留描边与常规内边距。 -->
+    <Style x:Key="DangerOutlineButton" TargetType="fluent:Button" BasedOn="{StaticResource {x:Type fluent:Button}}">
+        <Setter Property="Foreground" Value="{DynamicResource ErrorText}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ErrorText}"/>
+        <Setter Property="BorderThickness" Value="1"/>
     </Style>
     <Style TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
         <Setter Property="SelectionBrush" Value="{DynamicResource SelectionBackground}"/>
@@ -259,7 +269,8 @@
     <Style TargetType="ListBoxItem">
         <Setter Property="Foreground" Value="{DynamicResource AppText}"/><Setter Property="Padding" Value="12"/>
         <Setter Property="Margin" Value="0,0,0,4"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual}"/>
+        <!-- 列表项自带 1px 边框表示键盘焦点，不再额外叠一圈 2px 焦点环。 -->
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
             <Border x:Name="Frame" CornerRadius="{DynamicResource ControlCornerRadius}" Background="Transparent" Padding="{TemplateBinding Padding}" BorderThickness="{DynamicResource OutlineThickness}" BorderBrush="Transparent">
                 <ContentPresenter HorizontalAlignment="Stretch"/>

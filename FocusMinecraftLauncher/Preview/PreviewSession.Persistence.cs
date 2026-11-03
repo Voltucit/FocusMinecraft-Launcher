@@ -1,6 +1,7 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -89,7 +90,8 @@ public sealed partial class PreviewSession
             MemoryMb = Math.Max(512, (int)LauncherConfiguration.Number(root["global"]?["memoryMb"], 4096)),
             JvmArguments = LauncherConfiguration.Text(root["global"]?["jvmArguments"]),
             AutomaticMemory = LauncherConfiguration.Boolean(root["global"]?["automaticMemory"], true),
-            OptimizeMemory = LauncherConfiguration.Boolean(root["global"]?["optimizeMemory"])
+            OptimizeMemory = LauncherConfiguration.Boolean(root["global"]?["optimizeMemory"]),
+            AuthlibInjectorPath = LauncherConfiguration.Text(root["global"]?["authlibInjectorPath"])
         };
         RestoreRuntimeConfiguration(root);
         var accountData = _configuration.ReadAccounts();
@@ -97,7 +99,7 @@ public sealed partial class PreviewSession
             foreach (var node in list)
                 try
                 {
-                    if (node?.Deserialize<StoredAccount>(AccountJson) is not { } stored || stored.Type is not ("Offline" or "Microsoft") || string.IsNullOrWhiteSpace(stored.Name))
+                    if (node?.Deserialize<StoredAccount>(AccountJson) is not { } stored || stored.Type is not ("Offline" or "Microsoft" or "Yggdrasil") || string.IsNullOrWhiteSpace(stored.Name))
                         throw new JsonException("账户资料不完整。");
                     stored.ProtectedSession ??= "";
                     if (Accounts.Any(account => account.Id == stored.Id)) throw new JsonException("重复的账户标识。");
@@ -107,10 +109,13 @@ public sealed partial class PreviewSession
                 { _unreadableAccounts.Add(node?.DeepClone()); _configuration.ReportNotice("部分账户资料无法读取，已保留原始条目，请检查账户配置文件。"); }
         PreviewAccount? Find(string key) => Guid.TryParse(LauncherConfiguration.Text(accountData[key]), out var id) ? Accounts.FirstOrDefault(account => account.Id == id) : null;
         _microsoftMode = LauncherConfiguration.Boolean(accountData["microsoftMode"]);
-        _lastMicrosoftAccount = Find("lastMicrosoftAccountId") is { IsMicrosoft: true } microsoft ? microsoft : null;
-        _lastOfflineAccount = Find("lastOfflineAccountId") is { IsMicrosoft: false } offline ? offline : null;
-        CurrentAccount = Find("currentAccountId") is { } current && current.IsMicrosoft == _microsoftMode ? current
-            : (_microsoftMode ? _lastMicrosoftAccount : _lastOfflineAccount) ?? Accounts.FirstOrDefault(account => account.IsMicrosoft == _microsoftMode);
+        _lastMicrosoftAccount = Find("lastMicrosoftAccountId") is { IsOnline: true } microsoft ? microsoft : null;
+        _lastOfflineAccount = Find("lastOfflineAccountId") is { IsMicrosoft: false, IsYggdrasil: false } offline ? offline : null;
+        _defaultAccount = Find("defaultAccountId");
+        foreach (var account in Accounts) account.IsDefault = ReferenceEquals(account, _defaultAccount);
+        CurrentAccount = _defaultAccount is { } preferred && preferred.IsOnline == _microsoftMode ? preferred
+            : Find("currentAccountId") is { } current && current.IsOnline == _microsoftMode ? current
+            : (_microsoftMode ? _lastMicrosoftAccount : _lastOfflineAccount) ?? Accounts.FirstOrDefault(account => account.IsOnline == _microsoftMode);
         foreach (var account in Accounts) account.PropertyChanged += AccountChanged;
         Accounts.CollectionChanged += PersistentAccountsChanged;
         _configuration.StatusChanged += ConfigurationChanged;
@@ -145,6 +150,7 @@ public sealed partial class PreviewSession
         {
             root["accounts"] = accounts;
             root["currentAccountId"] = CurrentAccount?.Id.ToString("D");
+            root["defaultAccountId"] = _defaultAccount?.Id.ToString("D");
             root["microsoftMode"] = MicrosoftMode;
             root["lastMicrosoftAccountId"] = _lastMicrosoftAccount?.Id.ToString("D");
             root["lastOfflineAccountId"] = _lastOfflineAccount?.Id.ToString("D");
@@ -162,7 +168,8 @@ public sealed partial class PreviewSession
         if (e.NewItems != null) foreach (PreviewAccount account in e.NewItems) account.PropertyChanged += AccountChanged;
         if (_lastMicrosoftAccount != null && !Accounts.Contains(_lastMicrosoftAccount)) _lastMicrosoftAccount = null;
         if (_lastOfflineAccount != null && !Accounts.Contains(_lastOfflineAccount)) _lastOfflineAccount = null;
-        if (_account != null && !Accounts.Contains(_account)) CurrentAccount = Accounts.FirstOrDefault(account => account.IsMicrosoft == MicrosoftMode);
+        if (_defaultAccount != null && !Accounts.Contains(_defaultAccount)) _defaultAccount = null;
+        if (_account != null && !Accounts.Contains(_account)) CurrentAccount = Accounts.FirstOrDefault(account => account.IsOnline == MicrosoftMode);
         SaveAccountSelection(); Signal();
     }
     private void ConfigurationChanged() => PostUi(() => { Changed(nameof(ConfigurationMessage)); Changed(nameof(HasConfigurationMessage)); });
@@ -187,6 +194,7 @@ public sealed partial class PreviewSession
                 global["javaPath"] = settings.JavaPath; global["memoryMb"] = settings.MemoryMb;
                 global["gameDirectory"] = settings.GameDirectory; global["jvmArguments"] = settings.JvmArguments;
                 global["automaticMemory"] = settings.AutomaticMemory; global["optimizeMemory"] = settings.OptimizeMemory;
+                global["authlibInjectorPath"] = settings.AuthlibInjectorPath;
                 global["versionIsolation"] = settings.VersionIsolation.ToString();
             });
             if (!await _configuration.FlushAsync()) return false;
@@ -235,8 +243,99 @@ public sealed partial class PreviewSession
             await AuthenticateMicrosoftAsync(account, false);
         }
     }
-    public Task LoginMicrosoftAsync(PreviewAccount? account = null) => AuthenticateMicrosoftAsync(account, true);
-    public void CancelMicrosoftLogin()
+    private bool _validatingAccounts;
+    /// <summary>进入账号页时静默校验一次：只处理超过半小时未验证的正版账号，不进入交互式设备码流程。</summary>
+    public async Task ValidateAccountsAsync()
+    {
+        if (_validatingAccounts || IsAuthenticating || IsBusy) return;
+        _validatingAccounts = true;
+        try
+        {
+            foreach (var account in Accounts.Where(account => account.IsMicrosoft && account.Stored.ProtectedSession.Length > 0).ToArray())
+            {
+                if (_lifetime.IsCancellationRequested) break;
+                if (!Accounts.Contains(account)) continue;
+                if (account.Stored.LastAuthenticatedAt is { } verified && DateTimeOffset.UtcNow - verified < TimeSpan.FromMinutes(30)) continue;
+                await AuthenticateMicrosoftAsync(account, false);
+            }
+        }
+        finally { _validatingAccounts = false; }
+    }
+    /// <summary>启动时恢复外置账号：只重发刷新请求，失败保留资料并提示重新登录。</summary>
+    public async Task RestoreYggdrasilAccountsAsync()
+    {
+        foreach (var account in Accounts.Where(account => account.IsYggdrasil).ToArray())
+        {
+            if (_lifetime.IsCancellationRequested) break;
+            if (account.Stored.ProtectedYggdrasil.Length == 0) { account.MarkLoginFailure("需要重新登录"); continue; }
+            account.SetRestoring(true);
+            try
+            {
+                var result = await YggdrasilSessionService.RestoreAsync(account.Stored.YggdrasilServer, account.Stored.ProtectedYggdrasil, _lifetime.Token);
+                if (!Accounts.Contains(account)) continue;
+                if (result.Account is { } runtime)
+                {
+                    account.ApplyYggdrasil(runtime, result.Protected);
+                    SaveAccountSelection();
+                    _ = RefreshSkinAsync(account, true);
+                }
+                else if (result.RequiresLogin) account.MarkLoginFailure("需要重新登录");
+                else account.MarkUnverified("暂时无法校验登录");
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception error) when (error is HttpRequestException or IOException or System.Text.Json.JsonException)
+            {
+                Trace.TraceWarning("外置账号未恢复：{0}", error.GetType().Name);
+                account.MarkUnverified("暂时无法校验登录");
+            }
+            catch (Exception error) when (error is InvalidOperationException or UriFormatException)
+            {
+                account.MarkLoginFailure("需要重新登录");
+            }
+            finally { account.SetRestoring(false); Signal(); }
+        }
+    }
+
+    /// <summary>交互式登录外置账号：账号名与密码只交给验证服务，不落到本地配置。</summary>
+    public async Task<PreviewAccount> LoginYggdrasilAsync(string server, string username, string password)
+    {
+        if (IsAuthenticating) throw new InvalidOperationException("正在登录，请稍候。");
+        IsAuthenticating = true; LoginError = ""; LoginProgress = "正在登录外置账号";
+        try
+        {
+            var result = await YggdrasilSessionService.LoginAsync(server, username, password, SelectYggdrasilProfileAsync, _lifetime.Token);
+            if (result.Account is not { } runtime) throw new InvalidOperationException("验证服务没有返回角色。");
+            var target = Accounts.FirstOrDefault(account => account.IsYggdrasil && account.Uuid == runtime.Uuid && account.Stored.YggdrasilServer == runtime.ApiRoot.ToString().TrimEnd('/'));
+            if (target == null) { target = new PreviewAccount(new StoredAccount { Type = "Yggdrasil", Name = runtime.Username, Uuid = runtime.Uuid }); Accounts.Add(target); }
+            target.ApplyYggdrasil(runtime, result.Protected);
+            CurrentAccount = target; SaveAccountSelection(); Signal();
+            _ = RefreshSkinAsync(target, true);
+            return target;
+        }
+        finally
+        {
+            IsAuthenticating = false; LoginProgress = ""; Signal();
+        }
+    }
+
+    /// <summary>角色选择在界面线程弹框，取消时让核心的登录流程一起中止。</summary>
+    private Task<Guid> SelectYggdrasilProfileAsync(IReadOnlyList<FMCore.Accounts.YggdrasilProfile> profiles, CancellationToken cancellationToken)
+    {
+        var completion = new TaskCompletionSource<Guid>();
+        PostUi(() =>
+        {
+            try
+            {
+                var selected = Presentation.Dialogs.YggdrasilProfileDialog.Ask(System.Windows.Application.Current?.MainWindow, profiles);
+                if (selected is { } id) completion.TrySetResult(id);
+                else completion.TrySetCanceled(cancellationToken);
+            }
+            catch (Exception error) { completion.TrySetException(error); }
+        });
+        return completion.Task;
+    }
+
+    public Task LoginMicrosoftAsync(PreviewAccount? account = null) => AuthenticateMicrosoftAsync(account, true);    public void CancelMicrosoftLogin()
     { foreach (var cancellation in _accountAttempts.Values.ToArray()) cancellation.Cancel(); }
 
     private async Task AuthenticateMicrosoftAsync(PreviewAccount? existing, bool interactive)
@@ -271,10 +370,14 @@ public sealed partial class PreviewSession
         catch (Exception error)
         {
             Trace.TraceWarning("Microsoft 会话未恢复：{0}", error.GetType().Name);
-            var message = error is CryptographicException or FormatException ? "授权缓存无法解密，请重新登录。"
+            // 只有明确拒绝（缓存不可解密、账号不一致）才清登录态；网络与服务端临时故障保留令牌，下次再校验。
+            var rejected = error is CryptographicException or FormatException or InvalidOperationException;
+            var message = rejected
+                ? error is InvalidOperationException ? "登录的账户与所选账户不一致，请重新登录。" : "授权缓存无法解密，请重新登录。"
                 : error is HttpRequestException ? "无法连接认证服务，请检查网络后重试。"
-                : "登录验证未完成，请重新登录并检查所选 Microsoft 账号。";
-            existing?.MarkLoginFailure(message);
+                : "认证服务暂时不可用，请稍后重试。";
+            if (rejected) existing?.MarkLoginFailure(message);
+            else existing?.MarkUnverified("暂时无法校验登录");
             if (interactive) LoginError = message;
         }
         finally

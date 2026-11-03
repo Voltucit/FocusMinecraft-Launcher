@@ -8,6 +8,7 @@ public sealed class PreviewAccount : ObservableObject
 {
     private bool _current, _valid, _restoring;
     private string _loginFailure = "需要重新登录";
+    private string _warning = "";
     private ImageSource? _headImage;
     private bool _skinLoading;
     private string _skinMessage = "";
@@ -21,13 +22,33 @@ public sealed class PreviewAccount : ObservableObject
     public Guid Id => Stored.Id;
     public Guid Uuid => Stored.Uuid;
     public string Name => Stored.Name;
-    public string Kind => IsMicrosoft ? "Microsoft 正版账号" : "离线账号";
+    public string Kind => IsMicrosoft ? "Microsoft 正版账号" : IsYggdrasil ? "外置账号" : "离线账号";
+    /// <summary>账号卡片的类型标记：正版 / 离线 / 外置。</summary>
+    public string KindLabel => IsMicrosoft ? "正版" : IsYggdrasil ? "外置" : "离线";
     public bool IsMicrosoft => Stored.Type == "Microsoft";
+    public bool IsYggdrasil => Stored.Type == "Yggdrasil";
+    /// <summary>需要验证服务的账号都归在“正版/在线”一侧，离线账号单独一栏。</summary>
+    public bool IsOnline => IsMicrosoft || IsYggdrasil;
     public bool IsValid => _valid && (RuntimeAccount is not FMCore.Accounts.MicrosoftAccount microsoft || microsoft.ExpiresAt > DateTimeOffset.UtcNow);
     public bool IsRestoring => _restoring;
     public ImageSource? HeadImage { get => _headImage; set => Set(ref _headImage, value); }
     public string Initial => Name.Length > 0 ? Name[..1].ToUpperInvariant() : "?";
-    public string LoginState => IsRestoring ? "正在恢复登录" : IsMicrosoft ? IsValid ? "已登录" : _loginFailure : IsValid ? "离线账号" : "账户资料不可用";
+    public string LoginState => IsRestoring ? "正在恢复登录" : IsMicrosoft ? IsValid ? "已登录" : _loginFailure : IsYggdrasil ? IsValid ? "已登录" : _loginFailure : IsValid ? "离线账号" : "账户资料不可用";
+    /// <summary>状态用于界面着色：active 正常、expired 需要重新登录、offline 离线。</summary>
+    public string StatusKey => !IsMicrosoft && !IsYggdrasil ? "offline" : !IsValid ? "expired" : "active";
+    public string StatusText => IsRestoring ? "正在校验登录" : StatusKey switch
+    {
+        "active" => _warning.Length > 0 ? _warning : "已登录",
+        "expired" => _loginFailure,
+        _ => IsValid ? "离线账号" : "账户资料不可用"
+    };
+    public string LastLoginText => (IsMicrosoft || IsYggdrasil) && Stored.LastAuthenticatedAt is { } time
+        ? "上次登录 " + time.ToLocalTime().ToString("MM-dd HH:mm") : "";
+    public bool HasLastLogin => LastLoginText.Length > 0;
+    public string UuidText => Uuid == Guid.Empty ? "" : Uuid.ToString("D");
+    private bool _default;
+    public bool IsDefault { get => _default; internal set { if (Set(ref _default, value)) Changed(nameof(DefaultLabel)); } }
+    public string DefaultLabel => IsDefault ? "默认" : "";
     public string Label => Name + "（" + Kind + "）";
     public bool IsCurrent { get => _current; set { if (Set(ref _current, value)) Changed(nameof(CurrentLabel)); } }
     public string CurrentLabel => IsCurrent ? "当前使用" : "";
@@ -42,7 +63,7 @@ public sealed class PreviewAccount : ObservableObject
             RuntimeAccount = generated with { Uuid = stored.Uuid };
             _valid = true;
         }
-        _restoring = IsMicrosoft && stored.ProtectedSession.Length > 0;
+        _restoring = (IsMicrosoft && stored.ProtectedSession.Length > 0) || (IsYggdrasil && stored.ProtectedYggdrasil.Length > 0);
     }
     public void SetRestoring(bool value) { _restoring = value; Refresh(); }
     /// <summary>仅更改离线昵称；沿用账户标识和原 UUID，不重新生成存档身份。</summary>
@@ -54,12 +75,22 @@ public sealed class PreviewAccount : ObservableObject
         RuntimeAccount = renamed; _valid = true;
         Refresh();
     }
-    public void MarkLoginFailure(string message) { _valid = false; _restoring = false; _loginFailure = message; RuntimeAccount = null; Refresh(); }
+    public void MarkLoginFailure(string message) { _valid = false; _restoring = false; _loginFailure = message; _warning = ""; RuntimeAccount = null; Refresh(); }
+    /// <summary>网络或服务暂时不可用：保留登录态与令牌，只在状态行提示，下次再校验。</summary>
+    internal void MarkUnverified(string message) { if (!IsMicrosoft && !IsYggdrasil || !_valid) return; _warning = message; Refresh(); }
     public void ApplyMicrosoft(FMCore.Accounts.MicrosoftAccount account, string encryptedCache)
     {
         Stored.Name = account.Username; Stored.Uuid = account.Uuid;
         Stored.ProtectedSession = encryptedCache; Stored.LastAuthenticatedAt = DateTimeOffset.UtcNow;
-        RuntimeAccount = account; _valid = true; _restoring = false; Refresh();
+        RuntimeAccount = account; _valid = true; _restoring = false; _warning = ""; Refresh();
+    }
+    /// <summary>登录或恢复外置账号后写入名称、验证服务与加密令牌，界面与启动都读这一份。</summary>
+    public void ApplyYggdrasil(FMCore.Accounts.YggdrasilAccount account, string encryptedCache)
+    {
+        Stored.Name = account.Username; Stored.Uuid = account.Uuid;
+        Stored.YggdrasilServer = account.ApiRoot.ToString().TrimEnd('/');
+        Stored.ProtectedYggdrasil = encryptedCache; Stored.LastAuthenticatedAt = DateTimeOffset.UtcNow;
+        RuntimeAccount = account; _valid = true; _restoring = false; _warning = ""; Refresh();
     }
 }
 /// <summary>从实例进入资源下载时携带的筛选上下文：目标游戏版本与加载器（空串表示不限）。</summary>
