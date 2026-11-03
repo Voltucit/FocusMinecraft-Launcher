@@ -18,6 +18,7 @@ public sealed class LauncherUpdateViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _operation;
     private PreviewSession? _session;
     private UpdateRelease? _release;
+    private UpdateRelease? _prompt;
     private string _job = "", _status = "尚未检查更新", _error = "", _transfer = "";
     private bool _working, _downloading, _applying, _ready;
     private double _percent;
@@ -42,6 +43,18 @@ public sealed class LauncherUpdateViewModel : ObservableObject, IDisposable
     public UiCommand Cancel { get; }
     public UiCommand Install { get; }
     public UiCommand OpenRelease { get; }
+    /// <summary>启动器启动后自动发现新版本时触发，由主窗口弹出更新提示卡片。</summary>
+    public event EventHandler? PromptAvailable;
+    public UpdateRelease? PendingPrompt => _prompt;
+    /// <summary>记下用户已选择“稍后”的版本，同一版本不再打扰，换版本后重新提醒。</summary>
+    private string DismissedVersion => LauncherConfiguration.Text(_configuration.ReadLauncher()["updates"]?["dismissedVersion"]);
+    public void DismissPrompt()
+    {
+        _prompt = null;
+        if (_release == null) return;
+        var version = _release.Version;
+        _configuration.ChangeLauncher(root => LauncherConfiguration.Object(root, "updates")["dismissedVersion"] = version);
+    }
     public bool AutoCheck
     {
         get => LauncherConfiguration.Boolean(_configuration.ReadLauncher()["updates"]?["autoCheck"], true);
@@ -100,7 +113,7 @@ public sealed class LauncherUpdateViewModel : ObservableObject, IDisposable
                 finally { _working = false; Publish(); }
             }
             var last = LauncherConfiguration.Text(_configuration.ReadLauncher()["updates"]?["lastCheckUtc"]);
-            if (AutoCheck && (!DateTimeOffset.TryParse(last, out var checkedAt) || DateTimeOffset.UtcNow - checkedAt > TimeSpan.FromHours(24))) await CheckAsync(true);
+            if (AutoCheck && (!DateTimeOffset.TryParse(last, out var checkedAt) || DateTimeOffset.UtcNow - checkedAt > TimeSpan.FromHours(7))) await CheckAsync(true);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
         catch (Exception error) { _error = error.Message; _status = "更新状态读取失败"; Publish(); }
@@ -112,7 +125,7 @@ public sealed class LauncherUpdateViewModel : ObservableObject, IDisposable
         {
             var release = await _service.CheckAsync(_operation!.Token);
             if (release == null)
-            { _release = null; _ready = false; _job = ""; SavePrepared(""); _status = "当前已是最新正式版"; }
+            { _release = null; _prompt = null; _ready = false; _job = ""; SavePrepared(""); _status = "当前已是最新正式版"; }
             else
             {
                 if (_release?.Manifest?.PackageSha256 != release.Manifest?.PackageSha256 || _release?.Version != release.Version)
@@ -120,7 +133,6 @@ public sealed class LauncherUpdateViewModel : ObservableObject, IDisposable
                 _release = release;
                 _status = _ready ? "更新已下载，重启后安装 " + release.Version : release.Manifest == null
                     ? "发现新版本 " + release.Version + "，可从发布页面下载" : "发现新版本 " + release.Version;
-                if (automatic) _session?.NotifyTask("发现启动器新版本 " + release.Version, false);
             }
             _configuration.ChangeLauncher(root => LauncherConfiguration.Object(root, "updates")["lastCheckUtc"] = DateTimeOffset.UtcNow.ToString("O"));
         }
@@ -128,6 +140,15 @@ public sealed class LauncherUpdateViewModel : ObservableObject, IDisposable
         catch (Exception error) { _status = "检查更新失败"; _error = error.Message; _session?.Log("检查更新：" + error.Message); }
         finally { FinishOperation(); }
         if (automatic && AutoDownload && CanDownload) await DownloadAsync();
+        if (automatic) PromptIfNeeded();
+    }
+    /// <summary>自动检查发现新版本后弹出提示；同一版本被“稍后”过一次就不再打扰，换新版本会重新提醒。</summary>
+    private void PromptIfNeeded()
+    {
+        if (_ready || _session == null || _release == null) return;
+        if (DismissedVersion.Equals(_release.Version, StringComparison.OrdinalIgnoreCase)) return;
+        _prompt = _release;
+        PromptAvailable?.Invoke(this, EventArgs.Empty);
     }
     private async Task DownloadAsync()
     {

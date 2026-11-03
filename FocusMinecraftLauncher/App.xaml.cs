@@ -86,6 +86,14 @@ public partial class App : Application
     private async void MainWindowReady(object? sender, EventArgs e)
     {
         if (sender is Window window) window.ContentRendered -= MainWindowReady;
+        Updates.PromptAvailable += UpdatePromptAvailable;
         await Updates.OnMainWindowReadyAsync();
+    }
+
+    /// <summary>自动检查发现新版本后用主题卡片提示一次；用户选“稍后”后同一版本不再弹出。</summary>
+    private void UpdatePromptAvailable(object? sender, EventArgs e)
+    {
+        if (Updates.PendingPrompt == null) return;
+        Presentation.Dialogs.UpdateDialog.Prompt(Updates);
     }
 }
