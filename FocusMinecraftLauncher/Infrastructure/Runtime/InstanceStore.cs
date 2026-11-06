@@ -10,6 +10,8 @@ namespace FocusMinecraftLauncher.Infrastructure.Runtime;
 public static class InstanceStore
 {
     public const string FileName = "fmlauncher.instance.json";
+    /// <summary>启动器为加载器自动补装的原版父版本，不作为独立游戏显示。</summary>
+    public const string DependencyMarker = ".fmlauncher-dependency";
     private static readonly SemaphoreSlim Writer = new(1, 1);
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true };
     public static string Key(string root, string id) => Path.GetFullPath(root).TrimEnd('\\', '/') + "|" + id;
@@ -91,13 +93,21 @@ public static class InstanceStore
     {
         var reader = new MinecraftVersionReader();
         var versions = await reader.GetVersionsAsync(root, token);
-        var result = new List<PreviewInstance>();
+        var all = new List<PreviewInstance>();
         foreach (var version in versions)
         {
             token.ThrowIfCancellationRequested();
-            result.Add(await ReadVersionAsync(version, versions, root, token));
+            all.Add(await ReadVersionAsync(version, versions, root, token));
         }
-        return result;
+        // 加载器自动补装的原版父版本没有实例配置，不作为独立游戏显示；用户自己安装的版本仍有配置。
+        var loaderGames = all.Where(item => item.Loader is not "原版")
+            .Select(item => item.Version).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return all.Where(instance =>
+        {
+            if (File.Exists(Path.Combine(instance.DirectoryPath, FileName))) return true;
+            if (File.Exists(Path.Combine(instance.DirectoryPath, DependencyMarker))) return false;
+            return !(instance.Loader == "原版" && loaderGames.Contains(instance.Id));
+        }).ToArray();
     }
     /// <summary>单个实例的父版本缺失不阻止其他实例展示；修复仍使用核心的公开安装及转换接口。</summary>
     public static async Task<PreviewInstance> ReadVersionAsync(MinecraftVersion version, IReadOnlyList<MinecraftVersion> versions, string root, CancellationToken token)

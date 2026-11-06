@@ -24,6 +24,10 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
     private int _navigationRevision;
     private readonly CancellationTokenSource _lifetime = new();
     private string _state = "正常";
+    private bool _isTargetPickerOpen;
+    private IReadOnlyList<PreviewInstance> _targetChoices = [];
+    private PreviewInstance? _selectedTarget;
+    private TaskCompletionSource<PreviewInstance?>? _targetSelection;
     public PreviewSession Session { get; }
     public VanillaCatalogViewModel Vanilla { get; }
     public TaskHistoryViewModel Tasks { get; }
@@ -41,9 +45,12 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
     public string StateTitle => DisplayState switch { "加载中" => "正在加载版本列表", "空结果" => "没有匹配的内容", _ => "版本列表读取失败" };
     public string StateDescription => _loadError;
     private string _loadError = "";
-    public bool IsOverlayOpen => Preview != null || LargeImage != null;
+    public bool IsOverlayOpen => Preview != null || LargeImage != null || IsTargetPickerOpen;
     public bool IsPreviewOpen => Preview != null;
     public bool IsImageOpen => LargeImage != null;
+    public bool IsTargetPickerOpen { get => _isTargetPickerOpen; private set { if(Set(ref _isTargetPickerOpen,value)) OverlayChanged(); } }
+    public IReadOnlyList<PreviewInstance> TargetChoices { get => _targetChoices; private set => Set(ref _targetChoices,value); }
+    public PreviewInstance? SelectedTarget { get => _selectedTarget; set { if(Set(ref _selectedTarget,value)) System.Windows.Input.CommandManager.InvalidateRequerySuggested(); } }
     public bool CanInteract => !IsOverlayOpen;
     public DownloadPreviewViewModel? Preview { get => _preview; private set { if(Set(ref _preview,value)) OverlayChanged(); } }
     public ImageSource? LargeImage { get => _image; private set { if(Set(ref _image,value)) OverlayChanged(); } }
@@ -51,6 +58,8 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
     public UiCommand CloseOverlay { get; }
     public UiCommand Escape { get; }
     public UiCommand NormalState { get; }
+    public UiCommand ConfirmTarget { get; }
+    public UiCommand CancelTarget { get; }
     public DownloadsViewModel(PreviewSession session)
     {
         Session = session;
@@ -60,8 +69,10 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
         _section = Enum.IsDefined((DownloadSection)session.DownloadTab) ? (DownloadSection)session.DownloadTab : DownloadSection.Vanilla;
         _lastBrowse = _section == DownloadSection.Tasks ? DownloadSection.Vanilla : _section;
         ShowTasks = new(_ => SetSection(DownloadSection.Tasks)); NormalState = new(async _ => await LoadVanillaAsync());
-        CloseOverlay = new(_ => { LargeImage = null; Preview = null; });
-        Escape = new(_ => { if(IsOverlayOpen) CloseOverlay.Execute(null); else if(_detail != null) BackFromDetail(); else if(_installation != null) ReturnToVanilla(); });
+        CloseOverlay = new(_ => { LargeImage = null; Preview = null; CancelTargetSelection(); });
+        Escape = new(_ => { if(IsTargetPickerOpen) CancelTargetSelection(); else if(IsOverlayOpen) CloseOverlay.Execute(null); else if(_detail != null) BackFromDetail(); else if(_installation != null) ReturnToVanilla(); });
+        ConfirmTarget = new(_ => CompleteTarget(true), _ => SelectedTarget != null);
+        CancelTarget = new(_ => CompleteTarget(false));
         session.PropertyChanged += SessionChanged;
         session.TaskNotification += ShowNotification;
         _ = LoadVanillaAsync();
@@ -192,11 +203,44 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
         var revision=_navigationRevision;
         try
         {
+            var target=entry.Project.Category==DownloadSection.Modpacks?null:await ChooseTargetAsync(entry.Project,file);
+            if(entry.Project.Category!=DownloadSection.Modpacks&&target is null)return;
+            if(_disposed||revision!=_navigationRevision)return;
             await _catalog.EnsureDependenciesAsync(file);
             if(_disposed||revision!=_navigationRevision||!ReferenceEquals(entry.SelectedFile,file))return;
-            Preview=DownloadPreviewViewModel.Resource(entry.Project,file,Session,_catalog,OpenResource);
+            Preview=DownloadPreviewViewModel.Resource(entry.Project,file,target,Session,_catalog,OpenResource,()=>ClosePreviewAndNavigate(entry.Project.Category));
         }
         catch(Exception error){if(!_disposed&&revision==_navigationRevision)ShowNotification(Infrastructure.Runtime.RuntimeSupport.Error(error),true);}
+    }
+    /// <summary>缩放弹入的目标选择框只列出当前已安装且与文件兼容的实例。</summary>
+    private async Task<PreviewInstance?> ChooseTargetAsync(ResourceProject project,ResourceFileItem file)
+    {
+        var choices=Session.Instances.Where(item=>DownloadPreviewViewModel.Compatible(file,project.Category,item)).ToArray();
+        if(choices.Length==0){ShowNotification("没有与这个文件兼容的已安装游戏实例。",true);return null;}
+        TargetChoices=choices;
+        SelectedTarget=(Session.CurrentInstance is { } current&&choices.Contains(current))?current:choices[0];
+        var completion=new TaskCompletionSource<PreviewInstance?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _targetSelection=completion;
+        IsTargetPickerOpen=true;
+        try{return await completion.Task;}
+        finally
+        {
+            IsTargetPickerOpen=false;
+            _targetSelection=null;
+            TargetChoices=[];
+            SelectedTarget=null;
+        }
+    }
+    private void CompleteTarget(bool confirm)
+    {
+        if(_targetSelection is {} completion)completion.TrySetResult(confirm?SelectedTarget:null);
+    }
+    private void CancelTargetSelection()=>_targetSelection?.TrySetResult(null);
+    /// <summary>确认下载后关闭弹层并回到对应的资源分类列表。</summary>
+    private void ClosePreviewAndNavigate(DownloadSection section)
+    {
+        Preview=null;
+        SetSection(section);
     }
     private async Task LoadVanillaAsync()
     {
@@ -207,7 +251,7 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
     private void BackFromDetail() { _navigationRevision++; _detail = _detailTrail.TryPop(out var previous) ? previous : null; RefreshRoute(); }
     private void RefreshRoute() { Changed(nameof(ActivePage)); Changed(nameof(CanChangeDisplayState)); Changed(nameof(ShowPage)); Changed(nameof(ShowState)); Changed(nameof(StateTitle)); Changed(nameof(StateDescription)); Changed(nameof(DisplayState)); }
     private void OverlayChanged() { Changed(nameof(IsOverlayOpen)); Changed(nameof(IsPreviewOpen)); Changed(nameof(IsImageOpen)); Changed(nameof(CanInteract)); }
-    public void Dispose() { _disposed=true;_navigationRevision++;_lifetime.Cancel(); Session.PropertyChanged -= SessionChanged; Session.TaskNotification -= ShowNotification; _catalog.Dispose(); Tasks.Dispose(); foreach(var detail in _details.Values) detail.Dispose(); }
+    public void Dispose() { _disposed=true;_navigationRevision++;CancelTargetSelection();_lifetime.Cancel(); Session.PropertyChanged -= SessionChanged; Session.TaskNotification -= ShowNotification; _catalog.Dispose(); Tasks.Dispose(); foreach(var detail in _details.Values) detail.Dispose(); }
 }
 /// <summary>用户确认目标后才加入资源下载任务，前置资源与所选文件绑定。</summary>
 public sealed class DownloadPreviewViewModel : ObservableObject
@@ -218,23 +262,32 @@ public sealed class DownloadPreviewViewModel : ObservableObject
     public string Summary { get; }
     public string Message { get; private set; }
     private bool _submitted;
+    private readonly Action? _completed;
     public UiCommand Confirm { get; }
     public string DependencyStatus { get; }
     public bool SelectInstance { get; }
-    public bool HasInstances => Session.Instances.Count > 0;
     public bool HasDependencies => Dependencies.Count > 0;
     public IReadOnlyList<DependencyViewModel> Dependencies { get; }
-    public PreviewInstance? SelectedInstance { get => _instance; set { if(Set(ref _instance,value)) Changed(nameof(InstanceText)); } }
-    public string InstanceText => SelectedInstance?.Name ?? "未选择游戏";
-    private DownloadPreviewViewModel(string title,string summary,string message,PreviewSession session,ResourceFileItem? file,ResourceCatalog? catalog,Action<string,bool>? open)
+    public PreviewInstance? SelectedInstance { get => _instance; set { if(Set(ref _instance,value)) { Changed(nameof(InstanceText)); Changed(nameof(TargetPath)); } } }
+    public string InstanceText => SelectedInstance?.Name ?? (SelectInstance ? "未选择游戏" : "整合包将导入为新实例");
+    public string TargetPath => SelectedInstance?.GameDirectory ?? "";
+    private DownloadPreviewViewModel(string title,string summary,string message,PreviewSession session,ResourceFileItem? file,PreviewInstance? target,ResourceCatalog? catalog,Action<string,bool>? open,Action? completed)
     {
-        Title = title; Summary = summary; Message = message; Session = session; SelectInstance = file != null && file.DownloadFile?.Filename.EndsWith(".mrpack",StringComparison.OrdinalIgnoreCase) != true; _instance = session.CurrentInstance; DependencyStatus = file?.DependencyText ?? "";
+        Title = title; Summary = summary; Message = message; Session = session; SelectInstance = file != null && file.Section != DownloadSection.Modpacks && file.DownloadFile?.Filename.EndsWith(".mrpack",StringComparison.OrdinalIgnoreCase) != true;
+        _instance = target; _completed = completed;
+        DependencyStatus = file?.DependencyText ?? "";
         Dependencies = file?.EffectiveDependencies?.Select(dependency => catalog?.Find(dependency.ProjectId) is { } project ? new DependencyViewModel(project,dependency,open!) : null).OfType<DependencyViewModel>().ToArray() ?? [];
         Confirm=new(_=>
         {
-            try { if(file!=null) { if(file.IsCurseForge)session.DownloadCurseForgeResource(file, SelectedInstance);else session.DownloadResource(file, SelectedInstance); _submitted=true; System.Windows.Input.CommandManager.InvalidateRequerySuggested(); Message="已加入下载列表";Changed(nameof(Message)); } }
+            try { if(file!=null) { if(file.IsCurseForge)session.DownloadCurseForgeResource(file, SelectedInstance);else session.DownloadResource(file, SelectedInstance); _submitted=true; System.Windows.Input.CommandManager.InvalidateRequerySuggested(); Message="已加入下载列表";Changed(nameof(Message)); _completed?.Invoke(); } }
             catch(Exception error){Message=Infrastructure.Runtime.RuntimeSupport.Error(error);Changed(nameof(Message));}
         },_=>!_submitted&&file!=null&&(!SelectInstance||SelectedInstance!=null));
     }
-    public static DownloadPreviewViewModel Resource(ResourceProject project,ResourceFileItem file,PreviewSession session,ResourceCatalog catalog,Action<string,bool> open) => new("确认下载",project.Name+"\n"+file.FileName+"\n"+file.CompatibilityText+(file.Environment == null ? "" : " / "+file.Environment)+"\n"+file.SizeText,"必需前置资源会一同下载，可选资源请按需另行选择。",session,file,catalog,open);
+    public static DownloadPreviewViewModel Resource(ResourceProject project,ResourceFileItem file,PreviewInstance? target,PreviewSession session,ResourceCatalog catalog,Action<string,bool> open,Action? completed) => new("确认下载",project.Name+"\n"+file.FileName+"\n"+file.CompatibilityText+(file.Environment == null ? "" : " / "+file.Environment)+"\n"+file.SizeText,"必需前置资源会一同下载，可选资源请按需另行选择。",session,file,target,catalog,open,completed);
+    internal static bool Compatible(ResourceFileItem? file,DownloadSection category,PreviewInstance instance)
+    {
+        if(file is null)return true;
+        if(!file.GameVersions.Contains(instance.Version,StringComparer.OrdinalIgnoreCase))return false;
+        return category != DownloadSection.Mods || file.Loaders.Length == 0 || file.Loaders.Contains(instance.Loader,StringComparer.OrdinalIgnoreCase);
+    }
 }

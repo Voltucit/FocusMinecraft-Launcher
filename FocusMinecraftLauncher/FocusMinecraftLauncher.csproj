@@ -33,7 +33,7 @@
         <Description>Minecraft 启动器</Description>
 
         <!-- 软件版本号 -->
-        <Version Condition="'$(Version)' == ''">2.0.6</Version>
+        <Version Condition="'$(Version)' == ''">2.0.7</Version>
         <ReleaseNumber>$([System.Text.RegularExpressions.Regex]::Match('$(Version)', '^\d+\.\d+\.\d+').Value)</ReleaseNumber>
 
         <!-- 程序集版本 -->

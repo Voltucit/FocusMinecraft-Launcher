@@ -1,6 +1,9 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using FocusMinecraftLauncher.Presentation;
 using FocusMinecraftLauncher.Preview;
 using FocusMinecraftLauncher.Common;
 using FocusMinecraftLauncher.Features.Downloads.Models;
@@ -83,6 +86,8 @@ public sealed class ComponentGroupViewModel : ObservableObject
     public ComponentVersionItem? Selected { get; internal set; }
     public bool HasOptions => Choices.Count > 0;
     public bool HasSelection => Selected != null;
+    public bool ShowFabricApi => Name == "Fabric" && _owner.ShowFabricApi;
+    public string FabricApiText => _owner.FabricApiText;
     public bool IsExpanded { get => _expanded; set => Set(ref _expanded, HasOptions && value); }
     public string Status => !HasOptions ? Availability : Selected != null ? Selected.Version : Choices.All(c => !c.CanChoose) ? (Choices.Any(c=>c.Hint.Contains("未确认"))?"兼容性未确认":"不兼容") : "可以添加";
     public UiCommand Clear { get; }
@@ -125,10 +130,24 @@ public sealed class ComponentGroupViewModel : ObservableObject
 public sealed class VanillaInstallViewModel : ObservableObject
 {
     private string _name;
+    private string _fabricApiText = "正在查询 Fabric API";
+    private bool _fabricApiAvailable;
     public GameVersionItem Game { get; }
     public IReadOnlyList<ComponentGroupViewModel> Components { get; }
     public DownloadScrollPosition Scroll { get; } = new();
     public string Name { get => _name; set { if (Set(ref _name, value)) { Changed(nameof(NameError)); Changed(nameof(Summary)); CommandManager.InvalidateRequerySuggested(); } } }
+    public string FabricApiText { get => _fabricApiText; private set { if (Set(ref _fabricApiText, value)) foreach (var component in Components) component.Refresh(); } }
+    /// <summary>安装页标题图标随当前主要加载器变化；OptiFine 使用组件图标。</summary>
+    public ImageSource InstallImage => PrimaryName == "OptiFine" ? OptiFineIcon : GameVersionIcons.Get(PrimaryName, Game.VersionType);
+    private static readonly ImageSource OptiFineIcon = LoadIcon("Assets/DownloadAssets/Optifine.png");
+    private static ImageSource LoadIcon(string path)
+    {
+        var image=new BitmapImage();
+        image.BeginInit();image.CacheOption=BitmapCacheOption.OnLoad;image.DecodePixelWidth=128;
+        image.UriSource=new Uri("pack://application:,,,/FocusMinecraftLauncher;component/"+path);
+        image.EndInit();image.Freeze();return image;
+    }
+    public bool ShowFabricApi => PrimaryName == "Fabric";
     public string NameError
     {
         get
@@ -141,7 +160,7 @@ public sealed class VanillaInstallViewModel : ObservableObject
         }
     }
     public string PrimaryName => Components.FirstOrDefault(c => c.Name != "OptiFine" && c.Selected != null)?.Name ?? "原版";
-    public string Composition => Components.Any(c => c.Selected != null) ? string.Join(" / ", Components.Where(c => c.Selected != null).Select(c => c.Name + " " + c.Selected!.Version)) : "纯原版";
+    public string Composition { get { var parts=Components.Where(c=>c.Selected!=null).Select(c=>c.Name+" "+c.Selected!.Version).ToList(); if(PrimaryName=="Fabric"&&_fabricApiAvailable)parts.Add("Fabric API"); return parts.Count>0?string.Join(" / ",parts):"纯原版"; } }
     public string SuggestedName => Game.Number + string.Concat(Components.Where(component => component.Selected != null)
         .Select(component => "-" + component.Name + "_" + component.Selected!.Version.Replace(' ', '_')));
     public string Summary => Name + " / Minecraft " + Game.Number + " / " + Composition;
@@ -174,7 +193,25 @@ public sealed class VanillaInstallViewModel : ObservableObject
                 foreach(var component in Components)component.Update();Changed(nameof(CompatibilityError));
             }
             catch (Exception error) { group.SetOptions([], "查询失败，请重新进入此页重试"); session.Log(group.Name + "版本查询：" + FocusMinecraftLauncher.Infrastructure.Runtime.RuntimeSupport.Error(error)); }
-        }));
+        }).Append(LoadFabricApiAsync(session)));
+    }
+    private async Task LoadFabricApiAsync(FocusMinecraftLauncher.Preview.PreviewSession session)
+    {
+        try
+        {
+            var versions = await FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.NewClient().GetVersionsAsync("fabric-api", Game.Number, "fabric");
+            var version = versions.FirstOrDefault(item => item.Files.Count > 0);
+            _fabricApiAvailable = version is not null;
+            FabricApiText = version is null ? "当前游戏版本没有可自动安装的 Fabric API" : "Fabric API " + version.VersionNumber + " 将随 Fabric 自动安装";
+            Changed(nameof(Composition)); Changed(nameof(Summary));
+        }
+        catch (Exception error)
+        {
+            _fabricApiAvailable = false;
+            FabricApiText = "Fabric API 版本查询失败，安装时会重试";
+            Changed(nameof(Composition)); Changed(nameof(Summary));
+            session.Log("Fabric API 版本查询：" + FocusMinecraftLauncher.Infrastructure.Runtime.RuntimeSupport.Error(error));
+        }
     }
     /// <summary>发布日期只用于展示；查询失败时保留空日期，不影响版本选择。</summary>
     private async Task<IReadOnlyList<ComponentVersionItem>> WithDatesAsync(string kind, ComponentVersionItem[] items)
@@ -202,6 +239,6 @@ public sealed class VanillaInstallViewModel : ObservableObject
         group.Selected = option;
         if (followSelection) Name = SuggestedName;
         foreach (var component in Components) component.Update();
-        Changed(nameof(PrimaryName)); Changed(nameof(Composition)); Changed(nameof(SuggestedName)); Changed(nameof(Summary)); Changed(nameof(CompatibilityError)); CommandManager.InvalidateRequerySuggested();
+        Changed(nameof(PrimaryName)); Changed(nameof(InstallImage)); Changed(nameof(ShowFabricApi)); Changed(nameof(Composition)); Changed(nameof(SuggestedName)); Changed(nameof(Summary)); Changed(nameof(CompatibilityError)); CommandManager.InvalidateRequerySuggested();
     }
 }

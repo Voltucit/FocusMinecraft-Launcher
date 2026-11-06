@@ -142,6 +142,7 @@ public sealed partial class PreviewSession
         var pack=file.Section==DownloadSection.Modpacks;
         if(!pack&&instance==null)throw new InvalidOperationException("请先选择目标游戏。");
         if(!pack&&!file.GameVersions.Contains(instance!.Version))throw new InvalidOperationException("所选文件不支持目标 Minecraft 版本，请选择其他文件。");
+        if(!pack&&file.Section==DownloadSection.Mods&&file.Loaders.Length>0&&!file.Loaders.Contains(instance!.Loader,StringComparer.OrdinalIgnoreCase))throw new InvalidOperationException("所选文件不支持目标加载器，请选择其他文件。");
         if(instance!=null&&Tasks.Any(t=>t.IsActive&&string.Equals(InstanceStore.Key(t.Root,t.InstanceId),InstanceStore.Key(instance.Root,instance.Id),StringComparison.OrdinalIgnoreCase)))throw new InvalidOperationException("目标游戏正在运行或处理其他任务。");
         var root=instance?.Root??SelectedRoot;
         var targetId=instance?.Id??file.ProjectId;

@@ -9,7 +9,7 @@
     <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <StackPanel Margin="0,0,0,16">
             <fluent:Button Content="返回版本列表" Command="{Binding Back}" Style="{StaticResource QuietButton}" HorizontalAlignment="Left" Margin="-10,0,0,12"/>
-            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="52"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Image Source="{Binding Game.Image}" Width="40" Height="40" Stretch="Uniform" VerticalAlignment="Top" HorizontalAlignment="Left"/>
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="52"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Image Source="{Binding InstallImage}" Width="40" Height="40" Stretch="Uniform" VerticalAlignment="Top" HorizontalAlignment="Left"/>
                 <StackPanel Grid.Column="1"><WrapPanel Margin="0,0,0,8"><TextBlock Text="Minecraft" FontWeight="SemiBold" Margin="0,0,6,0"/><TextBlock Text="{Binding Game.Number}" FontWeight="SemiBold"/><TextBlock Text="{Binding Game.Kind}" Foreground="{DynamicResource MutedText}" Margin="12,0,0,0"/></WrapPanel><TextBlock Text="安装名称" Style="{StaticResource FieldLabel}"/><fluent:TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" MaxLength="80" AutomationProperties.Name="安装名称"/><TextBlock Text="{Binding NameError}" Style="{StaticResource ErrorMessage}" Margin="0,6,0,0"/></StackPanel>
             </Grid>
         </StackPanel>
@@ -18,24 +18,32 @@
                 <TextBlock Text="加载器与附加组件" Style="{StaticResource SectionTitle}" Margin="0,0,0,12"/>
                 <ItemsControl ItemsSource="{Binding Components}"><ItemsControl.ItemTemplate><DataTemplate>
                     <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <ui:AnimatedExpander Style="{StaticResource ComponentExpander}" IsExpanded="{Binding IsExpanded, Mode=TwoWay}" IsEnabled="{Binding HasOptions}" AutomationProperties.Name="{Binding Name}">
-                            <ui:AnimatedExpander.Header>
-                                <Grid>
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="36"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                    <Image Source="{Binding Icon}" Width="24" Height="24" Stretch="Uniform" HorizontalAlignment="Left"
-                                           VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" IsHitTestVisible="False"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                    <TextBlock Grid.Column="2" Text="{Binding Status}" TextWrapping="Wrap" Margin="16,0,0,0" VerticalAlignment="Center">
-                                        <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource Muted}"><Style.Triggers><DataTrigger Binding="{Binding Status}" Value="不兼容"><Setter Property="Foreground" Value="{DynamicResource ErrorText}"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
-                                    </TextBlock>
+                        <StackPanel>
+                            <ui:AnimatedExpander Style="{StaticResource ComponentExpander}" IsExpanded="{Binding IsExpanded, Mode=TwoWay}" IsEnabled="{Binding HasOptions}" AutomationProperties.Name="{Binding Name}">
+                                <ui:AnimatedExpander.Header>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="36"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <Image Source="{Binding Icon}" Width="24" Height="24" Stretch="Uniform" HorizontalAlignment="Left"
+                                               VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" IsHitTestVisible="False"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding Status}" TextWrapping="Wrap" Margin="16,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource Muted}"><Style.Triggers><DataTrigger Binding="{Binding Status}" Value="不兼容"><Setter Property="Foreground" Value="{DynamicResource ErrorText}"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
+                                        </TextBlock>
+                                    </Grid>
+                                </ui:AnimatedExpander.Header>
+                                <ItemsControl ItemsSource="{Binding Choices}"><ItemsControl.ItemTemplate><DataTemplate>
+                                    <RadioButton Style="{StaticResource DownloadChoice}" IsChecked="{Binding IsSelected, Mode=OneWay}" IsEnabled="{Binding CanChoose}" Command="{Binding Choose}" ToolTip="{Binding Hint}" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="{Binding Option.Version}">
+                                        <StackPanel><TextBlock Text="{Binding Option.Version}" FontWeight="Medium"/><WrapPanel><TextBlock Text="{Binding Option.Date}" Style="{StaticResource DownloadMeta}" Visibility="{Binding Option.Date, Converter={StaticResource TextVisibility}}"/><TextBlock Text="{Binding Option.Stability}" Style="{StaticResource DownloadMeta}"/></WrapPanel><TextBlock Text="{Binding Option.ForgeNote}" Style="{StaticResource DownloadMeta}" Visibility="{Binding Option.ForgeNote, Converter={StaticResource TextVisibility}}"/></StackPanel>
+                                    </RadioButton>
+                                </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                            </ui:AnimatedExpander>
+                            <Border Visibility="{Binding ShowFabricApi, Converter={StaticResource BoolVisibility}}" Margin="20,4,0,0" Padding="8" Background="{DynamicResource Surface}" CornerRadius="{DynamicResource ControlCornerRadius}" AutomationProperties.Name="Fabric API 自动安装">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <Image Source="pack://application:,,,/FocusMinecraftLauncher;component/Assets/DownloadAssets/fabric.png" Width="18" Height="18" Stretch="Uniform" HorizontalAlignment="Left" VerticalAlignment="Top" RenderOptions.BitmapScalingMode="HighQuality" IsHitTestVisible="False"/>
+                                    <StackPanel Grid.Column="1"><TextBlock Text="Fabric API" Style="{StaticResource ResourceBody}" FontWeight="SemiBold"/><TextBlock Text="{Binding FabricApiText}" Style="{StaticResource DownloadMeta}" Margin="0,3,0,0" TextWrapping="Wrap"/></StackPanel>
                                 </Grid>
-                            </ui:AnimatedExpander.Header>
-                            <ItemsControl ItemsSource="{Binding Choices}"><ItemsControl.ItemTemplate><DataTemplate>
-                                <RadioButton Style="{StaticResource DownloadChoice}" IsChecked="{Binding IsSelected, Mode=OneWay}" IsEnabled="{Binding CanChoose}" Command="{Binding Choose}" ToolTip="{Binding Hint}" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="{Binding Option.Version}">
-                                    <StackPanel><TextBlock Text="{Binding Option.Version}" FontWeight="Medium"/><WrapPanel><TextBlock Text="{Binding Option.Date}" Style="{StaticResource DownloadMeta}" Visibility="{Binding Option.Date, Converter={StaticResource TextVisibility}}"/><TextBlock Text="{Binding Option.Stability}" Style="{StaticResource DownloadMeta}"/></WrapPanel><TextBlock Text="{Binding Option.ForgeNote}" Style="{StaticResource DownloadMeta}" Visibility="{Binding Option.ForgeNote, Converter={StaticResource TextVisibility}}"/></StackPanel>
-                                </RadioButton>
-                            </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-                        </ui:AnimatedExpander>
+                            </Border>
+                        </StackPanel>
                         <fluent:Button Grid.Column="1" Content="清除" Command="{Binding Clear}" Style="{StaticResource QuietButton}" VerticalAlignment="Top" Margin="8,0,0,0" Visibility="{Binding HasSelection, Converter={StaticResource BoolVisibility}}"/>
                     </Grid>
                 </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>

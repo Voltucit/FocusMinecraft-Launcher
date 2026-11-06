@@ -228,15 +228,22 @@ public sealed partial class PreviewSession
     {
         var root = SelectedRoot;
         if (Tasks.Any(t => t.IsActive && string.Equals(InstanceStore.Key(t.Root, t.InstanceId), InstanceStore.Key(root, name), StringComparison.OrdinalIgnoreCase))) throw new InvalidOperationException("这个版本正在安装。");
-        if (Directory.Exists(Path.Combine(root, "versions", name)) && !_incomplete.Contains(InstanceStore.Key(root, name))) throw new IOException("这个安装名称已存在，请使用其他名称。");
+        var target = Path.Combine(root, "versions", name);
+        // 隐藏的原版父版本可以原地安装成正式的纯原版实例，不必要求用户换名或手动删目录。
+        var reuseBase = (loader is "" or "原版") && string.Equals(name, game, StringComparison.OrdinalIgnoreCase)
+            && Directory.Exists(target) && !File.Exists(Path.Combine(target, InstanceStore.FileName));
+        if (Directory.Exists(target) && !_incomplete.Contains(InstanceStore.Key(root, name)) && !reuseBase) throw new IOException("这个安装名称已存在，请使用其他名称。");
         return Enqueue(PreviewTaskKind.Install, name, game, root, name, async (task, token) =>
         {
             if (!_rootWriters.TryGetValue(root, out var writer)) _rootWriters[root] = writer = new(1, 1);
             await writer.WaitAsync(token);
+            var baseExisted = File.Exists(Path.Combine(root, "versions", game, game + ".json"));
             try
             {
                 await SetIncompleteAsync(root, name, true);
                 await InstallComponentsAsync(root, name, game, loader, loaderVersion, optifine, task, token);
+                await RemoveAutoInstalledBaseAsync(root, game, name, baseExisted);
+                if (!baseExisted && !string.Equals(name, game, StringComparison.OrdinalIgnoreCase)) MarkDependencyVersion(root, game);
                 token.ThrowIfCancellationRequested();
                 var instance = new PreviewInstance(name, name, game, loader) { Root = root, IsolationMode = SavedSettings.VersionIsolation };
                 var options = InstanceStore.Read(instance); options.Name = name; options.Source = "Minecraft";
@@ -245,8 +252,62 @@ public sealed partial class PreviewSession
                 if (string.Equals(root, SelectedRoot, StringComparison.OrdinalIgnoreCase)) await RefreshInstancesAsync();
                 NotifyTask(name + "安装完成", false);
             }
-            finally { writer.Release(); }
+            finally
+            {
+                if (!baseExisted && !string.Equals(name, game, StringComparison.OrdinalIgnoreCase)) MarkDependencyVersion(root, game);
+                writer.Release();
+            }
         });
+    }
+    /// <summary>加载器安装器自动补装的原版父版本只作为依赖保留，不在游戏列表中显示。</summary>
+    private static void MarkDependencyVersion(string root, string id)
+    {
+        try
+        {
+            var directory = Path.Combine(root, "versions", id);
+            if (!File.Exists(Path.Combine(directory, id + ".json"))) return;
+            Directory.CreateDirectory(directory);
+            var marker = Path.Combine(directory, InstanceStore.DependencyMarker);
+            if (!File.Exists(marker)) File.WriteAllText(marker, "");
+        }
+        catch (Exception error)
+        {
+            System.Diagnostics.Trace.TraceWarning("标记原版依赖失败：{0}", error.GetType().Name);
+        }
+    }
+    /// <summary>确认没有其他版本继承后，删除本次自动补装的原版父版本；失败时保留并标记为依赖。</summary>
+    private static async Task RemoveAutoInstalledBaseAsync(string root, string game, string name, bool baseExisted)
+    {
+        if (string.Equals(name, game, StringComparison.OrdinalIgnoreCase)) return;
+        var versionsRoot = Path.GetFullPath(Path.Combine(root, "versions"));
+        var directory = Path.GetFullPath(Path.Combine(versionsRoot, game));
+        if (!Directory.Exists(directory)) return;
+        if (!string.Equals(Path.GetDirectoryName(directory), versionsRoot, StringComparison.OrdinalIgnoreCase)) return;
+        if (File.Exists(Path.Combine(directory, InstanceStore.FileName))) return;
+        // 旧版本留下的标记也可以清理；没有标记且非本次安装创建的原版目录不碰。
+        if (baseExisted && !File.Exists(Path.Combine(directory, InstanceStore.DependencyMarker))) return;
+        try
+        {
+            if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0) return;
+            // 版本目录里出现用户数据时不删除，退化为隐藏，避免把玩过的原版目录清掉。
+            foreach (var folder in new[] { "mods", "saves", "config", "resourcepacks", "shaderpacks", "logs", "crash-reports" })
+                if (Directory.Exists(Path.Combine(directory, folder))) return;
+            if (File.Exists(Path.Combine(directory, "options.txt"))) return;
+            var reader = new FMCore.Versions.MinecraftVersionReader();
+            var versions = await reader.GetVersionsAsync(root, CancellationToken.None);
+            foreach (var version in versions)
+            {
+                if (string.Equals(version.Id, game, StringComparison.Ordinal)) continue;
+                var chain = reader.GetInheritanceChain(version, versions);
+                if (chain.Any(item => string.Equals(item.Id, game, StringComparison.Ordinal))) return;
+            }
+            Directory.Delete(directory, true);
+        }
+        catch (Exception error)
+        {
+            System.Diagnostics.Trace.TraceWarning("清理自动补装的原版失败：{0}", error.GetType().Name);
+            MarkDependencyVersion(root, game);
+        }
     }
     private async Task InstallComponentsAsync(string root, string name, string game, string loader, string loaderVersion, string optifine, PreviewTask task, CancellationToken token)
     {
@@ -270,7 +331,16 @@ public sealed partial class PreviewSession
                     }
                     else java=await RuntimeSupport.SelectJavaAsync(SavedSettings.JavaPath,null,token);
                 }
-                if (loader == "Fabric") await new FabricInstaller(game, loaderVersion, root, name, threads) { Source = source }.InstallAsync(p => Report(task, p.Message, p.Download), token);
+                if (loader == "Fabric")
+                {
+                    await new FabricInstaller(game, loaderVersion, root, name, threads) { Source = source }.InstallAsync(p => Report(task, p.Message, p.Download), token);
+                    try { await InstallFabricApiAsync(root, name, game, task, token); }
+                    catch (Exception error) when (error is not OperationCanceledException)
+                    {
+                        Log("Fabric API 自动安装失败：" + RuntimeSupport.Error(error));
+                        Report(task, "Fabric API 自动安装失败，可稍后从下载页安装");
+                    }
+                }
                 else if (loader == "Forge")
                 {
                     await new ForgeInstaller(game,loaderVersion,root,java!,name,threads){Source=source}.InstallAsync(p=>Report(task,p.Message,p.Download,p.InstallerDownload),token);
@@ -324,6 +394,27 @@ public sealed partial class PreviewSession
                 }
                 // 核心安装器默认使用独立工作目录；共享模式还需将旧版资源映射到实际启动目录。
                 if(!installed.UsesGameIsolation)await CheckAndCompleteFilesAsync(installed,task,token);
+    }
+    /// <summary>Fabric 安装完成后自动装 Fabric API；只取与当前游戏和 fabric 加载器匹配的最新版本。</summary>
+    private async Task InstallFabricApiAsync(string root, string name, string game, PreviewTask task, CancellationToken token)
+    {
+        var instance = new PreviewInstance(name, name, game, "Fabric") { Root = root, IsolationMode = SavedSettings.VersionIsolation };
+        ModpackArchive.EnsureInstanceWritePath(instance);
+        var client = CommunitySource.NewClient();
+        Report(task, "查询 Fabric API");
+        var versions = await client.GetVersionsAsync("fabric-api", game, "fabric", token);
+        var version = versions.FirstOrDefault(item => item.Files.Count > 0);
+        var file = version?.PrimaryFile ?? version?.Files.FirstOrDefault();
+        if (version is null || file is null)
+        {
+            Report(task, "当前游戏版本没有兼容的 Fabric API");
+            return;
+        }
+        Report(task, "安装 Fabric API " + version.VersionNumber);
+        var plan = await ResourceFileInstaller.PlanAsync(instance,
+            [new ResourceInstallFile("mods/" + file.Filename, "P7dR8mSH", version.Id, "Fabric API", file)], token);
+        await ResourceFileInstaller.ApplyAsync(instance, plan, client, _configuration.ConfigDirectory,
+            (stage, progress) => Report(task, stage, file: progress), token);
     }
     private Task BeginLaunchAsync()
     {
