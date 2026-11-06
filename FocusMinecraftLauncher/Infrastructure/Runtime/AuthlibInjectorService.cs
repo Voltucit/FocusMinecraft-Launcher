@@ -34,6 +34,7 @@ public static class AuthlibInjectorService
             if (File.Exists(ManagedPath)) return ManagedPath;
             report?.Invoke("下载 authlib-injector");
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(120) };
+            http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", CommunitySource.UserAgent);
             using var document = JsonDocument.Parse(await http.GetStringAsync(MetadataAddress, cancellationToken));
             var download = document.RootElement.GetProperty("download_url").GetString()
                 ?? throw new InvalidDataException("authlib-injector 发布信息不完整。");

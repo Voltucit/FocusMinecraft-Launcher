@@ -31,9 +31,7 @@
         <TextBlock Text="快捷入口" Style="{StaticResource SectionTitle}" Margin="0,32,0,16"/>
         <WrapPanel ToolTipService.ShowOnDisabled="True">
             <fluent:Button Content="游戏文件夹" Command="{Binding OpenFolder}" CommandParameter="" Margin="0,0,12,12"/>
-            <fluent:Button Content="存档文件夹" Command="{Binding OpenFolder}" CommandParameter="saves" Margin="0,0,12,12"/>
             <fluent:Button Content="Mod 文件夹" Command="{Binding OpenFolder}" CommandParameter="mods" Margin="0,0,12,12"/>
-            <fluent:Button Content="资源包文件夹" Command="{Binding OpenFolder}" CommandParameter="resourcepacks" Margin="0,0,12,12"/>
             <fluent:Button Content="删除当前游戏" Command="{Binding RequestRemove}" Style="{StaticResource DangerButton}" Margin="0,0,12,12"/>
         </WrapPanel>
         <Expander Header="高级管理" Margin="0,16,0,0">

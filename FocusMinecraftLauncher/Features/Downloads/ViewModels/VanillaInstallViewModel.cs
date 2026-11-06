@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows.Input;
 using FocusMinecraftLauncher.Preview;
@@ -12,13 +13,29 @@ public sealed class VanillaVersionRowViewModel(GameVersionItem game, Action<Game
     public UiCommand Configure { get; } = new(_ => configure(game));
     public string AccessibleName => "Minecraft "+Game.Number+"，安装";
 }
-public sealed class VanillaGroupViewModel(string title, IEnumerable<VanillaVersionRowViewModel> rows, bool expanded) : ObservableObject
+public sealed class VanillaGroupViewModel : ObservableObject
 {
-    private bool _expanded = expanded;
-    public string Title { get; } = title;
-    public IReadOnlyList<VanillaVersionRowViewModel> Rows { get; } = rows.ToArray();
-    public string Count => Rows.Count + " 个版本";
+    /// <summary>首次和每次“加载更多”渲染的行数，避免一次创建几百个版本按钮。</summary>
+    private const int PageSize=40;
+    private readonly IReadOnlyList<VanillaVersionRowViewModel> _rows;
+    private bool _expanded;
+    public string Title { get; }
+    public IReadOnlyList<VanillaVersionRowViewModel> Rows => _rows;
+    public ObservableCollection<VanillaVersionRowViewModel> VisibleRows { get; } = [];
+    public string Count => _rows.Count + " 个版本";
+    public bool HasMore => VisibleRows.Count < _rows.Count;
+    public UiCommand LoadMore { get; }
     public bool IsExpanded { get => _expanded; set => Set(ref _expanded, value); }
+    public VanillaGroupViewModel(string title, IEnumerable<VanillaVersionRowViewModel> rows, bool expanded)
+    {
+        Title=title;_expanded=expanded;_rows=rows.ToArray();
+        foreach(var row in _rows.Take(PageSize))VisibleRows.Add(row);
+        LoadMore=new(_ =>
+        {
+            foreach(var row in _rows.Skip(VisibleRows.Count).Take(PageSize))VisibleRows.Add(row);
+            Changed(nameof(HasMore));CommandManager.InvalidateRequerySuggested();
+        },_=>HasMore);
+    }
 }
 public sealed class VanillaCatalogViewModel : ObservableObject
 {

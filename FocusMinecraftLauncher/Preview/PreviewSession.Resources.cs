@@ -25,7 +25,7 @@ public sealed partial class PreviewSession
         PackImportRequest? packImport = null;
         Enqueue(PreviewTaskKind.Resource, file.FileName, string.Join(" / ", file.GameVersions), root, targetId, async (task, token) =>
         {
-            var client = new ModrinthClient();
+            var client = Infrastructure.Runtime.CommunitySource.NewClient();
             if (pack)
             {
                 var destination = Path.Combine(_configuration.ConfigDirectory, "Downloads", file.DownloadFile.Hashes.Sha1 ?? file.CoreVersion.Id, Path.GetFileName(file.FileName));

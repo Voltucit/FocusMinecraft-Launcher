@@ -21,7 +21,7 @@ public sealed class CurseForgeClient
     };
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    public const string UserAgent = "FocusMinecraftLauncher/2.0.5 (+https://github.com/Voltucit/FocusMinecraft-Launcher)";
+    public static string UserAgent => CommunitySource.UserAgent;
 
     /// <summary>下载地址只把 edge.forgecdn.net 换成镜像；mediafilez 等其它 CDN 官方明确不镜像。</summary>
     public static string Rewrite(string address)
@@ -60,7 +60,7 @@ public sealed class CurseForgeClient
         _ => null
     };
 
-    public async Task<CurseForgePage> SearchAsync(DownloadSection section, string? query, string? gameVersion, string? loader, int offset, int limit, CancellationToken token, int? categoryId = null)
+    public async Task<CurseForgePage> SearchAsync(DownloadSection section, string? query, string? gameVersion, string? loader, int offset, int limit, CancellationToken token, int? categoryId = null, bool background = false)
     {
         var builder = new StringBuilder($"mods/search?gameId=432&classId={ClassId(section)}&sortField=2&sortOrder=desc&index={offset}&pageSize={Math.Clamp(limit, 1, 50)}");
         if (!string.IsNullOrWhiteSpace(query)) builder.Append("&searchFilter=").Append(Uri.EscapeDataString(query.Trim()));
@@ -68,7 +68,7 @@ public sealed class CurseForgeClient
         if (categoryId is { } category) builder.Append("&categoryId=").Append(category.ToString(CultureInfo.InvariantCulture));
         if (LoaderType(loader) is { } type && section is DownloadSection.Mods or DownloadSection.Modpacks)
             builder.Append("&modLoaderType=").Append(type);
-        using var document = await GetAsync(builder.ToString(), token);
+        using var document = await GetAsync(builder.ToString(), token, background);
         var data = document.RootElement.GetProperty("data");
         var mods = new List<CurseForgeMod>();
         foreach (var item in data.EnumerateArray()) mods.Add(ReadMod(item));
@@ -77,9 +77,9 @@ public sealed class CurseForgeClient
     }
 
     /// <summary>分类列表用于把界面的标签名换成接口需要的 categoryId。</summary>
-    public async Task<IReadOnlyList<CurseForgeCategory>> GetCategoriesAsync(DownloadSection section, CancellationToken token)
+    public async Task<IReadOnlyList<CurseForgeCategory>> GetCategoriesAsync(DownloadSection section, CancellationToken token, bool background = false)
     {
-        using var document = await GetAsync($"categories?gameId=432&classId={ClassId(section)}", token);
+        using var document = await GetAsync($"categories?gameId=432&classId={ClassId(section)}", token, background);
         var items = new List<CurseForgeCategory>();
         foreach (var item in document.RootElement.GetProperty("data").EnumerateArray())
         {
@@ -114,26 +114,35 @@ public sealed class CurseForgeClient
         return files;
     }
 
-    /// <summary>用文件指纹反查 CurseForge 文件；批量上限 1000，失败返回空表而不影响其它来源的检查。</summary>
-    public async Task<IReadOnlyDictionary<uint, long>> MatchFingerprintsAsync(IReadOnlyList<uint> fingerprints, CancellationToken token)
+    /// <summary>用文件指纹反查 CurseForge 文件；批量上限 1000，需要明确反馈失败的详情跳转可启用 requireSuccess。</summary>
+    public async Task<IReadOnlyDictionary<uint, long>> MatchFingerprintsAsync(IReadOnlyList<uint> fingerprints, CancellationToken token, bool requireSuccess = false)
+        => (await MatchFingerprintFilesAsync(fingerprints,token,requireSuccess)).ToDictionary(pair=>pair.Key,pair=>pair.Value.ModId);
+
+    /// <summary>以响应中的文件指纹关联本地文件，保留已安装文件的发布时间；不依赖响应数组的位置。</summary>
+    internal async Task<IReadOnlyDictionary<uint, CurseForgeFingerprintMatch>> MatchFingerprintFilesAsync(IReadOnlyList<uint> fingerprints, CancellationToken token, bool requireSuccess = false)
     {
-        var result = new Dictionary<uint, long>();
+        var result = new Dictionary<uint, CurseForgeFingerprintMatch>();
         if (fingerprints.Count == 0) return result;
-        using var request = new HttpRequestMessage(HttpMethod.Post, "fingerprints")
+        using var response = await MirrorGate.SendAsync(Http,()=>
         {
-            Content = JsonContent.Create(new { fingerprints = fingerprints.Take(1000).ToArray() })
-        };
-        request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
-        using var response = await Http.SendAsync(request, token);
-        if (!response.IsSuccessStatusCode) return result;
+            var request=new HttpRequestMessage(HttpMethod.Post,"fingerprints")
+            {Content=JsonContent.Create(new{fingerprints=fingerprints.Take(1000).ToArray()})};
+            request.Headers.TryAddWithoutValidation("User-Agent",UserAgent);
+            return request;
+        },token);
+        if (!response.IsSuccessStatusCode)
+        { if(requireSuccess)response.EnsureSuccessStatusCode();return result; }
         using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(token), cancellationToken: token);
-        if (!document.RootElement.TryGetProperty("data", out var data) || !data.TryGetProperty("exactMatches", out var matches)) return result;
+        if (!document.RootElement.TryGetProperty("data", out var data) || data.ValueKind!=JsonValueKind.Object
+            || !data.TryGetProperty("exactMatches", out var matches) || matches.ValueKind!=JsonValueKind.Array)
+        { if(requireSuccess)throw new InvalidDataException("CurseForge 返回了无法读取的文件匹配结果。");return result; }
         foreach (var match in matches.EnumerateArray())
         {
-            if (!match.TryGetProperty("file", out var file) || !file.TryGetProperty("id", out var fileId)) continue;
-            if (!match.TryGetProperty("id", out var modId)) continue;
-            if (ReadFile(file) is { } parsed && file.TryGetProperty("modId", out var owner)) result[parsed.Fingerprint] = owner.GetInt64();
-            else _ = fileId;
+            if(match.ValueKind!=JsonValueKind.Object)continue;
+            if (!match.TryGetProperty("file", out var file) || file.ValueKind!=JsonValueKind.Object || ReadFile(file) is not {} parsed) continue;
+            var modId=file.TryGetProperty("modId",out var owner)&&owner.TryGetInt64(out var ownerId)?ownerId
+                :match.TryGetProperty("id",out var id)&&id.TryGetInt64(out var matchId)?matchId:0;
+            if(modId>0&&fingerprints.Contains(parsed.Fingerprint))result[parsed.Fingerprint]=new(modId,parsed);
         }
         return result;
     }
@@ -173,11 +182,14 @@ public sealed class CurseForgeClient
         }
     }
 
-    private static async Task<JsonDocument> GetAsync(string path, CancellationToken token)
+    private static async Task<JsonDocument> GetAsync(string path, CancellationToken token, bool background = false)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, path);
-        request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
-        using var response = await Http.SendAsync(request, token);
+        using var response = await MirrorGate.SendAsync(Http, () =>
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, path);
+            request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
+            return request;
+        }, token, background);
         if (response.StatusCode == HttpStatusCode.NotFound) throw new InvalidDataException("CurseForge 镜像暂时没有这个资源，请稍后再试。");
         response.EnsureSuccessStatusCode();
         return await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(token), cancellationToken: token);
@@ -212,6 +224,7 @@ public sealed class CurseForgeClient
     private static CurseForgeFile? ReadFile(JsonElement item)
     {
         if (!item.TryGetProperty("id", out var id) || !item.TryGetProperty("fileName", out var name)) return null;
+        DateTimeOffset? publishedAt=DateTimeOffset.TryParse(Text(item,"fileDate"),CultureInfo.InvariantCulture,DateTimeStyles.AssumeUniversal,out var published)?published:null;
         var tokens = item.TryGetProperty("gameVersions", out var versions)
             ? versions.EnumerateArray().Select(version => version.GetString() ?? "").ToArray()
             : [];
@@ -224,7 +237,7 @@ public sealed class CurseForgeClient
             Text(item, "downloadUrl") ?? "",
             item.TryGetProperty("fileLength", out var length) ? length.GetInt64() : 0,
             FileHash(item, 1),
-            item.TryGetProperty("fileDate", out var date) && DateTimeOffset.TryParse(date.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var published) ? DateOnly.FromDateTime(published.Date) : DateOnly.FromDateTime(DateTime.Today),
+            publishedAt is {} date?DateOnly.FromDateTime(date.Date):DateOnly.FromDateTime(DateTime.Today),
             item.TryGetProperty("downloadCount", out var downloads) ? downloads.GetInt64() : 0,
             item.TryGetProperty("fileFingerprint", out var fingerprint) ? (uint)fingerprint.GetInt64() : 0u,
             gameVersions,
@@ -233,7 +246,7 @@ public sealed class CurseForgeClient
                 ? dependencies.EnumerateArray().Select(dependency => new CurseForgeDependency(
                     dependency.TryGetProperty("modId", out var mod) ? mod.GetInt64() : 0,
                     dependency.TryGetProperty("relationType", out var relation) ? relation.GetInt32() : 3)).Where(dependency => dependency.ModId > 0).ToArray()
-                : []);
+                : []) {PublishedAt=publishedAt};
     }
 
     private static string? FileHash(JsonElement item, int algorithm)
@@ -261,7 +274,13 @@ public sealed record CurseForgeMod(long Id, string Name, string Slug, string Sum
 
 public sealed record CurseForgeFile(long Id, string FileName, string DisplayName, string DownloadUrl, long FileLength,
     string? Sha1, DateOnly Date, long Downloads, uint Fingerprint, string[] GameVersions, string[] Loaders,
-    IReadOnlyList<CurseForgeDependency> Dependencies);
+    IReadOnlyList<CurseForgeDependency> Dependencies)
+{
+    /// <summary>保留完整发布时刻用于更新排序，缺失时不能假定文件更新。</summary>
+    public DateTimeOffset? PublishedAt {get;init;}
+}
+
+internal sealed record CurseForgeFingerprintMatch(long ModId,CurseForgeFile File);
 
 public sealed record CurseForgeDependency(long ModId, int RelationType)
 {

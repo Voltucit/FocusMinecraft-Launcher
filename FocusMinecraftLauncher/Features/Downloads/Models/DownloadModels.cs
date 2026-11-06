@@ -31,6 +31,14 @@ public sealed record ResourceProject(string Id, DownloadSection Category, string
     public string? IconUrl { get; init; }
     public ImageSource? LoadedImage { get; set; }
     public ImageSource Image => LoadedImage ?? ResourceArtwork.Get(ImageKey);
+    /// <summary>简介的中文译文，取不到时留空并继续显示原文。</summary>
+    public string? TranslatedDescription { get; set; }
+    /// <summary>MC 百科提供的中文名，取不到时留空并继续显示项目原名。</summary>
+    public string? ChineseName { get; set; }
+    public string TitleText => ChineseName is { Length: > 0 } chinese ? chinese : Name;
+    /// <summary>标题已经换成中文名时，用小字把原名带在下面，避免认错项目。</summary>
+    public string? OriginalNameText => ChineseName is { Length: > 0 } && !Name.Equals(ChineseName, StringComparison.OrdinalIgnoreCase) ? Name : null;
+    public string DescriptionText => TranslatedDescription is { Length: > 0 } translated ? translated : Description;
     public string AliasText => string.Join(" / ", Aliases.Where(a => !a.Equals(Name, StringComparison.OrdinalIgnoreCase)));
     public string TagsText => Tags.Length == 0 ? "类型未提供" : string.Join(" / ", Tags);
     public string CompatibilityText => ResourceText.VersionSummary(GameVersions);
@@ -42,7 +50,7 @@ public sealed record ResourceProject(string Id, DownloadSection Category, string
     public string DownloadsText => Downloads is { } count ? ResourceText.Count(count) + " 次下载" : "下载量未知";
     public string FullDownloads => Downloads?.ToString("N0", CultureInfo.InvariantCulture) ?? "未知";
     public string UpdatedText => Updated is { } date ? "更新 " + date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : "更新时间未提供";
-    public string Introduction => PlainText(Body.Length > 0 ? Body : Description);
+    public string Introduction => PlainText(Body.Length > 0 ? Body : DescriptionText);
     private static string PlainText(string text)
     {
         text=System.Text.RegularExpressions.Regex.Replace(text,@"!\[[^\]]*\]\([^)]*\)","");

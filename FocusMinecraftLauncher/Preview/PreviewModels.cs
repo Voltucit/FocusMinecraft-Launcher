@@ -95,6 +95,8 @@ public sealed class PreviewAccount : ObservableObject
 }
 /// <summary>从实例进入资源下载时携带的筛选上下文：目标游戏版本与加载器（空串表示不限）。</summary>
 public sealed record ResourceFilter(string GameVersion, string Loader);
+/// <summary>从已安装 Mod 进入下载详情时的一次性请求；项目 ID、筛选上下文与本地已知名称一同传递，先出页面再补数据。</summary>
+public sealed record ResourceDetailRequest(string ProjectId, ResourceFilter Filter, string? Name = null);
 /// <summary>由核心读取的本地实例及启动器显示元数据。</summary>
 public sealed class PreviewInstance(string id, string name, string version, string loader, string versionType = "release") : ObservableObject
 {

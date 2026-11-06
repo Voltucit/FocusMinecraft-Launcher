@@ -10,6 +10,6 @@ public partial class CommunityResourcePage : UserControl
     private void UpdateFilterWidth(object sender, RoutedEventArgs e) => UpdateWidth();
     private void UpdateWidth()
     {
-        if (DataContext is CommunityCatalogViewModel vm) vm.NameFieldWidth = Math.Max(180, ActualWidth - 454);
+        if (DataContext is CommunityCatalogViewModel vm) vm.NameFieldWidth = Math.Max(180, ActualWidth - 300);
     }
 }

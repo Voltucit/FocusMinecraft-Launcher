@@ -29,6 +29,7 @@ public static class JavaRuntimeInstaller
         Timeout = TimeSpan.FromSeconds(60),
         MaxResponseContentBufferSize = MaximumMetadataBytes
     };
+    static JavaRuntimeInstaller() => Client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", CommunitySource.UserAgent);
 
     /// <summary>核心只提供 Windows x64 的 8、16、17、21、25 五个官方运行时。</summary>
     public static bool CanInstall(int major) =>

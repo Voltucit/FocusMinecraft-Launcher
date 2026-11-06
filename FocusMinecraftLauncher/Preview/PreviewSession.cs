@@ -107,8 +107,14 @@ public sealed partial class PreviewSession : ObservableObject, IDisposable
         }
     }
     public int DownloadTab { get => _tab; set => Set(ref _tab, value); }
-    /// <summary>实例页跳转“下载 Mod”时携带的筛选上下文；下载页读取后立即清空，只生效一次。</summary>
-    public ResourceFilter? PendingResourceFilter { get; set; }
+    private ResourceFilter? _pendingResourceFilter;
+    /// <summary>每次从游戏页进入“下载新 Mod”均通知下载页应用条件；读取后清空，供下次入口重新触发。</summary>
+    public ResourceFilter? PendingResourceFilter
+    { get => _pendingResourceFilter; set => Set(ref _pendingResourceFilter, value); }
+    private ResourceDetailRequest? _pendingResourceDetail;
+    /// <summary>通知已创建或首次打开的下载页读取指定资源；接收方取出后清空。</summary>
+    public ResourceDetailRequest? PendingResourceDetail
+    { get => _pendingResourceDetail; set => Set(ref _pendingResourceDetail, value); }
     public UiCommand Launch { get; }
     public UiCommand CancelTask { get; }
     public UiCommand RetryTask { get; }

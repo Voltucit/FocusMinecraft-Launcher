@@ -64,7 +64,7 @@ public sealed class InstanceExportViewModel : ObservableObject, IDisposable
     public UiCommand LoadConfiguration { get; }
     public UiCommand SaveConfiguration { get; }
     public UiCommand Guide { get; }
-    public InstanceExportViewModel(PreviewSession session,PreviewInstance instance,InstanceModsViewModel mods)
+    public InstanceExportViewModel(PreviewSession session,PreviewInstance instance,InstanceContentViewModel mods)
     {
         _session=session;Instance=instance;_name=instance.Name;
         SelectAll=new(_=>{foreach(var node in Content)node.IsChecked=true;},_=>!IsBusy&&!_loading);

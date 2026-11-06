@@ -34,6 +34,12 @@ public partial class App : Application
         {if(e.Args[index]=="--launch-instance")RequestedLaunchId=e.Args[++index];else if(e.Args[index]=="--launch-root")RequestedLaunchRoot=e.Args[++index];}
 
         Configuration = await LauncherConfiguration.OpenAsync();
+        Infrastructure.Runtime.CommunitySource.Apply(Configuration);
+        // 下载由 FMCore 统一发起，在这里补上镜像要求的 UA：名称固定、版本随发布更新。
+        FMCore.Downloads.FileDownloader.UserAgent = Infrastructure.Runtime.CommunitySource.UserAgent;
+        // 中文名默认开启，设置里关掉后本次启动不再请求 MC 百科。
+        Infrastructure.Runtime.WikiNameService.Enabled =
+            LauncherConfiguration.Boolean(Configuration.ReadLauncher()["downloads"]?["wikiNames"], true);
         if (updateError.Length > 0) Configuration.ReportNotice(updateError);
         Updates = new(Configuration);
         var appearance = Configuration.ReadLauncher()["appearance"];

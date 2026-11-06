@@ -17,7 +17,7 @@ public static class HomeContentService
     private static HttpClient CreateClient()
     {
         var client=new HttpClient{Timeout=TimeSpan.FromSeconds(25),MaxResponseContentBufferSize=8*1024*1024};
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("FocusMinecraftLauncher/2.0 (+https://github.com/Voltucit/FocusMinecraft-Launcher)");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd(FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.UserAgent);
         client.DefaultRequestHeaders.Accept.ParseAdd("application/json");return client;
     }
     public static async Task<IReadOnlyList<HomeContentEntry>> ReleasesAsync(CancellationToken token)

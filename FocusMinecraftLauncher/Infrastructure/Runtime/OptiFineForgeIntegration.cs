@@ -17,6 +17,11 @@ public static class OptiFineForgeIntegration
 {
     private static readonly HttpClient Metadata = new() { Timeout = TimeSpan.FromSeconds(30), MaxResponseContentBufferSize = 2 * 1024 * 1024 };
     private static readonly HttpClient Packages = new(new HttpClientHandler { MaxAutomaticRedirections = 5 }) { Timeout = TimeSpan.FromMinutes(5) };
+    static OptiFineForgeIntegration()
+    {
+        Metadata.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", CommunitySource.UserAgent);
+        Packages.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", CommunitySource.UserAgent);
+    }
     private static readonly SemaphoreSlim CatalogLock = new(1, 1);
     private static IReadOnlyDictionary<string, OptiFineForgeSupport>? _catalog;
     private static DateTimeOffset _catalogUntil;

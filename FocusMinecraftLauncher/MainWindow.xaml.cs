@@ -139,6 +139,8 @@ public partial class MainWindow : FluentWindow
         if (!_restoringAccountsStarted)
         {
             _restoringAccountsStarted = true;
+            // 资源预热独立于账号会话恢复，避免登录服务较慢时拖延社区列表。
+            _ = Features.Downloads.ViewModels.CommunityCatalogViewModel.PrefetchAsync();
             _ = InitializeBackendAsync();
         }
         if (_captionFeedback == null && PresentationSource.FromVisual(this) is HwndSource source)
@@ -165,18 +167,18 @@ public partial class MainWindow : FluentWindow
         catch(Exception error){_navigation.Session.NotifyTask(Infrastructure.Runtime.RuntimeSupport.Error(error),true);}
     }
     private static bool IsPack(string path)=>System.IO.File.Exists(path)&&(path.EndsWith(".mrpack",StringComparison.OrdinalIgnoreCase)||path.EndsWith(".zip",StringComparison.OrdinalIgnoreCase));
-    /// <summary>拖拽目标是 Mod 管理页时让事件继续冒泡，由该页把 jar 装进当前实例。</summary>
-    private static bool IsModsDrop(object? source,DragEventArgs e)=>
+    /// <summary>拖拽目标是内容管理页时让事件继续冒泡，由该页按当前类型把 jar 或 zip 装进实例。</summary>
+    private static bool IsContentDrop(object? source,DragEventArgs e)=>
         e.Data.GetDataPresent(DataFormats.FileDrop)
         && e.Data.GetData(DataFormats.FileDrop) is string[] files
         && files.Length>0
-        && files.All(path=>path.EndsWith(".jar",StringComparison.OrdinalIgnoreCase))
-        && FindModsPage(source)!=null;
-    private static Features.Home.Views.Instances.InstanceModsPage? FindModsPage(object? source)
+        && files.All(path=>path.EndsWith(".jar",StringComparison.OrdinalIgnoreCase)||path.EndsWith(".zip",StringComparison.OrdinalIgnoreCase))
+        && FindContentPage(source)!=null;
+    private static Features.Home.Views.Instances.InstanceContentPage? FindContentPage(object? source)
     {
         for(var node=source as DependencyObject;node!=null;)
         {
-            if(node is Features.Home.Views.Instances.InstanceModsPage page)return page;
+            if(node is Features.Home.Views.Instances.InstanceContentPage page)return page;
             node=node is Visual or System.Windows.Media.Media3D.Visual3D?VisualTreeHelper.GetParent(node):LogicalTreeHelper.GetParent(node);
         }
         return null;
@@ -184,17 +186,17 @@ public partial class MainWindow : FluentWindow
     private void WindowDragOver(object sender,DragEventArgs e)
     {
         if(!e.Data.GetDataPresent(DataFormats.FileDrop))return;
-        if(IsModsDrop(e.OriginalSource,e))return;
+        if(IsContentDrop(e.OriginalSource,e))return;
         var files=e.Data.GetData(DataFormats.FileDrop) as string[];
         e.Effects=files is {Length:1}&&IsPack(files[0])&&!_navigation.Session.IsBusy?DragDropEffects.Copy:DragDropEffects.None;e.Handled=true;
     }
     private async void WindowDrop(object sender,DragEventArgs e)
     {
         if(!e.Data.GetDataPresent(DataFormats.FileDrop))return;
-        if(IsModsDrop(e.OriginalSource,e))return;
+        if(IsContentDrop(e.OriginalSource,e))return;
         e.Handled=true;
         if(e.Data.GetData(DataFormats.FileDrop) is string[] {Length:1} files&&IsPack(files[0])&&!_navigation.Session.IsBusy)await _navigation.Session.ImportModpackAsync(files[0]);
-        else _navigation.Session.NotifyTask("请一次拖入一个整合包，或把 Mod 拖到 Mod 管理页，并等待当前任务结束。",true);
+        else _navigation.Session.NotifyTask("请一次拖入一个整合包，或把 Mod、资源包、光影包拖到对应的管理页，并等待当前任务结束。",true);
     }
     /// <summary>贴靠形成窄窗口时收起导航，恢复宽度后还原此前选择，为内容保留空间。</summary>
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)

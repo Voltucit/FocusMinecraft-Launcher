@@ -16,7 +16,10 @@
     <TabControl Grid.Row="2" SelectedIndex="{Binding SelectedTab, Mode=TwoWay}" IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="当前游戏管理">
         <TabItem Header="概览"><views:InstanceOverviewPage DataContext="{Binding Overview}"/></TabItem>
         <TabItem Header="设置"><views:InstanceLaunchSettingsPage DataContext="{Binding Settings}"/></TabItem>
-        <TabItem Header="Mod 管理"><views:InstanceModsPage DataContext="{Binding Mods}"/></TabItem>
+        <TabItem Header="存档管理"><views:InstanceSavesPage DataContext="{Binding Saves}"/></TabItem>
+        <TabItem Header="资源包管理"><views:InstanceContentPage DataContext="{Binding ResourcePacks}"/></TabItem>
+        <TabItem Header="光影管理"><views:InstanceContentPage DataContext="{Binding Shaders}"/></TabItem>
+        <TabItem Header="Mod 管理"><views:InstanceContentPage DataContext="{Binding Mods}"/></TabItem>
         <TabItem Header="备份"><views:InstanceBackupsPage DataContext="{Binding Backups}"/></TabItem>
         <TabItem Header="日志"><views:InstanceLogsPage DataContext="{Binding Logs}"/></TabItem>
         <TabItem Header="导出"><views:InstanceExportPage DataContext="{Binding Export}"/></TabItem>

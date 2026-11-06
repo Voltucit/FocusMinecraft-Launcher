@@ -17,6 +17,7 @@ public static class LoaderReleaseDates
 {
     private const string NeoForgeMaven = "https://maven.neoforged.net/releases/net/neoforged/neoforge/";
     private static readonly HttpClient Metadata = new() { Timeout = TimeSpan.FromSeconds(15), MaxResponseContentBufferSize = 16 * 1024 * 1024 };
+    static LoaderReleaseDates() => Metadata.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", CommunitySource.UserAgent);
     private static readonly SemaphoreSlim CacheLock = new(1, 1);
     private static readonly Dictionary<string, (IReadOnlyDictionary<string, string> Dates, DateTimeOffset Until)> Cache = new(StringComparer.Ordinal);
     private static readonly IReadOnlyDictionary<string, string> Empty = new Dictionary<string, string>();

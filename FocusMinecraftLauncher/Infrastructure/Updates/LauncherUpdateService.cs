@@ -24,7 +24,7 @@ public sealed class LauncherUpdateService : IDisposable
     public LauncherUpdateService(string root)
     {
         _root = Path.GetFullPath(root);
-        _client.DefaultRequestHeaders.UserAgent.ParseAdd("FMLauncher/" + CurrentVersion);
+        _client.DefaultRequestHeaders.UserAgent.ParseAdd(FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.UserAgent);
         _client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
     }
     public async Task<UpdateRelease?> CheckAsync(CancellationToken token)

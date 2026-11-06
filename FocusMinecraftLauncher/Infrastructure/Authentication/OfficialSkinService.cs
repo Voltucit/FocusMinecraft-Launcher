@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using FMCore.Accounts;
+using FocusMinecraftLauncher.Infrastructure.Runtime;
 
 namespace FocusMinecraftLauncher.Infrastructure.Authentication;
 
@@ -15,6 +16,7 @@ public sealed class OfficialSkinService(string configurationDirectory)
 {
     private readonly string _cacheDirectory = Path.Combine(configurationDirectory, "Skins");
     private static readonly HttpClient Client = new(new HttpClientHandler { AllowAutoRedirect = false });
+    static OfficialSkinService() => Client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", CommunitySource.UserAgent);
     public sealed record SkinImage(BitmapSource Head, byte[] Png, bool CacheSaved = true);
     /// <summary>官方档案返回的披风条目；IsActive 表示当前正在使用的披风。</summary>
     public sealed record CapeEntry(string Id, string Alias, bool IsActive);

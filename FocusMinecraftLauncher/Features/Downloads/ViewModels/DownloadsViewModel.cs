@@ -21,8 +21,6 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
     private DownloadNotification? _notification;
     private ImageSource? _image;
     private bool _compact, _syncing,_disposed;
-    private ResourceFilter? _filter;
-    private bool _filterApplied;
     private int _navigationRevision;
     private readonly CancellationTokenSource _lifetime = new();
     private string _state = "正常";
@@ -67,27 +65,50 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
         session.PropertyChanged += SessionChanged;
         session.TaskNotification += ShowNotification;
         _ = LoadVanillaAsync();
-        if(_categories.TryGetValue(_section,out var currentCategory))_ = EnterCategoryAsync(currentCategory);
+        if(!OpenPendingResource()&&_categories.TryGetValue(_section,out var currentCategory))_ = EnterCategoryAsync(currentCategory);
     }
     private void SessionChanged(object? sender,PropertyChangedEventArgs e)
-    { if(!_syncing && e.PropertyName == nameof(PreviewSession.DownloadTab)) SetSection(Enum.IsDefined((DownloadSection)Session.DownloadTab) ? (DownloadSection)Session.DownloadTab : DownloadSection.Vanilla); }
+    {
+        if(e.PropertyName==nameof(PreviewSession.PendingResourceDetail)){OpenPendingResource();return;}
+        if(e.PropertyName==nameof(PreviewSession.PendingResourceFilter))
+        {
+            // 同一分类再次进入也要消费新的入口条件，不能依赖 DownloadTab 的值发生变化。
+            if(Session.PendingResourceFilter!=null)SetSection(DownloadSection.Mods);
+            return;
+        }
+        if(!_syncing && e.PropertyName == nameof(PreviewSession.DownloadTab)) SetSection(Enum.IsDefined((DownloadSection)Session.DownloadTab) ? (DownloadSection)Session.DownloadTab : DownloadSection.Vanilla);
+    }
+    /// <summary>管理页的游戏条件只作用于本次详情，不写入社区列表的筛选状态。</summary>
+    private bool OpenPendingResource()
+    {
+        if(_disposed||Session.PendingResourceDetail is not {} request)return false;
+        Session.PendingResourceDetail=null;Session.PendingResourceFilter=null;
+        SetSection(DownloadSection.Mods);
+        if(_details.Remove(request.ProjectId,out var previous))previous.Dispose();
+        OpenResource(request.ProjectId,false,request.Filter,request.Name);
+        return true;
+    }
     private void SetSection(DownloadSection section)
     {
         _navigationRevision++;
+        // 离开的分类不再继续预读，把请求名额留给当前页。
+        if(_categories.TryGetValue(_section,out var leaving))leaving.SetActive(false);
         if(section != DownloadSection.Tasks) _lastBrowse = section;
         _section = section; _detail = null; _installation = null; _detailTrail.Clear(); _state = "正常";
         _syncing = true; Session.DownloadTab = (int)section; _syncing = false;
         Changed(nameof(SelectedNavigation)); RefreshRoute();
         if(_categories.TryGetValue(section,out var category)) _ = EnterCategoryAsync(category);
     }
-    /// <summary>首次进入分类时接管实例带来的筛选上下文：自动落到版本与加载器，之后详情页沿用同一范围。</summary>
+    /// <summary>添加新 Mod 的入口条件先同步到列表控件，再加载资料；后续用户选择不被旧条件覆盖。</summary>
     private async Task EnterCategoryAsync(CommunityCatalogViewModel category)
     {
-        if(_filter==null&&Session.PendingResourceFilter is { } pending){_filter=pending;Session.PendingResourceFilter=null;}
+        category.SetActive(true);
+        if(category.Category==DownloadSection.Mods&&Session.PendingResourceFilter is {} pending)
+        {
+            Session.PendingResourceFilter=null;
+            category.ApplyFilter(pending.GameVersion,pending.Loader);
+        }
         await category.EnsureLoadedAsync();
-        if(_filter is not { } filter||_filterApplied||category.Category!=DownloadSection.Mods)return;
-        _filterApplied=true;
-        category.ApplyFilter(filter.GameVersion,filter.Loader);
     }
     private void OpenInstallation(GameVersionItem game)
     {
@@ -103,20 +124,68 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
         catch(Exception error){ShowNotification(Infrastructure.Runtime.RuntimeSupport.Error(error),true);}
     }
     private void ShowNotification(string message, bool isError) { Notification = new(message, isError); Session.SetGlobalNotification(message,isError); }
-    private async void OpenResource(string id,bool versions)
+    /// <summary>普通列表与前置资源跳转沿用当前可见的条件，不读取上一次管理页跳转的临时条件。</summary>
+    private ResourceFilter? VisibleResourceFilter()
+    {
+        if(_detail is {} detail)return new(detail.VersionFilter.IsAllSelected?"":detail.GameVersion,detail.SelectedLoader);
+        if(_categories.TryGetValue(_section,out var category))return new(category.VersionFilter.IsAllSelected?"":category.VersionFilter.SelectedVersion,
+            category.UsesEnvironment&&category.Environment!="全部"?category.Environment:"");
+        return null;
+    }
+    private void OpenResource(string id,bool versions)=>OpenResource(id,versions,VisibleResourceFilter());
+    /// <summary>详情页先出结果再补数据：点击时只用已有或占位的项目建页面，联网失败只写在页面提示里，不弹红色提示条。</summary>
+    private async void OpenResource(string id,bool versions,ResourceFilter? filter,string? name=null)
     {
         var revision=++_navigationRevision;
+        var entry=EnsureEntry(id,name);
         try
         {
-            var project=await _catalog.LoadAsync(id,_lifetime.Token);
-            if(_disposed||revision!=_navigationRevision)return;
-            if(!_entries.TryGetValue(id,out var entry))_entries[id]=entry=new(project,_catalog,OpenResource);else if(!ReferenceEquals(entry.Project,project))entry.UpdateProject(project);
             Preview=null;
             if(_detail!=null&&_detail.Project.Id!=id)_detailTrail.Push(_detail);
-            if(!_details.TryGetValue(id,out var vm))_details[id]=vm=new ResourceDetailViewModel(entry,BackFromDetail,async file=>await OpenDownloadConfirmationAsync(entry,file),async key=>LargeImage=await RemoteArtwork.LoadAsync(key),_filter);_detail=vm;if(versions)vm.SelectedTab=2;RefreshRoute();
+            if(!_details.TryGetValue(id,out var vm))
+                _details[id]=vm=new ResourceDetailViewModel(entry,BackFromDetail,async file=>await OpenDownloadConfirmationAsync(entry,file),async key=>LargeImage=await RemoteArtwork.LoadAsync(key),filter,()=>OpenResource(id,false,filter,name));
+            else vm.ApplyFilter(filter);
+            _detail=vm;if(versions)vm.SelectedTab=2;RefreshRoute();
+            vm.BeginLoading();
+            vm.ClearNotice();
+            // 项目正文先到先显示；版本列表随后在后台补齐，不把首屏卡在整条详情链上。
+            var project=await _catalog.LoadProjectAsync(id,_lifetime.Token);
+            if(_disposed||revision!=_navigationRevision)return;
+            entry.UpdateProject(project);
+            vm.ReportLoading(50);
+            vm.ClearNotice();
+            var full=await _catalog.LoadAsync(id,_lifetime.Token);
+            if(_disposed||revision!=_navigationRevision)return;
+            entry.UpdateProject(full);
+            vm.FinishLoading();
+            vm.ClearNotice();
         }
-        catch(Exception error){if(!_disposed)ShowNotification(Infrastructure.Runtime.RuntimeSupport.Error(error),true);}
+        catch(Exception error)
+        {
+            if(_disposed||revision!=_navigationRevision)return;
+            Session.Log("读取资源详情失败 ["+id+"; "+Infrastructure.Runtime.CommunitySource.Current.Name+"; UA="+Infrastructure.Runtime.CommunitySource.UserAgent+"]："+Infrastructure.Runtime.RuntimeSupport.SafeText(error.ToString()));
+            _details.TryGetValue(id,out var failed);
+            failed?.StopLoading();
+            failed?.ShowNotice(DescribeDetailFailure(error),true);
+        }
     }
+    /// <summary>没有缓存过的项目先用名称做一个占位条目，让详情页立刻有标题可显示。</summary>
+    private ResourceEntryViewModel EnsureEntry(string id,string? name)
+    {
+        if(_entries.TryGetValue(id,out var existing))return existing;
+        var placeholder=new ResourceProject(id,DownloadSection.Mods,string.IsNullOrWhiteSpace(name)?id:name,[],"",[],null,null,null,null,null,null,null);
+        existing=new(placeholder,_catalog,OpenResource);
+        _entries[id]=existing;
+        return existing;
+    }
+    /// <summary>把网络类的失败翻译成页面里的一句话，不再复用“连接服务失败”的红色提示。</summary>
+    private static string DescribeDetailFailure(Exception error)=>error switch
+    {
+        System.Net.Http.HttpRequestException{StatusCode:System.Net.HttpStatusCode.Forbidden}=>"资源服务拒绝了这次请求，稍后可以重试。",
+        System.Net.Http.HttpRequestException=>"暂时连不上资源服务，稍后可以重试。",
+        System.Threading.Tasks.TaskCanceledException=>"读取资源详情超时，稍后可以重试。",
+        _=>"无法读取资源详情："+Infrastructure.Runtime.RuntimeSupport.Error(error)
+    };
     /// <summary>确认框等待当前文件的前置资料读取结束，不使用上一个版本或尚未完成的资料快照。</summary>
     private async Task OpenDownloadConfirmationAsync(ResourceEntryViewModel entry,ResourceFileItem file)
     {

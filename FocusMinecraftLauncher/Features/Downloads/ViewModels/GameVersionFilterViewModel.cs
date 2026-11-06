@@ -14,18 +14,27 @@ public sealed class GameVersionFilterViewModel : ObservableObject
     public string SelectionText => IsAllSelected ? "全部版本" : SelectedVersion;
     public bool IsAllSelected => _selected == "全部";
     public bool IsExpanded { get => _expanded; set => Set(ref _expanded, value); }
-    public IReadOnlyList<GameVersionSeriesViewModel> Series { get; }
+    public IReadOnlyList<GameVersionSeriesViewModel> Series { get; private set; } = [];
     public UiCommand SelectAll { get; }
 
     public GameVersionFilterViewModel(IEnumerable<string> versions, Action selectionChanged)
     {
         _selectionChanged = selectionChanged;
-        Series = versions.Distinct(StringComparer.OrdinalIgnoreCase)
+        UpdateVersions(versions);
+        SelectAll = new(_ => Select("全部"));
+    }
+
+    /// <summary>补充异步取得的版本选项，保留当前选择与展开状态，不重置筛选或触发额外查询。</summary>
+    public void UpdateVersions(IEnumerable<string> versions)
+    {
+        var expansion = Series.ToDictionary(series => series.Title, series => series.IsExpanded);
+        Series = versions.Concat(IsAllSelected ? [] : new[] { SelectedVersion }).Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderByDescending(version => version, MinecraftVersionOrder.Instance)
             .GroupBy(MinecraftVersionOrder.Series)
             .Select(group => new GameVersionSeriesViewModel(group.Key,
-                group.Select(version => new GameVersionChoiceViewModel(version, this)))).ToArray();
-        SelectAll = new(_ => Select("全部"));
+                group.Select(version => new GameVersionChoiceViewModel(version, this)))
+                { IsExpanded = expansion.GetValueOrDefault(group.Key) }).ToArray();
+        Changed(nameof(Series));
     }
 
     public void Select(string version)
