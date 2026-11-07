@@ -99,7 +99,7 @@ public sealed class ResourceDetailViewModel : ObservableObject, IDisposable
         if (Notice.Length > 0) Notice = "";
         if (_retryVisible) { _retryVisible = false; Changed(nameof(ShowRetry)); }
     }
-    public bool IsLoading { get => _loading; private set => Set(ref _loading, value); }
+    public bool IsLoading { get => _loading; private set { if (Set(ref _loading, value)) Changed(nameof(CanRetryFiles)); } }
     public double LoadingPercent { get => _loadingPercent; private set => Set(ref _loadingPercent, value); }
     public string LoadingText => IsLoading ? $"正在加载资源详情（{LoadingPercent:0}%）" : "";
     public void BeginLoading()
@@ -120,6 +120,8 @@ public sealed class ResourceDetailViewModel : ObservableObject, IDisposable
     }
     public IEnumerable<ResourceFileItem> AvailableFiles => Project.Files;
     public bool HasFiles => Project.Files.Count > 0;
+    /// <summary>读取结束但没有任何文件时提供重新读取入口。</summary>
+    public bool CanRetryFiles => !HasFiles && !IsLoading;
     public bool HasGallery => Gallery.Count > 0;
     public bool HasDependencies => Dependencies.Count > 0;
     public string DependencyStatus => Entry.DependencyStatus;
@@ -197,7 +199,7 @@ public sealed class ResourceDetailViewModel : ObservableObject, IDisposable
         if (!LoaderTabs.Any(tab => tab.Key == _loader)) { _loader = ""; Changed(nameof(SelectedLoader)); }
         VersionFilter.UpdateVersions(Project.Files.SelectMany(file => file.GameVersions));
         Gallery = BuildGallery(); Changed(nameof(Gallery)); Changed(nameof(HasGallery));
-        Changed(nameof(HasFiles)); Changed(nameof(AvailableFiles));
+        Changed(nameof(HasFiles)); Changed(nameof(AvailableFiles)); Changed(nameof(CanRetryFiles));
         if (_groupsBuilt) BuildGroups();
     }
     private void EnsureGroups()
@@ -234,7 +236,7 @@ public sealed class ResourceDetailViewModel : ObservableObject, IDisposable
         }
         if (SelectedFile == null || !Groups.SelectMany(group => group.Files).Any(row => ReferenceEquals(row.File, SelectedFile)))
             SelectedFile = Groups.FirstOrDefault()?.Files.FirstOrDefault()?.File;
-        Changed(nameof(HasFiles)); Changed(nameof(AvailableFiles)); FileScroll.Reset();
+        Changed(nameof(HasFiles)); Changed(nameof(AvailableFiles)); Changed(nameof(CanRetryFiles)); FileScroll.Reset();
     }
     private bool MatchesLoader(ResourceFileItem file) => SelectedLoader.Length == 0
         || FileLoaders(file).Contains(SelectedLoader, StringComparer.OrdinalIgnoreCase);

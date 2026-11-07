@@ -89,6 +89,7 @@ public sealed partial class PreviewSession
             GameDirectory = LauncherConfiguration.Text(root["global"]?["gameDirectory"], _configuration.MinecraftDirectory),
             MemoryMb = Math.Max(512, (int)LauncherConfiguration.Number(root["global"]?["memoryMb"], 4096)),
             JvmArguments = LauncherConfiguration.Text(root["global"]?["jvmArguments"]),
+            GcMode = LauncherConfiguration.Text(root["global"]?["gcMode"], "Auto"),
             AutomaticMemory = LauncherConfiguration.Boolean(root["global"]?["automaticMemory"], true),
             OptimizeMemory = LauncherConfiguration.Boolean(root["global"]?["optimizeMemory"]),
             AuthlibInjectorPath = LauncherConfiguration.Text(root["global"]?["authlibInjectorPath"])
@@ -193,6 +194,7 @@ public sealed partial class PreviewSession
                 var global = LauncherConfiguration.Object(root, "global");
                 global["javaPath"] = settings.JavaPath; global["memoryMb"] = settings.MemoryMb;
                 global["gameDirectory"] = settings.GameDirectory; global["jvmArguments"] = settings.JvmArguments;
+                global["gcMode"] = settings.GcMode;
                 global["automaticMemory"] = settings.AutomaticMemory; global["optimizeMemory"] = settings.OptimizeMemory;
                 global["authlibInjectorPath"] = settings.AuthlibInjectorPath;
                 global["versionIsolation"] = settings.VersionIsolation.ToString();

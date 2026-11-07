@@ -69,7 +69,9 @@ public sealed class ResourceCatalog : IDisposable
             var result=new ResourceProject(detail.Id, detail.Loaders.Contains("datapack")?DownloadSection.Datapacks:Section(detail.ProjectType), detail.Title, [], detail.Description, detail.Tags.Select(t => t.DisplayName).ToArray(), detail.GameVersions.ToArray(), detail.Loaders.ToArray(),
                 string.Join(" / ", detail.Authors.Select(a => a.DisplayName)), "Modrinth", detail.Downloads, DateOnly.FromDateTime(detail.UpdatedAt.Date), null)
             { Body = detail.Body, Gallery = detail.Gallery.Select(g => g.Url).ToArray(), IconUrl = detail.IconUrl };
-            result.Files=previous?.Files??[];
+            // 详情和版本可能并发加载；后完成的详情请求不能把已经补好的文件列表覆盖成空。
+            var existing=_projects.GetValueOrDefault(key);
+            result.Files=existing?.Files is {Count:>0} files?files:previous?.Files??[];
             _projects[key]=result;
             _projectLoaded.Add(key);
             return result;
@@ -82,6 +84,16 @@ public sealed class ResourceCatalog : IDisposable
         var key=Normalize(id);
         if(_projects.TryGetValue(key,out var alias))key=alias.Id;
         return _loaded.Contains(key);
+    }
+    /// <summary>丢弃详情缓存，让下一次打开重新读取项目与版本；保留已有文件供网络失败时回退。</summary>
+    public void Invalidate(string id)
+    {
+        var key=Normalize(id);
+        if(_projects.TryGetValue(key,out var alias))key=alias.Id;
+        _loaded.Remove(key);
+        _projectLoaded.Remove(key);
+        _detailLoads.TryRemove(key,out _);
+        _projectLoads.TryRemove(key,out _);
     }
     private static string Normalize(string id)=>
         id.StartsWith("cf-",StringComparison.Ordinal)
@@ -112,8 +124,17 @@ public sealed class ResourceCatalog : IDisposable
                 _projects[id]=result;
                 _projectLoaded.Add(id);
             }
-            AttachFiles(result,await versionsTask);
-            _loaded.Add(id);
+            var versions=await versionsTask;
+            if(versions.Count>0||result.Files.Count==0)AttachFiles(result,versions);
+            // 版本请求与详情请求可能同时完成；若详情对象已被替换，把文件补到当前对象上。
+            if(_projects.TryGetValue(id,out var current)&&!ReferenceEquals(current,result))
+            {
+                if(result.Files.Count>0||current.Files.Count==0)current.Files=result.Files;
+                if(current.LoadedImage is null)current.LoadedImage=result.LoadedImage;
+                result=current;
+            }
+            // 空文件列表不写入已加载缓存，下一次打开或点重试会重新请求版本。
+            if(result.Files.Count>0)_loaded.Add(id);
             if(await RemoteArtwork.LoadAsync(result.IconUrl) is {} image)result.LoadedImage=image;
             return result;
         }
@@ -293,7 +314,7 @@ public static class RemoteArtwork
                 bitmap.CacheOption = BitmapCacheOption.OnLoad; bitmap.DecodePixelWidth = width; bitmap.StreamSource = stream;
                 bitmap.EndInit(); bitmap.Freeze(); return bitmap;
             }, token);
-            if (Cache.Count >= 150) Cache.Clear(); Cache[key] = image; return image;
+            if (Cache.Count >= 64) Cache.Clear(); Cache[key] = image; return image;
         }
         catch (Exception error) when (error is HttpRequestException or IOException or NotSupportedException or OperationCanceledException)
         {

@@ -249,7 +249,7 @@ public sealed class InstanceOptions
     public int Height { get; set; } = 720;
     public bool Fullscreen { get; set; }
     /// <summary>启动前自动生成快照；默认开启，容量由保留份数控制。</summary>
-    public bool AutoBackup { get; set; } = true;
+    public bool AutoBackup { get; set; }
     public int BackupRetention { get; set; } = 5;
     public string JvmArguments { get; set; } = "";
     public string GameArguments { get; set; } = "";

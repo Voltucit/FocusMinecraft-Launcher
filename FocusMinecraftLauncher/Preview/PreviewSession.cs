@@ -170,6 +170,8 @@ public sealed class PreviewSettings
     public bool AutomaticMemory { get; set; } = true;
     public bool OptimizeMemory { get; set; }
     public string JvmArguments { get; set; } = "";
+    /// <summary>垃圾回收器：Auto、G1GC、ZGC 或 None；默认自动使用 G1GC。</summary>
+    public string GcMode { get; set; } = "Auto";
     /// <summary>外置账号启动所需的 authlib-injector；留空时由启动器下载到自己的目录。</summary>
     public string AuthlibInjectorPath { get; set; } = "";
     public PreviewSettings Copy() => (PreviewSettings)MemberwiseClone();

@@ -333,7 +333,7 @@ public sealed partial class PreviewSession
                 }
                 if (loader == "Fabric")
                 {
-                    await new FabricInstaller(game, loaderVersion, root, name, threads) { Source = source }.InstallAsync(p => Report(task, p.Message, p.Download), token);
+                    await new FabricInstaller(game, loaderVersion, root, name, threads) { Source = source, RemoveCreatedBaseVersion = true }.InstallAsync(p => Report(task, p.Message, p.Download), token);
                     try { await InstallFabricApiAsync(root, name, game, task, token); }
                     catch (Exception error) when (error is not OperationCanceledException)
                     {
@@ -343,7 +343,7 @@ public sealed partial class PreviewSession
                 }
                 else if (loader == "Forge")
                 {
-                    await new ForgeInstaller(game,loaderVersion,root,java!,name,threads){Source=source}.InstallAsync(p=>Report(task,p.Message,p.Download,p.InstallerDownload),token);
+                    await new ForgeInstaller(game,loaderVersion,root,java!,name,threads){Source=source,RemoveCreatedBaseVersion=true}.InstallAsync(p=>Report(task,p.Message,p.Download,p.InstallerDownload),token);
                     if(optiFineMod!=null)
                     {
                         token.ThrowIfCancellationRequested();
@@ -355,8 +355,8 @@ public sealed partial class PreviewSession
                         Log("Forge 与 OptiFine 接入完成："+game+" / "+loaderVersion+" / "+component.Edition);
                     }
                 }
-                else if (loader == "NeoForge") await new NeoForgeInstaller(game, loaderVersion, root, java!, name, threads) { Source = source }.InstallAsync(p => Report(task, p.Message, p.Download, p.InstallerDownload), token);
-                else if (optifine.Length > 0) await new OptiFineOnlineInstaller(game, optifine, root, java!, name, threads).InstallAsync(p => Report(task, p.Message, p.Download, p.InstallerDownload), token);
+                else if (loader == "NeoForge") await new NeoForgeInstaller(game, loaderVersion, root, java!, name, threads) { Source = source, RemoveCreatedBaseVersion = true }.InstallAsync(p => Report(task, p.Message, p.Download, p.InstallerDownload), token);
+                else if (optifine.Length > 0) await new OptiFineOnlineInstaller(game, optifine, root, java!, name, threads) { RemoveCreatedBaseVersion = true }.InstallAsync(p => Report(task, p.Message, p.Download, p.InstallerDownload), token);
                 else
                 {
                     await new MinecraftInstaller(game, root, threads) { Source = source }.InstallAsync(p => Report(task, p.Message, p.Download), token);

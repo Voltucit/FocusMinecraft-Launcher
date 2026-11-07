@@ -10,6 +10,7 @@ namespace FocusMinecraftLauncher.Features.Settings.ViewModels;
 public sealed class SettingsViewModel : ObservableObject
 {
     private string _java, _jvm, _authlib = "", _javaError = "", _notice = "";
+    private string _gcMode = "Auto";
     private bool _saving, _importingBackground;
     public string BackgroundActionText => _importingBackground ? "正在读取…" : "选择图片";
     private bool _themeSettingsExpanded;
@@ -49,6 +50,22 @@ public sealed class SettingsViewModel : ObservableObject
     public MemoryAllocationViewModel MemoryAllocation { get; } = new();
     public JavaDetectionViewModel JavaDetection { get; }
     public string JvmArguments { get => _jvm; set { if (Set(ref _jvm, value)) Notice = ""; } }
+    public IReadOnlyList<GcOption> GcChoices { get; } =
+    [
+        new("Auto", "自动"),
+        new("G1GC", "G1GC"),
+        new("ZGC", "ZGC"),
+        new("None", "不添加")
+    ];
+    public string GcMode
+    {
+        get => _gcMode;
+        set
+        {
+            var normalized = GcChoices.Any(choice => string.Equals(choice.Value, value, StringComparison.OrdinalIgnoreCase)) ? value : "Auto";
+            if (Set(ref _gcMode, normalized)) Notice = "";
+        }
+    }
     /// <summary>外置账号使用的 authlib-injector；留空表示由启动器下载并维护。</summary>
     public string AuthlibInjectorPath { get => _authlib; set { if (Set(ref _authlib, value)) { Notice = ""; System.Windows.Input.CommandManager.InvalidateRequerySuggested(); } } }
     public string JavaError { get => _javaError; private set => Set(ref _javaError, value); }
@@ -72,6 +89,7 @@ public sealed class SettingsViewModel : ObservableObject
         _authlib = session.SavedSettings.AuthlibInjectorPath;
         MemoryAllocation.LoadMemoryMb(session.SavedSettings.MemoryMb);
         MemoryAllocation.IsAutomatic = session.SavedSettings.AutomaticMemory; MemoryAllocation.OptimizeBeforeLaunch = session.SavedSettings.OptimizeMemory; _jvm = session.SavedSettings.JvmArguments;
+        GcMode = session.SavedSettings.GcMode;
         MemoryAllocation.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(MemoryAllocationViewModel.AllocatedMemoryGb) or nameof(MemoryAllocationViewModel.IsAutomatic) or nameof(MemoryAllocationViewModel.OptimizeBeforeLaunch)) Notice = "";
@@ -84,7 +102,7 @@ public sealed class SettingsViewModel : ObservableObject
             MemoryAllocation.LoadMemoryMb(session.SavedSettings.MemoryMb);
         MemoryAllocation.IsAutomatic = session.SavedSettings.AutomaticMemory; MemoryAllocation.OptimizeBeforeLaunch = session.SavedSettings.OptimizeMemory;
             MemoryAllocation.IsAutomatic = session.SavedSettings.AutomaticMemory; MemoryAllocation.OptimizeBeforeLaunch = session.SavedSettings.OptimizeMemory;
-            JvmArguments = session.SavedSettings.JvmArguments; AuthlibInjectorPath = session.SavedSettings.AuthlibInjectorPath; JavaError = ""; Notice = "已恢复已保存的设置。";        });
+            JvmArguments = session.SavedSettings.JvmArguments; GcMode = session.SavedSettings.GcMode; AuthlibInjectorPath = session.SavedSettings.AuthlibInjectorPath; JavaError = ""; Notice = "已恢复已保存的设置。";        });
         BrowseJava = new(_ => { var dialog = new OpenFileDialog { Filter = "Java|java.exe;javaw.exe" }; if (dialog.ShowDialog() == true) JavaPath = dialog.FileName; });
         ClearJava = new(_ => JavaPath = "", _ => !IsJavaAutoSelected);
         BrowseAuthlibInjector = new(_ => { var dialog = new OpenFileDialog { Filter = "authlib-injector|*.jar", Title = "选择 authlib-injector" }; if (dialog.ShowDialog() == true) AuthlibInjectorPath = dialog.FileName; });
@@ -131,10 +149,12 @@ public sealed class SettingsViewModel : ObservableObject
                 catch(Exception error){JavaError=Infrastructure.Runtime.RuntimeSupport.Error(error);return;}
             }
             if(AuthlibInjectorPath.Trim().Length>0 && !File.Exists(AuthlibInjectorPath.Trim())){JavaError="authlib-injector 文件不存在，请重新选择或留空自动下载。";return;}
-            var saved = await Session.SaveGlobalSettingsAsync(new() { VersionIsolation = VersionIsolation, JavaPath = JavaPath.Trim(), GameDirectory = Session.SavedSettings.GameDirectory, MemoryMb = memory, AutomaticMemory = MemoryAllocation.IsAutomatic, OptimizeMemory = MemoryAllocation.OptimizeBeforeLaunch, JvmArguments = JvmArguments, AuthlibInjectorPath = AuthlibInjectorPath.Trim() });
+            var saved = await Session.SaveGlobalSettingsAsync(new() { VersionIsolation = VersionIsolation, JavaPath = JavaPath.Trim(), GameDirectory = Session.SavedSettings.GameDirectory, MemoryMb = memory, AutomaticMemory = MemoryAllocation.IsAutomatic, OptimizeMemory = MemoryAllocation.OptimizeBeforeLaunch, JvmArguments = JvmArguments, GcMode = GcMode, AuthlibInjectorPath = AuthlibInjectorPath.Trim() });
             Notice = !saved ? "设置未保存，请检查程序目录的写入权限后重试。" : "已保存全局设置。";
         }
         catch(Exception error){Notice=Infrastructure.Runtime.RuntimeSupport.Error(error);}
         finally { _saving = false; System.Windows.Input.CommandManager.InvalidateRequerySuggested(); }
     }
 }
+
+public sealed record GcOption(string Value, string Label);

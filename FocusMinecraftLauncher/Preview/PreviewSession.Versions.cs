@@ -22,6 +22,7 @@ public sealed partial class PreviewSession
             var version = versions.Single(v => v.Id == instance.Id);
             var current = version;
             var visited = new HashSet<string>(StringComparer.Ordinal);
+            var autoParents = new List<string>();
             // 只恢复实际声明且在官方清单中存在的父版本，不根据实例名称猜测游戏版本。
             while (current.InheritsFrom is { } parentId && visited.Add(current.Id))
             {
@@ -35,6 +36,7 @@ public sealed partial class PreviewSession
                     Report(task, "恢复官方游戏版本 " + parentId);
                     await new MinecraftInstaller(parentId, instance.Root, DownloadConcurrency) { Source = FileSource }
                         .InstallAsync(p => Report(task, "恢复游戏配置：" + p.Message, p.Download), token);
+                    autoParents.Add(parentId);
                     changed = true;
                     versions = await reader.GetVersionsAsync(instance.Root, token);
                     parent = versions.Single(v => v.Id == parentId);
@@ -63,6 +65,11 @@ public sealed partial class PreviewSession
                 await new MinecraftVersionConverter(instance.Id, instance.Root).MakeIndependentAsync(token);
                 changed = true;
                 Log(instance.Id + "：已由 FMCore 转换为独立版本，存档、Mod 和设置保留在原处。");
+                foreach (var parentId in autoParents.Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    await RemoveAutoInstalledBaseAsync(instance.Root, parentId, instance.Id, false);
+                    MarkDependencyVersion(instance.Root, parentId);
+                }
             }
             token.ThrowIfCancellationRequested();
             if (changed || instance.MetadataIssue.Length > 0)

@@ -49,7 +49,7 @@
                     <ScrollViewer Grid.Row="1" Style="{StaticResource CommunityScroll}" local:ScrollRetention.Position="{Binding FileScroll}" Padding="0,0,8,0">
                         <StackPanel>
                             <local:GameVersionFilterBody DataContext="{Binding VersionFilter}"/>
-                            <TextBlock Text="未提供匹配的文件版本" Style="{StaticResource ResourceDescription}" Visibility="{Binding HasFiles, Converter={StaticResource NotVisibility}}"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0"><TextBlock Text="未提供匹配的文件版本" Style="{StaticResource ResourceDescription}" Visibility="{Binding HasFiles, Converter={StaticResource NotVisibility}}"/><fluent:Button Content="重新读取" Command="{Binding Retry}" Style="{StaticResource QuietButton}" Margin="12,0,0,0" Visibility="{Binding CanRetryFiles, Converter={StaticResource BoolVisibility}}"/></StackPanel>
                             <ItemsControl ItemsSource="{Binding Groups}"><ItemsControl.ItemTemplate><DataTemplate>
                                 <ui:AnimatedExpander Style="{StaticResource CommunityExpander}" IsExpanded="{Binding IsExpanded, Mode=TwoWay}" Margin="0,0,0,8" AutomationProperties.Name="{Binding Title}">
                                     <ui:AnimatedExpander.Header><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Title}" Style="{StaticResource ResourceBody}" FontWeight="SemiBold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}"/><TextBlock Grid.Column="1" Text="{Binding Count}" Style="{StaticResource DownloadMeta}" Margin="12,0,0,0" VerticalAlignment="Center"/></Grid></ui:AnimatedExpander.Header>

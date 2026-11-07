@@ -13,7 +13,7 @@ public static class CommunitySource
     /// <summary>镜像按「名称/版本号」识别接入方，注册用的 UA 与这里保持一致；版本号取自程序集，跟随发布走。</summary>
     public static string UserAgent { get; } = "FocusMinecraftLauncher/" + (typeof(CommunitySource).Assembly.GetName().Version is { } version
         ? version.ToString(3)
-        : "2.0.7");
+        : "2.0.8");
 
     private const string MirrorRoot = "https://mod.mcimirror.top";
 

@@ -149,6 +149,8 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
     {
         var revision=++_navigationRevision;
         var entry=EnsureEntry(id,name);
+        // 上次可能只拿到了项目正文、版本接口失败并留下空文件列表；重新打开时强制补取一次。
+        if(entry.Project.Files.Count==0)_catalog.Invalidate(id);
         try
         {
             Preview=null;
@@ -157,6 +159,7 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
                 _details[id]=vm=new ResourceDetailViewModel(entry,BackFromDetail,async file=>await OpenDownloadConfirmationAsync(entry,file),async key=>LargeImage=await RemoteArtwork.LoadAsync(key),filter,()=>OpenResource(id,false,filter,name));
             else vm.ApplyFilter(filter);
             _detail=vm;if(versions)vm.SelectedTab=2;RefreshRoute();
+            TrimDetailCache();
             vm.BeginLoading();
             vm.ClearNotice();
             // 项目正文先到先显示；版本列表随后在后台补齐，不把首屏卡在整条详情链上。
@@ -168,6 +171,7 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
             var full=await _catalog.LoadAsync(id,_lifetime.Token);
             if(_disposed||revision!=_navigationRevision)return;
             entry.UpdateProject(full);
+            if(full.Files.Count==0)Session.Log("资源文件列表为空 ["+id+"; "+Infrastructure.Runtime.CommunitySource.Current.Name+"; UA="+Infrastructure.Runtime.CommunitySource.UserAgent+"]");
             vm.FinishLoading();
             vm.ClearNotice();
         }
@@ -249,6 +253,19 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
         catch(Exception error){_loadError=Infrastructure.Runtime.RuntimeSupport.Error(error);if(_section==DownloadSection.Vanilla)DisplayState="失败";}
     }
     private void BackFromDetail() { _navigationRevision++; _detail = _detailTrail.TryPop(out var previous) ? previous : null; RefreshRoute(); }
+    /// <summary>只保留最近打开的详情，避免长期浏览后把每个项目的文件分组都留在内存里。</summary>
+    private void TrimDetailCache()
+    {
+        const int limit=12;
+        if(_details.Count<=limit)return;
+        var keep=new HashSet<string>(_detailTrail.Select(item=>item.Project.Id),StringComparer.Ordinal);
+        if(_detail!=null)keep.Add(_detail.Project.Id);
+        foreach(var pair in _details.Where(pair=>!keep.Contains(pair.Key)).Take(_details.Count-limit).ToArray())
+        {
+            pair.Value.Dispose();
+            _details.Remove(pair.Key);
+        }
+    }
     private void RefreshRoute() { Changed(nameof(ActivePage)); Changed(nameof(CanChangeDisplayState)); Changed(nameof(ShowPage)); Changed(nameof(ShowState)); Changed(nameof(StateTitle)); Changed(nameof(StateDescription)); Changed(nameof(DisplayState)); }
     private void OverlayChanged() { Changed(nameof(IsOverlayOpen)); Changed(nameof(IsPreviewOpen)); Changed(nameof(IsImageOpen)); Changed(nameof(CanInteract)); }
     public void Dispose() { _disposed=true;_navigationRevision++;CancelTargetSelection();_lifetime.Cancel(); Session.PropertyChanged -= SessionChanged; Session.TaskNotification -= ShowNotification; _catalog.Dispose(); Tasks.Dispose(); foreach(var detail in _details.Values) detail.Dispose(); }

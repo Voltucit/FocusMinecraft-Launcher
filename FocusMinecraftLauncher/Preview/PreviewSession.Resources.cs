@@ -232,10 +232,13 @@ public sealed partial class PreviewSession
         var manifest=request.Manifest;var root=request.Root;var instanceName=request.InstanceName;
         if(!_rootWriters.TryGetValue(root,out var writer))_rootWriters[root]=writer=new(1,1);
         await writer.WaitAsync(token);
+        var baseExisted = File.Exists(Path.Combine(root, "versions", manifest.Minecraft, manifest.Minecraft + ".json"));
         try
         {
             await SetIncompleteAsync(root,instanceName,true);
             await InstallComponentsAsync(root,instanceName,manifest.Minecraft,manifest.Loader,manifest.LoaderVersion,"",task,token);
+            await RemoveAutoInstalledBaseAsync(root,manifest.Minecraft,instanceName,baseExisted);
+            if(!baseExisted&&!string.Equals(instanceName,manifest.Minecraft,StringComparison.OrdinalIgnoreCase))MarkDependencyVersion(root,manifest.Minecraft);
             var instance=new PreviewInstance(instanceName,manifest.Name,manifest.Minecraft,manifest.Loader){Root=root,IsolationMode=SavedSettings.VersionIsolation};
             var options=InstanceStore.Read(instance);options.Name=manifest.Name;options.Description=manifest.Summary;options.Source="Modrinth 整合包";options.SourceProjectId=sourceProjectId;options.SourceVersionId=sourceVersionId;
             await Task.Run(()=>ModpackArchive.InstallContentAsync(path,manifest,instance,options,DownloadConcurrency,p=>Report(task,"收集整合包资源",p),token),token);
@@ -257,6 +260,6 @@ public sealed partial class PreviewSession
             if(string.Equals(root,SelectedRoot,StringComparison.OrdinalIgnoreCase))await RefreshInstancesAsync();
             NotifyTask(manifest.Name+"导入完成",false);
         }
-        finally{writer.Release();NotifyInstanceContentChanged(root,instanceName);}
+        finally{writer.Release();NotifyInstanceContentChanged(root,instanceName);if(!baseExisted&&!string.Equals(instanceName,manifest.Minecraft,StringComparison.OrdinalIgnoreCase))MarkDependencyVersion(root,manifest.Minecraft);}
     }
 }

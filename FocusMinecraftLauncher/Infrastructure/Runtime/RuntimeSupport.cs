@@ -38,10 +38,11 @@ public static class RuntimeSupport
         // 外置账号必须带上 authlib-injector；缺少时按设置下载或直接报出路径问题。
         var authlibInjector=account is FMCore.Accounts.YggdrasilAccount?await AuthlibInjectorService.EnsureAsync(global.AuthlibInjectorPath,null,token):null;
         var memory=MemoryMb(settings.GlobalMemory?global.AutomaticMemory:settings.AutomaticMemory,settings.GlobalMemory?global.MemoryMb:settings.MemoryMb,ModCount(instance));
-        var jvmArguments = LaunchJvmArguments(instance, account, settings.GlobalArguments ? global.JvmArguments : settings.JvmArguments);
+        var configuredArguments=settings.GlobalArguments?global.JvmArguments:settings.JvmArguments;
         foreach(var java in ordered)
         {
             token.ThrowIfCancellationRequested();
+            var jvmArguments = LaunchJvmArguments(instance, account, configuredArguments, java.MajorVersion, global.GcMode);
             var launcher=new FMCore.Launch.MinecraftLauncher(new()
             {
                 Account=account,
@@ -56,22 +57,61 @@ public static class RuntimeSupport
         throw new InvalidOperationException("启动配置检查未通过："+reason);
     }
     /// <summary>仅为 1.16.4、1.16.5 的离线身份启用旧 Authlib 的离线回退，保留正版和自定义认证配置。</summary>
-    private static string[] LaunchJvmArguments(PreviewInstance instance, FMCore.Accounts.IMinecraftAccount account, string configuredArguments)
+    private static string[] LaunchJvmArguments(PreviewInstance instance, FMCore.Accounts.IMinecraftAccount account, string configuredArguments, int javaMajor, string gcMode)
     {
-        var arguments = Arguments(configuredArguments);
-        if (account is not FMCore.Accounts.OfflineAccount || instance.Version is not ("1.16.4" or "1.16.5")) return arguments;
+        var arguments = Arguments(configuredArguments).ToList();
+        if (!arguments.Any(HasGarbageCollectorOption))
+            arguments.AddRange(GarbageCollectorArguments(gcMode, javaMajor));
+        if (account is not FMCore.Accounts.OfflineAccount || instance.Version is not ("1.16.4" or "1.16.5")) return [.. arguments];
         if (arguments.Any(argument => argument.StartsWith("-Dminecraft.api.", StringComparison.OrdinalIgnoreCase)
             || argument.StartsWith("-javaagent:", StringComparison.OrdinalIgnoreCase)
-                && argument.Contains("authlib-injector", StringComparison.OrdinalIgnoreCase))) return arguments;
+                && argument.Contains("authlib-injector", StringComparison.OrdinalIgnoreCase))) return [.. arguments];
 
         // 旧 Authlib 将未认证的权限响应误读为禁止多人游戏。不可解析的保留域名让它进入内置离线回退；
         // 三个基础 host 必须同时设置，services host 单独设置会被忽略。只传给本次游戏进程，不写入配置。
         // 参考：https://github.com/FabricMC/fabric-loom/issues/915
-        return [.. arguments,
+        arguments.AddRange([
             "-Dminecraft.api.auth.host=https://offline.invalid",
             "-Dminecraft.api.account.host=https://offline.invalid",
             "-Dminecraft.api.session.host=https://offline.invalid",
-            "-Dminecraft.api.services.host=https://offline.invalid"];
+            "-Dminecraft.api.services.host=https://offline.invalid"]);
+        return [.. arguments];
+    }
+    private static bool HasGarbageCollectorOption(string argument) =>
+        (argument.StartsWith("-XX:+Use", StringComparison.OrdinalIgnoreCase)
+            || argument.StartsWith("-XX:-Use", StringComparison.OrdinalIgnoreCase))
+        && argument.Contains("GC", StringComparison.OrdinalIgnoreCase);
+    private static readonly string[] G1Arguments =
+    [
+        "-XX:+UseG1GC",
+        "-XX:+ParallelRefProcEnabled",
+        "-XX:MaxGCPauseMillis=50",
+        "-XX:+UnlockExperimentalVMOptions",
+        "-XX:+DisableExplicitGC",
+        "-XX:G1NewSizePercent=30",
+        "-XX:G1MaxNewSizePercent=40",
+        "-XX:G1HeapRegionSize=8M",
+        "-XX:G1ReservePercent=20",
+        "-XX:G1HeapWastePercent=5",
+        "-XX:G1MixedGCCountTarget=4",
+        "-XX:InitiatingHeapOccupancyPercent=15",
+        "-XX:G1MixedGCLiveThresholdPercent=90",
+        "-XX:G1RSetUpdatingPauseTimePercent=5",
+        "-XX:SurvivorRatio=32",
+        "-XX:MaxTenuringThreshold=1",
+        "-XX:+PerfDisableSharedMem"
+    ];
+    private static string[] GarbageCollectorArguments(string mode, int javaMajor)
+    {
+        if (string.Equals(mode, "None", StringComparison.OrdinalIgnoreCase)) return [];
+        if (string.Equals(mode, "ZGC", StringComparison.OrdinalIgnoreCase))
+        {
+            if (javaMajor >= 21) return ["-XX:+UseZGC", "-XX:+ZGenerational"];
+            if (javaMajor >= 15) return ["-XX:+UseZGC"];
+            if (javaMajor >= 11) return ["-XX:+UnlockExperimentalVMOptions", "-XX:+UseZGC"];
+            // Java 8 等不支持 ZGC 的运行时不加未知参数，退回 G1GC。
+        }
+        return javaMajor >= 8 ? G1Arguments : [];
     }
     /// <summary>补全游戏文件前先检查本机 Java；兼容性最终交给核心配置检查，不复制版本兼容规则。</summary>
     public static async Task<IReadOnlyList<JavaInfo>> ReadLaunchJavaCandidatesAsync(PreviewInstance instance,InstanceOptions settings,PreviewSettings global,CancellationToken token)
@@ -149,14 +189,14 @@ public static class RuntimeSupport
     /// <summary>自动分配：先按 Mod 数量估算需求，再取本机总内存与当前可用内存允许的最大值。</summary>
     public static int AutomaticMemoryMb(double totalGb, double availableGb, int modCount)
     {
-        // 原版基线 2 GB，每个启用的 Mod 追加 96 MB，需求上限 16 GB。
-        var need = Math.Clamp(2048d + Math.Max(0, modCount) * 96d, 2048d, 16384d);
+        // 原版基线 4 GB，每个启用的 Mod 追加 128 MB，需求上限 32 GB。
+        var need = Math.Clamp(4096d + Math.Max(0, modCount) * 128d, 4096d, 32768d);
         var total = totalGb * 1024d;
         var available = availableGb * 1024d;
-        // 总内存预留系统 15%（不低于 2 GB）；可用内存只取 85%，其余留给 JVM 自身与瞬时波动。
-        var cap = Math.Min(total - Math.Max(2048d, total * .15), available * .85);
+        // 总内存只预留 10%（不低于 2 GB）；可用内存取 90%，比旧策略更充分。
+        var cap = Math.Min(total - Math.Max(2048d, total * .10), available * .90);
         var target = Math.Min(need, cap);
-        return (int)Math.Clamp(Math.Floor(target / 256d) * 256d, 512d, 16384d);
+        return (int)Math.Clamp(Math.Floor(target / 256d) * 256d, 512d, 32768d);
     }
     public static int MemoryMb(bool automatic, int configured, int modCount = 0)
     {

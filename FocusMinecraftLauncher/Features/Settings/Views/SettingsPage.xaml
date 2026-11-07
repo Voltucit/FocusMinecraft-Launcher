@@ -40,7 +40,7 @@
         <ui:SettingRow Title="版本隔离" Description="切换目录，不移动已有存档或 Mod">
             <ui:AnimatedComboBox ItemsSource="{Binding IsolationOptions}" DisplayMemberPath="Name" SelectedValuePath="Mode" SelectedValue="{Binding VersionIsolation, Mode=TwoWay}" AutomationProperties.Name="游戏目录隔离方式"/>
         </ui:SettingRow>
-        <Expander Header="高级启动选项" Margin="0,8,0,0"><ui:SettingRow Title="JVM 参数"><fluent:TextBox Text="{Binding JvmArguments, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="附加 JVM 参数" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="72" VerticalContentAlignment="Top"/></ui:SettingRow></Expander>
+        <Expander Header="高级启动选项" Margin="0,8,0,0"><StackPanel><ui:SettingRow Title="垃圾回收器"><ui:AnimatedComboBox ItemsSource="{Binding GcChoices}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding GcMode, Mode=TwoWay}" AutomationProperties.Name="垃圾回收器"/></ui:SettingRow><ui:SettingRow Title="JVM 参数"><fluent:TextBox Text="{Binding JvmArguments, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="附加 JVM 参数" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="72" VerticalContentAlignment="Top"/></ui:SettingRow></StackPanel></Expander>
         <WrapPanel Margin="0,16,0,0"><fluent:Button Content="保存游戏设置" Command="{Binding Save}" Style="{StaticResource PrimaryButton}" Margin="0,0,12,12"/><fluent:Button Content="恢复已保存的值" Command="{Binding Restore}" Margin="0,0,0,12"/></WrapPanel>
         <TextBlock Text="{Binding Notice}" Style="{StaticResource Muted}" AutomationProperties.LiveSetting="Polite" Visibility="{Binding Notice, Converter={StaticResource TextVisibility}}"/>
         <TextBlock Text="游戏设置保存后生效。" Style="{StaticResource Caption}" Margin="0,16,0,0"/>
