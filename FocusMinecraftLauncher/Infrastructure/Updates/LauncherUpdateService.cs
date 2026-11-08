@@ -4,7 +4,9 @@ using System.Net;
 using System.Net.Http;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Text.Json.Nodes;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using FMLauncher.UpdateShared;
 
 namespace FocusMinecraftLauncher.Infrastructure.Updates;
@@ -25,50 +27,90 @@ public sealed class LauncherUpdateService : IDisposable
     {
         _root = Path.GetFullPath(root);
         _client.DefaultRequestHeaders.UserAgent.ParseAdd(FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.UserAgent);
-        _client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
     }
+    /// <summary>通过官方最新发布跳转和固定附件名检查更新，不依赖匿名 REST API 配额。</summary>
     public async Task<UpdateRelease?> CheckAsync(CancellationToken token)
     {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token); timeout.CancelAfter(TimeSpan.FromSeconds(30));
-        var data = await BytesAsync(new Uri("https://api.github.com/repos/" + UpdateProduct.Repository + "/releases/latest"), 2 * 1024 * 1024, timeout.Token).ConfigureAwait(false);
-        var release = JsonNode.Parse(data) as JsonObject ?? throw new InvalidDataException("更新服务返回了无效内容。");
-        var tag = release["tag_name"]?.GetValue<string>() ?? "";
-        if (release["draft"]?.GetValue<bool>() == true || release["prerelease"]?.GetValue<bool>() == true
-            || !ReleaseVersion.TryParse(tag, out var next) || next.IsPrerelease) throw new InvalidDataException("没有可用的正式更新版本。");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(30));
+        using var request = new HttpRequestMessage(HttpMethod.Get, ReleasePage.AbsoluteUri + "/latest");
+        request.Headers.Accept.ParseAdd("text/html");
+        // 只读取重定向后的响应头，不下载整张发布页面。
+        using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
+        EnsureUpdateResponse(response);
+        var page = GitHubAddress(response.RequestMessage?.RequestUri?.AbsoluteUri ?? "");
+        var prefix = "/" + UpdateProduct.Repository + "/releases/tag/";
+        if (!page.AbsolutePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("更新服务没有返回有效的正式发布地址。");
+        var tag = Uri.UnescapeDataString(page.AbsolutePath[prefix.Length..]);
+        if (!ReleaseVersion.TryParse(tag, out var next) || next.IsPrerelease)
+            throw new InvalidDataException("没有可用的正式更新版本。");
         if (!ReleaseVersion.TryParse(CurrentVersion, out var current)) throw new InvalidDataException("当前程序版本号无效。");
         if (next.CompareTo(current) <= 0) return null;
-        var page = GitHubAddress(release["html_url"]?.GetValue<string>() ?? "");
-        var notes = (release["body"]?.GetValue<string>() ?? "").Trim(); if (notes.Length > 16000) notes = notes[..16000];
         var version = tag.TrimStart('v');
-        UpdateRelease Manual() => new(version, notes, page, null, null, null, null);
-        if (!IsConfigured || RuntimeInformation.ProcessArchitecture != Architecture.X64) return Manual();
-        var assets = release["assets"] as JsonArray ?? [];
-        Uri? Asset(string name)
+        Uri Asset(string name) => GitHubAddress(ReleasePage.AbsoluteUri + "/download/" + Uri.EscapeDataString(tag) + "/" + Uri.EscapeDataString(name));
+        async Task<UpdateRelease> ManualAsync() => new(version, await ReleaseNotesAsync(page, timeout.Token).ConfigureAwait(false), page, null, null, null, null);
+        if (!IsConfigured || RuntimeInformation.ProcessArchitecture != Architecture.X64) return await ManualAsync().ConfigureAwait(false);
+        byte[] bytes, signature;
+        try
         {
-            var asset = assets.FirstOrDefault(a => a?["name"]?.GetValue<string>() == name);
-            return asset == null ? null : GitHubAddress(asset["browser_download_url"]?.GetValue<string>() ?? "");
+            // 固定到本次查到的标签，避免检查途中发布新版本造成清单与签名混用。
+            bytes = await BytesAsync(Asset(UpdateProduct.ManifestName), 4 * 1024 * 1024, timeout.Token).ConfigureAwait(false);
+            signature = await BytesAsync(Asset(UpdateProduct.SignatureName), 128, timeout.Token).ConfigureAwait(false);
         }
-        var manifestUrl = Asset(UpdateProduct.ManifestName); var signatureUrl = Asset(UpdateProduct.SignatureName);
-        if (manifestUrl == null || signatureUrl == null) return Manual();
-        var bytes = await BytesAsync(manifestUrl, 4 * 1024 * 1024, timeout.Token).ConfigureAwait(false);
-        var signature = await BytesAsync(signatureUrl, 128, timeout.Token).ConfigureAwait(false);
+        catch (HttpRequestException error) when (error.StatusCode == HttpStatusCode.NotFound)
+        {
+            return await ManualAsync().ConfigureAwait(false);
+        }
         var manifest = UpdateManifest.Verify(bytes, signature, _key);
         if (manifest.Version != version) throw new InvalidDataException("发布版本与更新清单不一致。");
-        var package = Asset(manifest.PackageName) ?? throw new InvalidDataException("此版本的更新包尚未发布完整，请稍后重试。");
-        return new(version, notes, page, manifest, bytes, signature, package);
+        return new(version, await ReleaseNotesAsync(page, timeout.Token).ConfigureAwait(false), page,
+            manifest, bytes, signature, Asset(manifest.PackageName));
+    }
+    /// <summary>发布说明从官方订阅读取；说明不可用不影响已经验证的更新附件。</summary>
+    private async Task<string> ReleaseNotesAsync(Uri page, CancellationToken token)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(5));
+        try
+        {
+            var data = await BytesAsync(new Uri(ReleasePage.AbsoluteUri + ".atom"), 2 * 1024 * 1024, timeout.Token).ConfigureAwait(false);
+            XNamespace atom = "http://www.w3.org/2005/Atom";
+            var entry = XDocument.Parse(Encoding.UTF8.GetString(data)).Root?.Elements(atom + "entry")
+                .FirstOrDefault(item => item.Elements(atom + "link").Any(link => (string?)link.Attribute("href") == page.AbsoluteUri));
+            var notes = entry?.Element(atom + "content")?.Value ?? "";
+            notes = Regex.Replace(notes, @"</(?:p|div|h[1-6]|ul|ol)>|<br\s*/?>", "\n\n", RegexOptions.IgnoreCase);
+            notes = Regex.Replace(notes, @"<li\b[^>]*>", "\n- ", RegexOptions.IgnoreCase);
+            notes = WebUtility.HtmlDecode(Regex.Replace(notes, @"<[^>]+>", "")).Trim();
+            return notes.Length > 16000 ? notes[..16000] : notes;
+        }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested) { return ""; }
+        catch (Exception error) when (error is HttpRequestException or IOException or System.Xml.XmlException) { return ""; }
     }
     private static Uri GitHubAddress(string value)
     {
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme != "https" || !uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)
-            || !uri.AbsolutePath.StartsWith("/" + UpdateProduct.Repository + "/releases", StringComparison.OrdinalIgnoreCase) || uri.UserInfo.Length > 0)
+            || !uri.AbsolutePath.StartsWith("/" + UpdateProduct.Repository + "/releases/", StringComparison.OrdinalIgnoreCase) || uri.UserInfo.Length > 0)
             throw new InvalidDataException("更新地址不属于启动器发布仓库。");
         return uri;
+    }
+    /// <summary>保留 HTTP 状态供调用方区分附件缺失、访问拒绝与请求过于频繁。</summary>
+    private static void EnsureUpdateResponse(HttpResponseMessage response)
+    {
+        if (response.IsSuccessStatusCode) return;
+        var message = response.StatusCode switch
+        {
+            HttpStatusCode.Forbidden => "更新服务拒绝访问（HTTP 403），请稍后重试或打开发布页面。",
+            HttpStatusCode.TooManyRequests => "更新请求过于频繁（HTTP 429），请稍后重试。",
+            HttpStatusCode.NotFound => "未找到更新版本或附件（HTTP 404），请打开发布页面确认。",
+            _ => $"更新服务返回 HTTP {(int)response.StatusCode}，请稍后重试或打开发布页面。"
+        };
+        throw new HttpRequestException(message, null, response.StatusCode);
     }
     private async Task<byte[]> BytesAsync(Uri uri, int limit, CancellationToken token)
     {
         using var response = await _client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
-        if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests) throw new HttpRequestException("更新服务请求受限，请稍后重试。");
-        response.EnsureSuccessStatusCode();
+        EnsureUpdateResponse(response);
         if (response.Content.Headers.ContentLength > limit) throw new InvalidDataException("更新服务返回内容过大。");
         await using var stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
         using var output = new MemoryStream(); var buffer = new byte[16 * 1024]; int length;
@@ -90,7 +132,7 @@ public sealed class LauncherUpdateService : IDisposable
         try
         {
             using var response = await _client.GetAsync(release.Package!, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            EnsureUpdateResponse(response);
             if (response.Content.Headers.ContentLength is { } total && total != manifest.PackageSize) throw new InvalidDataException("更新包大小与签名声明不一致。");
             await using (var input = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false))
             await using (var output = new FileStream(partial, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, true))
