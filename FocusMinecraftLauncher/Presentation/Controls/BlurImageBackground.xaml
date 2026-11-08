@@ -1,7 +1,7 @@
 <UserControl x:Class="FocusMinecraftLauncher.Presentation.Controls.BlurImageBackground"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  IsHitTestVisible="False" Focusable="False" ClipToBounds="True"
- Visibility="{Binding Session.ShowCustomBackgroundImage, Converter={StaticResource BoolVisibility}}">
+ Visibility="{Binding Session.ShowImageBackground, Converter={StaticResource BoolVisibility}}">
     <Grid>
         <!-- 铺底：同一张图重度模糊后拉伸填满，让未铺满的空白处与画面同色，避免出现硬边。 -->
         <Image x:Name="Backdrop" Source="{Binding Session.CustomBackgroundImage}" Stretch="UniformToFill" Margin="-60"

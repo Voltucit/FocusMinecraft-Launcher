@@ -93,7 +93,7 @@ public sealed partial class PreviewSession : ObservableObject, IDisposable
             _theme = value; _glassTransparency = ReadThemeTransparency(value);
             SelectThemeBackground();
             Changed(); Changed(nameof(GlassTransparency));
-            Presentation.UiTheme.Apply(value, GlassTransparency, HasCustomBackgroundImage); Signal(); SaveAppearance();
+            Presentation.UiTheme.Apply(value, GlassTransparency, HasCustomBackgroundImage || HasWallpaper); Signal(); SaveAppearance();
         }
     }
     /// <summary>保存当前主题的玻璃透明度，其他主题的定制值分别保留。</summary>
@@ -103,7 +103,7 @@ public sealed partial class PreviewSession : ObservableObject, IDisposable
         set
         {
             if (Set(ref _glassTransparency, Math.Clamp(value, 0, 100)))
-            { Presentation.UiTheme.ApplyGlassTransparency(Theme, _glassTransparency, HasCustomBackgroundImage); SaveAppearance(); }
+            { Presentation.UiTheme.ApplyGlassTransparency(Theme, _glassTransparency, HasCustomBackgroundImage || HasWallpaper); SaveAppearance(); }
         }
     }
     public int DownloadTab { get => _tab; set => Set(ref _tab, value); }

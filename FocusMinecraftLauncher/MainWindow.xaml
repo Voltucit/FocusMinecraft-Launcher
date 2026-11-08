@@ -108,6 +108,12 @@
         
         <visual:BlurImageBackground Grid.RowSpan="3" BlurRadius="{Binding Session.BackgroundBlurRadius}"
                                     IsDynamicBlurEnabled="{Binding Session.DynamicBlurEnabled}" MotionAllowed="{Binding Session.MotionAllowed}"/>
+        <visual:WallpaperBackground Grid.RowSpan="3" Kind="{Binding Session.WallpaperKind}"
+                                    SourcePath="{Binding Session.WallpaperPath}" PreviewPath="{Binding Session.WallpaperPreviewPath}"
+                                    ProjectPath="{Binding Session.WallpaperProject}" PropertiesJson="{Binding Session.WallpaperPropertiesJson}"
+                                    RefreshVersion="{Binding Session.WallpaperRefreshVersion}" MotionAllowed="{Binding Session.MotionAllowed}"
+                                    RenderStateChanged="Wallpaper_OnRenderStateChanged" BlurPercent="{Binding Session.BackgroundBlur}"
+                                    Visibility="{Binding Session.HasWallpaper, Converter={StaticResource BoolVisibility}}"/>
         
         <ui:TitleBar x:Name="AppTitleBar" Title="FMLauncher" Height="40" Padding="16,0,12,0"
                      Background="{DynamicResource TitleBarBackground}" Foreground="{DynamicResource AppText}"

@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
-        <TargetFramework>net10.0-windows</TargetFramework>
+        <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <UseWPF>true</UseWPF>
@@ -12,6 +12,7 @@
     <ItemGroup>
       <PackageReference Include="FocusMinecraftCore" Version="2.0.8" />
       <PackageReference Include="WPF-UI" Version="4.3.0" />
+      <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
       <ProjectReference Include="..\FMLauncher.UpdateShared\FMLauncher.UpdateShared.csproj" />
     </ItemGroup>
 
@@ -19,6 +20,9 @@
       <Resource Include="Presentation\Assets\DefaultPlayerHead.png" />
       <Resource Include="Assets\GamesIcon\*.png" />
       <Resource Include="Assets\DownloadAssets\*.png" />
+      <EmbeddedResource Include="Assets\WallpaperEngine\webwallgl.global.min.js" LogicalName="FMLauncher.WallpaperEngine.js" />
+      <EmbeddedResource Include="Assets\WallpaperEngine\webwallgl.LICENSE.txt" LogicalName="FMLauncher.WallpaperEngine.LICENSE.txt" />
+      <Content Include="Assets\WallpaperEngine\webwallgl.LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
     </ItemGroup>
 
 
@@ -33,7 +37,7 @@
         <Description>Minecraft 启动器</Description>
 
         <!-- 软件版本号 -->
-        <Version Condition="'$(Version)' == ''">2.0.8</Version>
+        <Version Condition="'$(Version)' == ''">2.0.9</Version>
         <ReleaseNumber>$([System.Text.RegularExpressions.Regex]::Match('$(Version)', '^\d+\.\d+\.\d+').Value)</ReleaseNumber>
 
         <!-- 程序集版本 -->
@@ -52,6 +56,19 @@
 <!--        <ApplicationIcon>Assets\FMLauncher.ico</ApplicationIcon>-->
     </PropertyGroup>
 
+
+    <!-- 单文件发布不外带开发用文档；壁纸脚本和许可证已作为资源内嵌。 -->
+    <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
+        <PublishDocumentationFiles>false</PublishDocumentationFiles>
+        <PublishDocumentationFile>false</PublishDocumentationFile>
+        <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
+    </PropertyGroup>
+    <Target Name="ExcludeSingleFilePublishSymbols" BeforeTargets="_ComputeFilesToBundle"
+            Condition="'$(PublishSingleFile)' == 'true' and '$(IncludeSymbolsInSingleFile)' != 'true'">
+        <ItemGroup>
+            <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(ResolvedFileToPublish.Extension)' == '.pdb'" />
+        </ItemGroup>
+    </Target>
 
     <Import Project="..\Build\Authentication\MicrosoftClientId.targets" />
     <Import Project="..\Build\Updates\EmbeddedUpdater.targets" />

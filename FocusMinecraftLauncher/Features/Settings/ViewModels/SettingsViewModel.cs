@@ -1,6 +1,9 @@
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using Microsoft.Win32;
 using FocusMinecraftLauncher.Common;
+using FocusMinecraftLauncher.Infrastructure.Runtime;
 using FocusMinecraftLauncher.Preview;
 using FocusMinecraftLauncher.Features.Home.Models;
 using FocusMinecraftLauncher.Presentation.ViewModels;
@@ -11,6 +14,15 @@ public sealed class SettingsViewModel : ObservableObject
 {
     private string _java, _jvm, _authlib = "", _javaError = "", _notice = "";
     private string _gcMode = "Auto";
+    private const int WallpaperPageSize = 12;
+    private IReadOnlyList<WallpaperOption> _allWallpapers = [];
+    private WallpaperChoiceViewModel? _selectedWallpaper;
+    private string _wallpaperListStatus = "展开后读取本地壁纸";
+    private bool _isWallpaperExpanded;
+    private bool _isWallpaperPropertiesExpanded;
+    private bool _suppressWallpaperApply;
+    private bool _wallpapersLoaded;
+    private bool _wallpapersLoading;
     private bool _saving, _importingBackground;
     public string BackgroundActionText => _importingBackground ? "正在读取…" : "选择图片";
     private bool _themeSettingsExpanded;
@@ -50,6 +62,40 @@ public sealed class SettingsViewModel : ObservableObject
     public MemoryAllocationViewModel MemoryAllocation { get; } = new();
     public JavaDetectionViewModel JavaDetection { get; }
     public string JvmArguments { get => _jvm; set { if (Set(ref _jvm, value)) Notice = ""; } }
+    public UiCommand RefreshWallpaper { get; }
+    public UiCommand ClearWallpaper { get; }
+    public UiCommand RefreshWallpaperList { get; }
+    public UiCommand LoadMoreWallpapers { get; }
+    public UiCommand SelectWallpaper { get; }
+    public UiCommand ResetWallpaperProperties { get; }
+    public ObservableCollection<WallpaperChoiceViewModel> VisibleWallpapers { get; } = [];
+    public ObservableCollection<WallpaperRowViewModel> WallpaperRows { get; } = [];
+    public ObservableCollection<WallpaperPropertyEditorViewModel> WallpaperProperties { get; } = [];
+    public bool HasWallpaperProperties => WallpaperProperties.Count > 0;
+    public WallpaperChoiceViewModel? SelectedWallpaper
+    {
+        get => _selectedWallpaper;
+        set
+        {
+            if (!Set(ref _selectedWallpaper, value)) return;
+            foreach (WallpaperChoiceViewModel item in VisibleWallpapers)
+                item.IsSelected = ReferenceEquals(item, value);
+            if (_suppressWallpaperApply || value is null) return;
+            _ = ApplySelectedWallpaperAsync(value);
+        }
+    }
+    public string WallpaperListStatus { get => _wallpaperListStatus; private set => Set(ref _wallpaperListStatus, value); }
+    public bool IsWallpaperExpanded
+    {
+        get => _isWallpaperExpanded;
+        set
+        {
+            if (!Set(ref _isWallpaperExpanded, value) || !value) return;
+            _ = LoadWallpapersAsync();
+        }
+    }
+    public bool IsWallpaperPropertiesExpanded { get => _isWallpaperPropertiesExpanded; set => Set(ref _isWallpaperPropertiesExpanded, value); }
+    public bool HasMoreWallpapers => VisibleWallpapers.Count < _allWallpapers.Count;
     public IReadOnlyList<GcOption> GcChoices { get; } =
     [
         new("Auto", "自动"),
@@ -114,6 +160,104 @@ public sealed class SettingsViewModel : ObservableObject
             await ChangeBackgroundAsync(dialog.FileName);
         }, _ => !_importingBackground);
         ResetBackground = new(async _ => await ChangeBackgroundAsync(null), _ => !_importingBackground && session.HasBackgroundSelection);
+        RefreshWallpaper = new(async _ => await Session.RefreshWallpaperAsync());
+        ClearWallpaper = new(async _ =>
+        {
+            await Session.ClearWallpaperAsync();
+            LoadWallpaperProperties();
+        });
+        RefreshWallpaperList = new(async _ => await LoadWallpapersAsync(true));
+        LoadMoreWallpapers = new(_ => LoadMoreWallpapersCore(), _ => HasMoreWallpapers);
+        SelectWallpaper = new(parameter =>
+        {
+            if (parameter is WallpaperChoiceViewModel choice) SelectedWallpaper = choice;
+        });
+        ResetWallpaperProperties = new(_ =>
+        {
+            foreach (WallpaperPropertyEditorViewModel editor in WallpaperProperties) editor.Reset();
+        });
+        Session.PropertyChanged += OnSessionPropertyChanged;
+    }
+    private void OnSessionPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(PreviewSession.WallpaperProject))
+            LoadWallpaperProperties();
+    }
+    private async Task ApplySelectedWallpaperAsync(WallpaperChoiceViewModel wallpaper)
+    {
+        await Session.UseWallpaperAsync(wallpaper.Option.ProjectPath);
+        LoadWallpaperProperties();
+    }
+    private void LoadWallpaperProperties()
+    {
+        WallpaperProperties.Clear();
+        foreach (WallpaperProperty property in Session.WallpaperProperties)
+        {
+            var editor = new WallpaperPropertyEditorViewModel(property, Session.GetWallpaperPropertyValue(property.Key));
+            editor.ValueChanged += (key, value) => Session.SetWallpaperProperty(key, value);
+            WallpaperProperties.Add(editor);
+        }
+        Changed(nameof(HasWallpaperProperties));
+    }
+    private async Task LoadWallpapersAsync(bool force = false)
+    {
+        if (_wallpapersLoading || (_wallpapersLoaded && !force)) return;
+        _wallpapersLoading = true;
+        WallpaperListStatus = "正在读取本地壁纸…";
+        try
+        {
+            IReadOnlyList<WallpaperOption> wallpapers = await Task.Run(() => WallpaperEngineService.GetLocalWallpapers(force));
+            _allWallpapers = wallpapers;
+            VisibleWallpapers.Clear();
+            WallpaperRows.Clear();
+            AddNextWallpapers();
+            _suppressWallpaperApply = true;
+            try
+            {
+                SelectedWallpaper = VisibleWallpapers.FirstOrDefault(item =>
+                        string.Equals(item.Option.ProjectPath, Session.WallpaperProject, StringComparison.OrdinalIgnoreCase))
+                    ?? VisibleWallpapers.FirstOrDefault();
+            }
+            finally { _suppressWallpaperApply = false; }
+            LoadWallpaperProperties();
+            UpdateWallpaperStatus();
+            _wallpapersLoaded = true;
+        }
+        catch (Exception error)
+        {
+            _allWallpapers = [];
+            VisibleWallpapers.Clear();
+            WallpaperRows.Clear();
+            SelectedWallpaper = null;
+            Changed(nameof(HasMoreWallpapers));
+            WallpaperListStatus = "读取本地壁纸失败：" + Infrastructure.Runtime.RuntimeSupport.Error(error);
+        }
+        finally
+        {
+            _wallpapersLoading = false;
+        }
+    }
+    private void LoadMoreWallpapersCore()
+    {
+        if (!HasMoreWallpapers) return;
+        AddNextWallpapers();
+        UpdateWallpaperStatus();
+    }
+    private void AddNextWallpapers()
+    {
+        int start = VisibleWallpapers.Count;
+        foreach (WallpaperOption option in _allWallpapers.Skip(start).Take(WallpaperPageSize))
+            VisibleWallpapers.Add(new WallpaperChoiceViewModel(option));
+        for (int index = start; index < VisibleWallpapers.Count; index += 3)
+            WallpaperRows.Add(new WallpaperRowViewModel(VisibleWallpapers.Skip(index).Take(3).ToArray()));
+        Changed(nameof(HasMoreWallpapers));
+        System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+    }
+    private void UpdateWallpaperStatus()
+    {
+        WallpaperListStatus = _allWallpapers.Count == 0
+            ? "未找到本地 Wallpaper Engine 壁纸"
+            : $"已找到 {_allWallpapers.Count} 个壁纸，显示 {VisibleWallpapers.Count} 个";
     }
     /// <summary>通过原生文件选择器导入图片；操作期间避免重复导入与清理。</summary>
     private async Task ChangeBackgroundAsync(string? path)

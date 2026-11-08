@@ -28,6 +28,94 @@
                                 <TextBlock Text="{Binding Session.BackgroundError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
                             </StackPanel>
                         </ui:SettingRow>
+                        <ui:AnimatedExpander IsExpanded="{Binding IsWallpaperExpanded, Mode=TwoWay}" Margin="0,8,0,0" AutomationProperties.Name="Wallpaper Engine 壁纸">
+                            <ui:AnimatedExpander.Header>
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Wallpaper Engine 壁纸" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding WallpaperListStatus}" Style="{StaticResource Caption}"
+                                               VerticalAlignment="Center" Margin="16,0,0,0"/>
+                                </Grid>
+                            </ui:AnimatedExpander.Header>
+                            <StackPanel Margin="0,8,0,0">
+                                <TextBlock Text="从本地项目中读取；需要已安装 Wallpaper Engine" Style="{StaticResource Caption}" Margin="0,0,0,8"/>
+                                <ListBox ItemsSource="{Binding WallpaperRows}" Background="Transparent"
+                                         BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         ScrollViewer.VerticalScrollBarVisibility="Disabled" Focusable="False"
+                                         PreviewMouseWheel="WallpaperList_OnPreviewMouseWheel"
+                                         AutomationProperties.Name="本地 Wallpaper Engine 壁纸">
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem">
+                                            <Setter Property="Focusable" Value="False"/>
+                                            <Setter Property="Padding" Value="0"/>
+                                            <Setter Property="Margin" Value="0,0,0,8"/>
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                            <Setter Property="Template"><Setter.Value>
+                                                <ControlTemplate TargetType="ListBoxItem"><ContentPresenter/></ControlTemplate>
+                                            </Setter.Value></Setter>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                    <ListBox.ItemTemplate><DataTemplate>
+                                        <ItemsControl ItemsSource="{Binding Items}">
+                                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="3"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate><DataTemplate>
+                                                <Button Command="{Binding DataContext.SelectWallpaper, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                        CommandParameter="{Binding}" FocusVisualStyle="{x:Null}" Padding="0"
+                                                        BorderThickness="0" Background="Transparent" Margin="0,0,8,0"
+                                                        HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+                                                    <Button.Template><ControlTemplate TargetType="Button">
+                                                        <Border x:Name="Card" CornerRadius="{DynamicResource ControlCornerRadius}" Background="{DynamicResource Surface}"
+                                                                BorderBrush="Transparent" BorderThickness="2" ClipToBounds="True">
+                                                            <ContentPresenter/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource AccentText}"/>
+                                                            </Trigger>
+                                                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource AccentText}"/>
+                                                            </DataTrigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate></Button.Template>
+                                                    <Grid Height="132">
+                                                        <TextBlock Text="无预览" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                   Style="{StaticResource Caption}" Opacity="0.45"/>
+                                                        <Image Source="{Binding Preview}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                        <Border VerticalAlignment="Bottom" Background="#B3000000" Padding="10,7">
+                                                            <StackPanel>
+                                                                <TextBlock Text="{Binding Title}" Foreground="White" FontWeight="SemiBold"
+                                                                           FontSize="13" TextTrimming="CharacterEllipsis"/>
+                                                                <TextBlock Text="{Binding KindText}" Foreground="#CCFFFFFF" FontSize="12" Margin="0,2,0,0"/>
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </Grid>
+                                                </Button>
+                                            </DataTemplate></ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </DataTemplate></ListBox.ItemTemplate>
+                                </ListBox>
+                                <fluent:Button Content="加载更多" Command="{Binding LoadMoreWallpapers}" Style="{StaticResource QuietButton}"
+                                               HorizontalAlignment="Center" Margin="0,8,0,8"
+                                               Visibility="{Binding HasMoreWallpapers, Converter={StaticResource BoolVisibility}}"/>
+                                <TextBlock Text="{Binding Session.WallpaperName}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Session.WallpaperName}" Margin="0,4,0,8"/>
+                                <ui:AnimatedExpander IsExpanded="{Binding IsWallpaperPropertiesExpanded, Mode=TwoWay}" Margin="0,0,0,8"
+                                                     Visibility="{Binding HasWallpaperProperties, Converter={StaticResource BoolVisibility}}"
+                                                     AutomationProperties.Name="壁纸设置">
+                                    <ui:AnimatedExpander.Header>
+                                        <TextBlock Text="壁纸设置" FontWeight="SemiBold" FontSize="13"/>
+                                    </ui:AnimatedExpander.Header>
+                                    <StackPanel Margin="0,8,0,0">
+                                        <fluent:Button Content="恢复默认值" Command="{Binding ResetWallpaperProperties}"
+                                                       Style="{StaticResource QuietButton}" HorizontalAlignment="Right" Margin="0,0,0,8"/>
+                                        <local:WallpaperPropertiesEditor ItemsSource="{Binding WallpaperProperties}"/>
+                                    </StackPanel>
+                                </ui:AnimatedExpander>
+                                <WrapPanel>
+                                    <fluent:Button Content="刷新列表" Command="{Binding RefreshWallpaperList}" Margin="0,0,8,8"/>
+                                    <fluent:Button Content="恢复默认" Command="{Binding ClearWallpaper}" Style="{StaticResource QuietButton}" Margin="0,0,8,8"/>
+                                </WrapPanel>
+                                <TextBlock Text="{Binding Session.WallpaperError}" Style="{StaticResource ErrorMessage}"/>
+                            </StackPanel>
+                        </ui:AnimatedExpander>
                             <ui:SettingRow Title="模糊度" Description="{Binding Session.BackgroundBlurHint}" IsEnabled="{Binding Session.CanAdjustBackgroundBlur}"
                                            ToolTip="调整自定义背景图片的模糊程度" ToolTipService.ShowOnDisabled="True">
                                 <Grid>

@@ -35,7 +35,7 @@ public partial class MainWindow : FluentWindow
         ((App)Application.Current).Updates.Attach(_navigation.Session);
         _settings = new(_navigation.Session);
         AppTitleBar.WndProcInvoked += FixedWindowHitTest;
-        UiTheme.Apply(_navigation.Session.Theme, _navigation.Session.GlassTransparency, _navigation.Session.HasCustomBackgroundImage);
+        UiTheme.Apply(_navigation.Session.Theme, _navigation.Session.GlassTransparency, _navigation.Session.HasCustomBackgroundImage || _navigation.Session.HasWallpaper);
         _navigation.PropertyChanged += NavigationChanged;
         _navigation.Session.NavigateRequested += NavigateTo;
         _navigation.Session.PropertyChanged += SessionChanged;
@@ -43,6 +43,9 @@ public partial class MainWindow : FluentWindow
         DataContext = _navigation;
         PresentPage();
     }
+
+    private void Wallpaper_OnRenderStateChanged(object? sender, WallpaperRenderEventArgs e)
+        => _navigation.Session.ReportWallpaperRenderState(e.Version, e.Error);
 
     /// <summary>首帧之前按窗口所在显示器的工作区定尺寸，避免 1440×900 顶出小屏幕或超宽屏留白过多。</summary>
     protected override void OnSourceInitialized(EventArgs e)
@@ -135,7 +138,7 @@ public partial class MainWindow : FluentWindow
     protected override void OnContentRendered(EventArgs e)
     {
         base.OnContentRendered(e);
-        UiTheme.ApplyWindowMaterial(this, _navigation.Session.Theme, _navigation.Session.HasCustomBackgroundImage);
+        UiTheme.ApplyWindowMaterial(this, _navigation.Session.Theme, _navigation.Session.HasCustomBackgroundImage || _navigation.Session.HasWallpaper);
         if (!_restoringAccountsStarted)
         {
             _restoringAccountsStarted = true;
@@ -245,7 +248,7 @@ public partial class MainWindow : FluentWindow
         if (e.PropertyName is not (nameof(SystemParameters.HighContrast) or nameof(SystemParameters.ClientAreaAnimation))) return;
         Dispatcher.InvokeAsync(() =>
         {
-            UiTheme.Apply(_navigation.Session.Theme, _navigation.Session.GlassTransparency, _navigation.Session.HasCustomBackgroundImage); _navigation.Session.Refresh();
+            UiTheme.Apply(_navigation.Session.Theme, _navigation.Session.GlassTransparency, _navigation.Session.HasCustomBackgroundImage || _navigation.Session.HasWallpaper); _navigation.Session.Refresh();
             if (!SystemParameters.ClientAreaAnimation)
             {
                 Sidebar.BeginAnimation(WidthProperty, null); Sidebar.Width = _navigation.IsExpanded ? 236 : 72;
