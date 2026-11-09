@@ -183,7 +183,8 @@ public sealed class LauncherUpdateViewModel : ObservableObject, IDisposable
             if (!await _configuration.FlushAsync()) throw new IOException("配置尚未保存，已停止重启更新。");
             await _service.StartUpdaterAsync(_job, _operation!.Token);
             handedOff = true;
-            Application.Current.MainWindow.Close();
+            if (Application.Current.MainWindow is MainWindow mainWindow) mainWindow.CloseLauncher();
+            else Application.Current.MainWindow.Close();
         }
         catch (Exception error) { _status = "无法开始更新"; _error = error.Message; }
         finally { if (!handedOff) { _session.EndLauncherUpdate(); _applying = false; FinishOperation(); } }

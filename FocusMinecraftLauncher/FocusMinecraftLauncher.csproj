@@ -10,14 +10,18 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
       <PackageReference Include="FocusMinecraftCore" Version="2.0.9" />
       <PackageReference Include="WPF-UI" Version="4.3.0" />
       <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
-      <ProjectReference Include="..\FMLauncher.UpdateShared\FMLauncher.UpdateShared.csproj" />
+      <ProjectReference Include="..\FMLauncher.UpdateShared\FMLauncher.UpdateShared.csproj">
+        <AdditionalProperties Condition="'$(Configuration)' == 'Release' and '$(PublishSingleFile)' == 'true'">DebugType=None;DebugSymbols=false</AdditionalProperties>
+      </ProjectReference>
     </ItemGroup>
 
     <ItemGroup>
       <Resource Include="Presentation\Assets\DefaultPlayerHead.png" />
+      <Resource Include="Assets\Skins\Steve.png" />
       <Resource Include="Assets\GamesIcon\*.png" />
       <Resource Include="Assets\DownloadAssets\*.png" />
       <EmbeddedResource Include="Assets\WallpaperEngine\webwallgl.global.min.js" LogicalName="FMLauncher.WallpaperEngine.js" />
@@ -37,7 +41,7 @@
         <Description>Minecraft 启动器</Description>
 
         <!-- 软件版本号 -->
-        <Version Condition="'$(Version)' == ''">2.1.0</Version>
+        <Version Condition="'$(Version)' == ''">2.1.1</Version>
         <ReleaseNumber>$([System.Text.RegularExpressions.Regex]::Match('$(Version)', '^\d+\.\d+\.\d+').Value)</ReleaseNumber>
 
         <!-- 程序集版本 -->
@@ -56,6 +60,14 @@
 <!--        <ApplicationIcon>Assets\FMLauncher.ico</ApplicationIcon>-->
     </PropertyGroup>
 
+
+    <!-- Release 单文件发布（包括 Release-Lite）不生成或携带调试符号。 -->
+    <PropertyGroup Condition="'$(Configuration)' == 'Release' and '$(PublishSingleFile)' == 'true'">
+        <DebugType>None</DebugType>
+        <DebugSymbols>false</DebugSymbols>
+        <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+        <IncludeSymbolsInSingleFile>false</IncludeSymbolsInSingleFile>
+    </PropertyGroup>
 
     <!-- 单文件发布不外带开发用文档；壁纸脚本和许可证已作为资源内嵌。 -->
     <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">

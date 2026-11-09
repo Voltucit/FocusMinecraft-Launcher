@@ -66,6 +66,8 @@
                 <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
                     <fluent:Button x:Name="CancelButton" Content="取消" MinWidth="96" Margin="0,0,12,0"
                                    Visibility="Collapsed" Click="Decline"/>
+                    <fluent:Button x:Name="MinimizeButton" Content="最小化" MinWidth="96" Margin="0,0,12,0"
+                                   Visibility="Collapsed" Click="Minimize" AutomationProperties.Name="最小化到系统托盘"/>
                     <fluent:Button x:Name="ConfirmButton" Content="知道了" Style="{StaticResource PrimaryButton}"
                                    MinWidth="96" IsDefault="True" IsCancel="True" Click="Accept"
                                    AutomationProperties.Name="关闭提示"/>

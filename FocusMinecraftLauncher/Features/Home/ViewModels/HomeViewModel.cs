@@ -149,6 +149,8 @@ public sealed class HomeViewModel : ObservableObject, IDisposable
                 if (session.CurrentAccount?.Uuid != account.Uuid) return;
                 session.NotifyTask(removing ? $"披风（{choice.Alias}）已取消" : $"披风（{choice.Alias}）修改成功", false);
                 await LoadCapesAsync(account);
+                if (session.CurrentAccount is { } selected && ReferenceEquals(selected.RuntimeAccount, account))
+                    await session.RefreshSkinAsync(selected, true);
             }
             catch (Exception error) { session.NotifyTask(Infrastructure.Runtime.RuntimeSupport.Error(error), true); }
         }, parameter => parameter is CapeChoice { Id.Length: > 0 } && CanEditCapes);
@@ -162,10 +164,11 @@ public sealed class HomeViewModel : ObservableObject, IDisposable
             { Notice = "皮肤文件保存失败，请检查所选位置的写入权限。"; }
         }, _ => CanSaveSkin);
         UploadLocalSkin = new(async _ => await UploadLocalSkinAsync(), _ => CanEditLocalSkin);
-        RemoveLocalSkin = new(_ =>
+        RemoveLocalSkin = new(async _ =>
         {
             if (Session.CurrentAccount is not { } account || account.Name.Length == 0) return;
             var removed = Infrastructure.Authentication.LocalSkinStore.Remove(LocalSkinTargets(), account.Name);
+            await Session.RefreshLocalSkinAsync(account);
             Session.NotifyTask(removed > 0 ? "本地皮肤已移除" : "没有可移除的本地皮肤", removed == 0);
             Refresh();
         }, _ => CanEditLocalSkin);
@@ -231,6 +234,7 @@ public sealed class HomeViewModel : ObservableObject, IDisposable
             var png = await File.ReadAllBytesAsync(dialog.FileName);
             Infrastructure.Authentication.LocalSkinStore.Validate(png);
             var saved = await Infrastructure.Authentication.LocalSkinStore.SaveAsync(targets, account.Name, png, CancellationToken.None);
+            await Session.RefreshLocalSkinAsync(account);
             Session.NotifyTask($"本地皮肤已保存到 {saved} 个游戏目录", false);
             if (targets.Any(directory => !Infrastructure.Authentication.LocalSkinStore.HasLoader(directory)))
                 Session.NotifyTask("未检测到 CustomSkinLoader，游戏内不会显示本地皮肤，请先给游戏安装该 Mod。", true);

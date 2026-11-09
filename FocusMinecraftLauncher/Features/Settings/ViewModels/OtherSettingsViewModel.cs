@@ -1,8 +1,11 @@
 using FocusMinecraftLauncher.Common;
+using FocusMinecraftLauncher.Infrastructure.Configuration;
 
 namespace FocusMinecraftLauncher.Features.Settings.ViewModels;
 
-/// <summary>统一保存下载和资源显示选项；认证证书校验始终使用库的默认安全行为。</summary>
+public sealed record CloseBehaviorOption(LauncherCloseBehavior Value, string Label);
+
+/// <summary>管理退出行为、下载、资源显示及联机设置。</summary>
 public sealed class OtherSettingsViewModel : ObservableObject
 {
     public FocusMinecraftLauncher.Features.More.ViewModels.LauncherUpdateViewModel Updates => ((App)System.Windows.Application.Current).Updates;
@@ -15,9 +18,27 @@ public sealed class OtherSettingsViewModel : ObservableObject
     private string _fileNameFormat = ProjectAndFileName;
     private string _modManagementStyle = "标题显示资源名称，详情显示文件名";
     private bool _wikiNames = true;
+    private LauncherCloseBehavior _closeBehavior;
+    private bool _minimizeToTray;
     private long _cacheBytes = FocusMinecraftLauncher.Infrastructure.Runtime.CommunityCache.Measure();
 
     public string[] DownloadSources { get; } = [PreferOfficial, "BMCLAPI 镜像源"];
+    public IReadOnlyList<CloseBehaviorOption> CloseBehaviors { get; } =
+    [
+        new(LauncherCloseBehavior.Ask, "询问用户"),
+        new(LauncherCloseBehavior.Close, "直接关闭启动器"),
+        new(LauncherCloseBehavior.Minimize, "最小化到系统托盘")
+    ];
+    public LauncherCloseBehavior CloseBehavior
+    {
+        get => _closeBehavior;
+        set { if (Set(ref _closeBehavior, value)) _configuration.CloseBehavior = value; }
+    }
+    public bool MinimizeToTray
+    {
+        get => _minimizeToTray;
+        set { if (Set(ref _minimizeToTray, value)) _configuration.MinimizeToTray = value; }
+    }
     public string[] ResourceSources { get; } = [FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.MirrorName, FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.OfficialName];
     public string[] FileNameFormats { get; } = [ProjectAndFileName, "原文件名", "资源名称 + 版本号"];
     public string[] ModManagementStyles { get; } =
@@ -133,6 +154,8 @@ public sealed class OtherSettingsViewModel : ObservableObject
     private readonly FocusMinecraftLauncher.Infrastructure.Configuration.LauncherConfiguration _configuration = ((App)System.Windows.Application.Current).Configuration;
     public OtherSettingsViewModel()
     {
+        _closeBehavior = _configuration.CloseBehavior;
+        _minimizeToTray = _configuration.MinimizeToTray;
         _sharedNode = Network.SharedNode;
         _sharedNodeNetworkName = Network.SharedNodeNetworkName;
         _sharedNodePassword = Network.SharedNodePassword;

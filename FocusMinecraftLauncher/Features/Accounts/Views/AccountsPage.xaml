@@ -1,6 +1,7 @@
 <UserControl x:Class="FocusMinecraftLauncher.Features.Accounts.Views.AccountsPage"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:accounts="clr-namespace:FocusMinecraftLauncher.Features.Accounts.Controls"
  xmlns:ui="clr-namespace:FocusMinecraftLauncher.Presentation.Controls" SizeChanged="ResizePage" Focusable="False">
  
  
@@ -39,7 +40,7 @@
             <StackPanel>
                 <ComboBox ItemsSource="{Binding Session.Accounts}" SelectedItem="{Binding Selected, Mode=TwoWay}" DisplayMemberPath="Label" AutomationProperties.Name="查看账号" Visibility="{Binding IsCompact, Converter={StaticResource BoolVisibility}}" Margin="0,0,0,24"/>
                 <StackPanel Visibility="{Binding HasSelection, Converter={StaticResource BoolVisibility}}">
-                    <Border Width="64" Height="64" CornerRadius="{DynamicResource Radius16}" Background="{DynamicResource SelectionBackground}" HorizontalAlignment="Left"><ui:PlayerHead Source="{Binding Selected.HeadImage}" Width="64" Height="64"/></Border>
+                    <accounts:PlayerModelView Account="{Binding Selected}"/>
                     <TextBlock Text="{Binding Selected.Name}" Style="{StaticResource PageTitle}" Margin="0,16,0,8"/>
                     <TextBlock Text="{Binding Selected.Kind}" Style="{StaticResource Muted}"/>
                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">

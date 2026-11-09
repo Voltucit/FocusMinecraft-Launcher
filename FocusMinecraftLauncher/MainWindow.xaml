@@ -118,7 +118,7 @@
         <ui:TitleBar x:Name="AppTitleBar" Title="FMLauncher" Height="40" Padding="16,0,12,0"
                      Background="{DynamicResource TitleBarBackground}" Foreground="{DynamicResource AppText}"
                      ButtonsForeground="{DynamicResource AppText}" ButtonsBackground="{DynamicResource ControlHover}"
-                     ShowMaximize="False" CanMaximize="False"
+                     ShowMinimize="True" ShowMaximize="False" CanMaximize="False"
                      CloseWindowByDoubleClickOnIcon="True" ForceShutdown="False"
                      KeyboardNavigation.TabNavigation="Continue" AutomationProperties.Name="窗口标题栏">
             <ui:TitleBar.Icon><ui:ImageIcon Width="16" Height="16" Source="{DynamicResource LauncherIcon}"/></ui:TitleBar.Icon>

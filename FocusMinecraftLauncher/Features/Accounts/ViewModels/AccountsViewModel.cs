@@ -16,7 +16,19 @@ public sealed class AccountsViewModel : ObservableObject, IDisposable
     private PreviewAccount? _renameTarget;
     private bool _remove, _compact;
     public PreviewSession Session { get; }
-    public PreviewAccount? Selected { get => _selected; set { if(Set(ref _selected, value)) CancelRenameEditor(); ConfirmRemove = false; Changed(nameof(HasSelection)); } }
+    public PreviewAccount? Selected
+    {
+        get => _selected;
+        set
+        {
+            if (Set(ref _selected, value))
+            {
+                CancelRenameEditor();
+                if (value is { IsOnline: false }) _ = Session.RefreshLocalSkinAsync(value);
+            }
+            ConfirmRemove = false; Changed(nameof(HasSelection));
+        }
+    }
     public bool HasSelection => Selected != null;
     public bool IsCompact { get => _compact; set => Set(ref _compact, value); }
     public bool ConfirmRemove { get => _remove; set => Set(ref _remove, value); }
@@ -64,6 +76,7 @@ public sealed class AccountsViewModel : ObservableObject, IDisposable
         try
         {
             var saved=await Session.RenameOfflineAccountAsync(target,name);
+            await Session.RefreshLocalSkinAsync(target);
             if(ReferenceEquals(Selected,target))
             {
                 CancelRenameEditor();

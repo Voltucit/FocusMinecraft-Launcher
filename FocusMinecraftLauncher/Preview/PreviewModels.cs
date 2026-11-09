@@ -13,10 +13,13 @@ public sealed class PreviewAccount : ObservableObject
     private bool _skinLoading;
     private string _skinMessage = "";
     public byte[]? SkinPng { get; private set; }
+    public byte[]? CapePng { get; private set; }
+    public bool IsSlimSkin { get; private set; }
     public bool IsSkinLoading => _skinLoading;
     public string SkinMessage => _skinMessage;
     public void SetSkinState(bool loading, string message) { _skinLoading = loading; _skinMessage = message; Refresh(); }
-    public void ApplySkin(ImageSource? head, byte[]? png) { _headImage = head; SkinPng = png; Refresh(); }
+    public void ApplySkin(ImageSource? head, byte[]? png, bool slim = false, byte[]? cape = null)
+    { _headImage = head; SkinPng = png; IsSlimSkin = slim; CapePng = cape; Refresh(); }
     public Infrastructure.Authentication.StoredAccount Stored { get; }
     public FMCore.Accounts.IMinecraftAccount? RuntimeAccount { get; private set; }
     public Guid Id => Stored.Id;

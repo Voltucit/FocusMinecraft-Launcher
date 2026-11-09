@@ -17,19 +17,39 @@ public sealed class OfficialSkinService(string configurationDirectory)
     private readonly string _cacheDirectory = Path.Combine(configurationDirectory, "Skins");
     private static readonly HttpClient Client = new(new HttpClientHandler { AllowAutoRedirect = false });
     static OfficialSkinService() => Client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", CommunitySource.UserAgent);
-    public sealed record SkinImage(BitmapSource Head, byte[] Png, bool CacheSaved = true);
+    public sealed record SkinImage(BitmapSource? Head, byte[]? Png, bool CacheSaved = true,
+        bool IsSlim = false, byte[]? CapePng = null, string CapeMessage = "");
+    private sealed record AppearanceCache(byte[]? SkinPng, bool IsSlim, byte[]? CapePng);
+    private sealed record TextureProfile(string? Skin, bool IsSlim, string? Cape);
     /// <summary>官方档案返回的披风条目；IsActive 表示当前正在使用的披风。</summary>
     public sealed record CapeEntry(string Id, string Alias, bool IsActive);
 
     /// <summary>加载 UUID 对应的本机缓存，读取完成后不占用文件句柄。</summary>
     public Task<SkinImage?> ReadCacheAsync(Guid uuid, CancellationToken cancellationToken) => Task.Run<SkinImage?>(async () =>
     {
+        var appearancePath = AppearanceCachePath(uuid);
+        if (File.Exists(appearancePath))
+        {
+            try
+            {
+                if (new FileInfo(appearancePath).Length > 3 * 1024 * 1024) throw new InvalidDataException("外观缓存过大。");
+                var cache = JsonSerializer.Deserialize<AppearanceCache>(await File.ReadAllBytesAsync(appearancePath, cancellationToken).ConfigureAwait(false));
+                if (cache != null)
+                {
+                    var skin = cache.SkinPng == null ? new SkinImage(null, null) : DecodeSkin(cache.SkinPng);
+                    if (cache.CapePng != null) ValidateCape(cache.CapePng);
+                    return skin with { IsSlim = cache.IsSlim, CapePng = cache.CapePng };
+                }
+            }
+            catch (Exception error) when (error is JsonException or InvalidDataException or NotSupportedException or ArgumentException or FileFormatException)
+            { System.Diagnostics.Trace.TraceWarning("外观缓存无效，尝试旧皮肤缓存：{0}", error.GetType().Name); }
+        }
         var path = CachePath(uuid);
         if (!File.Exists(path)) return null;
         if (new FileInfo(path).Length > 1024 * 1024) throw new InvalidDataException("皮肤缓存过大。");
         var data = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        return Decode(data);
+        return DecodeSkin(data);
     }, cancellationToken);
 
     /// <summary>授权仅发送给官方档案地址；皮肤纹理请求不携带授权，禁止自动跳转。</summary>
@@ -48,40 +68,21 @@ public sealed class OfficialSkinService(string configurationDirectory)
         if (!root.TryGetProperty("skins", out var skins) || skins.ValueKind != JsonValueKind.Array)
             throw new InvalidDataException("皮肤档案格式无效。");
         string? address = null;
+        var slim = false;
         foreach (var skin in skins.EnumerateArray())
             if (skin.TryGetProperty("state", out var state) && state.GetString() == "ACTIVE")
-            { if (skin.TryGetProperty("url", out var url)) address = url.GetString(); if (string.IsNullOrEmpty(address)) throw new InvalidDataException("皮肤地址缺失。"); break; }
-        if (address == null)
-        {
-            // 已恢复默认皮肤时不继续保留之前的自定义皮肤缓存。
-            try { File.Delete(CachePath(account.Uuid)); }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { System.Diagnostics.Trace.TraceWarning("旧皮肤缓存未清理：{0}", error.GetType().Name); }
-            return null;
-        }
-        if (!Uri.TryCreate(address, UriKind.Absolute, out var texture) || texture.Host != "textures.minecraft.net"
-            || texture.Scheme is not ("http" or "https") || texture.UserInfo.Length != 0 || !texture.IsDefaultPort
-            || !texture.AbsolutePath.StartsWith("/texture/", StringComparison.Ordinal))
-            throw new InvalidDataException("皮肤纹理地址不是受支持的官方地址。");
-        var secureTexture = new UriBuilder(texture) { Scheme = Uri.UriSchemeHttps, Port = -1 }.Uri;
-        using var skinRequest = new HttpRequestMessage(HttpMethod.Get, secureTexture);
-        var png = await ReadResponseAsync(skinRequest, 1024 * 1024, token).ConfigureAwait(false);
-        var result = await Task.Run(() => Decode(png), token).ConfigureAwait(false);
-        token.ThrowIfCancellationRequested();
-        try
-        {
-            Directory.CreateDirectory(_cacheDirectory);
-            var temporary = CachePath(account.Uuid) + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            try
             {
-                await File.WriteAllBytesAsync(temporary, png, token).ConfigureAwait(false);
-                token.ThrowIfCancellationRequested();
-                File.Move(temporary, CachePath(account.Uuid), true);
+                if (skin.TryGetProperty("url", out var url)) address = url.GetString();
+                if (string.IsNullOrEmpty(address)) throw new InvalidDataException("皮肤地址缺失。");
+                slim = skin.TryGetProperty("variant", out var variant) && string.Equals(variant.GetString(), "SLIM", StringComparison.OrdinalIgnoreCase);
+                break;
             }
-            finally { if (File.Exists(temporary)) File.Delete(temporary); }
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-        { return result with { CacheSaved = false }; }
-        return result;
+        string? capeAddress = null;
+        if (root.TryGetProperty("capes", out var capes) && capes.ValueKind == JsonValueKind.Array)
+            foreach (var cape in capes.EnumerateArray())
+                if (cape.TryGetProperty("state", out var state) && state.GetString() == "ACTIVE")
+                { if (cape.TryGetProperty("url", out var url)) capeAddress = url.GetString(); break; }
+        return await FetchAppearanceAsync(account.Uuid, new(address, slim, capeAddress), OfficialTexture, token, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>从外置验证服务的档案接口读取皮肤；纹理地址由服务在档案属性里给出。</summary>
@@ -95,36 +96,22 @@ public sealed class OfficialSkinService(string configurationDirectory)
         try { profile = await ReadResponseAsync(profileRequest, 256 * 1024, timeout.Token).ConfigureAwait(false); }
         // 部分验证服务对没有皮肤或未注册的档案返回空响应。
         catch (JsonException) { return ClearSkinCache(uuid); }
-        string? address;
-        using (var document = JsonDocument.Parse(profile)) address = ReadYggdrasilSkin(document.RootElement);
-        if (string.IsNullOrEmpty(address)) return ClearSkinCache(uuid);
-        if (!Uri.TryCreate(new Uri(root), address, out var texture) || texture.Scheme is not ("http" or "https") || texture.UserInfo.Length != 0
-            || (apiRoot.Scheme == Uri.UriSchemeHttps && texture.Scheme != Uri.UriSchemeHttps))
-            throw new InvalidDataException("验证服务返回的皮肤地址不受支持。");
-        using var skinRequest = new HttpRequestMessage(HttpMethod.Get, texture);
-        var png = await ReadResponseAsync(skinRequest, 1024 * 1024, timeout.Token).ConfigureAwait(false);
-        var result = await Task.Run(() => Decode(png), timeout.Token).ConfigureAwait(false);
-        try
+        TextureProfile textures;
+        using (var document = JsonDocument.Parse(profile)) textures = ReadYggdrasilTextures(document.RootElement);
+        Uri Resolve(string address)
         {
-            Directory.CreateDirectory(_cacheDirectory);
-            var temporary = CachePath(uuid) + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            try
-            {
-                await File.WriteAllBytesAsync(temporary, png, timeout.Token).ConfigureAwait(false);
-                timeout.Token.ThrowIfCancellationRequested();
-                File.Move(temporary, CachePath(uuid), true);
-            }
-            finally { if (File.Exists(temporary)) File.Delete(temporary); }
+            if (!Uri.TryCreate(new Uri(root), address, out var texture) || texture.Scheme is not ("http" or "https") || texture.UserInfo.Length != 0
+                || (apiRoot.Scheme == Uri.UriSchemeHttps && texture.Scheme != Uri.UriSchemeHttps))
+                throw new InvalidDataException("验证服务返回的纹理地址不受支持。");
+            return texture;
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-        { return result with { CacheSaved = false }; }
-        return result;
+        return await FetchAppearanceAsync(uuid, textures, Resolve, timeout.Token, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>在 Yggdrasil 档案里找到皮肤纹理地址：properties 里的 textures 属性是 Base64 编码的 JSON。</summary>
-    private static string? ReadYggdrasilSkin(JsonElement profile)
+    private static TextureProfile ReadYggdrasilTextures(JsonElement profile)
     {
-        if (!profile.TryGetProperty("properties", out var properties) || properties.ValueKind != JsonValueKind.Array) return null;
+        if (!profile.TryGetProperty("properties", out var properties) || properties.ValueKind != JsonValueKind.Array) return new(null, false, null);
         foreach (var property in properties.EnumerateArray())
         {
             if (!property.TryGetProperty("name", out var name) || name.GetString() != "textures") continue;
@@ -135,13 +122,20 @@ public sealed class OfficialSkinService(string configurationDirectory)
             try
             {
                 using var document = JsonDocument.Parse(decoded);
-                if (document.RootElement.TryGetProperty("textures", out var textures)
-                    && textures.TryGetProperty("SKIN", out var skin)
-                    && skin.TryGetProperty("url", out var url)) return url.GetString();
+                if (!document.RootElement.TryGetProperty("textures", out var textures)) continue;
+                string? skinAddress = null, capeAddress = null;
+                var slim = false;
+                if (textures.TryGetProperty("SKIN", out var skin))
+                {
+                    if (skin.TryGetProperty("url", out var url)) skinAddress = url.GetString();
+                    slim = skin.TryGetProperty("metadata", out var metadata) && metadata.TryGetProperty("model", out var model) && model.GetString() == "slim";
+                }
+                if (textures.TryGetProperty("CAPE", out var cape) && cape.TryGetProperty("url", out var capeUrl)) capeAddress = capeUrl.GetString();
+                return new(skinAddress, slim, capeAddress);
             }
             catch (JsonException) { continue; }
         }
-        return null;
+        return new(null, false, null);
     }
 
     /// <summary>没有可用皮肤时清掉旧缓存，避免继续显示上一次的皮肤。</summary>
@@ -149,7 +143,66 @@ public sealed class OfficialSkinService(string configurationDirectory)
     {
         try { File.Delete(CachePath(uuid)); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { System.Diagnostics.Trace.TraceWarning("旧皮肤缓存未清理：{0}", error.GetType().Name); }
+        try { File.Delete(AppearanceCachePath(uuid)); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { System.Diagnostics.Trace.TraceWarning("旧外观缓存未清理：{0}", error.GetType().Name); }
         return null;
+    }
+
+    private static Uri OfficialTexture(string address)
+    {
+        if (!Uri.TryCreate(address, UriKind.Absolute, out var texture) || texture.Host != "textures.minecraft.net"
+            || texture.Scheme is not ("http" or "https") || texture.UserInfo.Length != 0 || !texture.IsDefaultPort
+            || !texture.AbsolutePath.StartsWith("/texture/", StringComparison.Ordinal))
+            throw new InvalidDataException("纹理地址不是受支持的官方地址。");
+        return new UriBuilder(texture) { Scheme = Uri.UriSchemeHttps, Port = -1 }.Uri;
+    }
+
+    private async Task<SkinImage> FetchAppearanceAsync(Guid uuid, TextureProfile textures, Func<string, Uri> resolve,
+        CancellationToken requestToken, CancellationToken cancellationToken)
+    {
+        var result = new SkinImage(null, null, IsSlim: textures.IsSlim);
+        if (!string.IsNullOrEmpty(textures.Skin))
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, resolve(textures.Skin));
+            var png = await ReadResponseAsync(request, 1024 * 1024, requestToken).ConfigureAwait(false);
+            result = await Task.Run(() => DecodeSkin(png) with { IsSlim = textures.IsSlim }, requestToken).ConfigureAwait(false);
+        }
+        if (!string.IsNullOrEmpty(textures.Cape))
+        {
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, resolve(textures.Cape));
+                var png = await ReadResponseAsync(request, 1024 * 1024, requestToken).ConfigureAwait(false);
+                await Task.Run(() => ValidateCape(png), requestToken).ConfigureAwait(false);
+                result = result with { CapePng = png };
+            }
+            catch (Exception error) when (!cancellationToken.IsCancellationRequested && error is HttpRequestException or IOException or OperationCanceledException or ArgumentException or InvalidOperationException or NotSupportedException or FileFormatException)
+            {
+                System.Diagnostics.Trace.TraceWarning("披风纹理读取失败：{0}", error.GetType().Name);
+                result = result with { CapeMessage = "披风暂时无法读取，请刷新资料重试。" };
+            }
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        try
+        {
+            Directory.CreateDirectory(_cacheDirectory);
+            // 一份原子快照保存皮肤、模型和披风，避免新皮肤与旧披风混用；不保存授权或纹理 URL。
+            var path = AppearanceCachePath(uuid);
+            var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                var data = JsonSerializer.SerializeToUtf8Bytes(new AppearanceCache(result.Png, result.IsSlim, result.CapePng));
+                await File.WriteAllBytesAsync(temporary, data, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                File.Move(temporary, path, true);
+                try { File.Delete(CachePath(uuid)); }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException) { System.Diagnostics.Trace.TraceWarning("旧皮肤缓存未清理：{0}", error.GetType().Name); }
+            }
+            finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        { result = result with { CacheSaved = false }; }
+        return result;
     }
 
     /// <summary>读取当前正版账号拥有的披风，仅向 Minecraft 官方档案发送授权。</summary>
@@ -193,6 +246,7 @@ public sealed class OfficialSkinService(string configurationDirectory)
         };
     }
     private string CachePath(Guid uuid) => Path.Combine(_cacheDirectory, uuid.ToString("N") + ".png");
+    private string AppearanceCachePath(Guid uuid) => Path.Combine(_cacheDirectory, uuid.ToString("N") + ".appearance.json");
     private static async Task<byte[]> ReadResponseAsync(HttpRequestMessage request, int maximumBytes, CancellationToken cancellationToken)
     {
         using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
@@ -211,22 +265,60 @@ public sealed class OfficialSkinService(string configurationDirectory)
     }
 
     /// <summary>兼容 64×32 与 64×64 皮肤，按透明度将帽子层覆盖到 8×8 面部上。</summary>
-    private static SkinImage Decode(byte[] png)
+    public static SkinImage DecodeSkin(byte[] png)
     {
         if (png.Length > 1024 * 1024) throw new InvalidDataException("皮肤图片过大。");
         using var stream = new MemoryStream(png, false);
         var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
-        if (decoder is not PngBitmapDecoder || decoder.Frames[0].PixelWidth != 64 || decoder.Frames[0].PixelHeight is not (32 or 64))
+        var width = decoder.Frames[0].PixelWidth;
+        var height = decoder.Frames[0].PixelHeight;
+        if (decoder is not PngBitmapDecoder || width < 64 || width > 1024 || width % 64 != 0 || (height != width && height * 2 != width))
             throw new InvalidDataException("皮肤图片尺寸或格式无效。");
         var pixels = new FormatConvertedBitmap(decoder.Frames[0], PixelFormats.Pbgra32, null, 0);
         var face = new byte[8 * 8 * 4]; var hat = new byte[face.Length];
-        pixels.CopyPixels(new Int32Rect(8, 8, 8, 8), face, 32, 0);
-        pixels.CopyPixels(new Int32Rect(40, 8, 8, 8), hat, 32, 0);
+        var scale = width / 64;
+        var region = new byte[8 * scale * 8 * scale * 4];
+        void ReadFace(int x, byte[] target)
+        {
+            pixels.CopyPixels(new Int32Rect(x * scale, 8 * scale, 8 * scale, 8 * scale), region, 8 * scale * 4, 0);
+            for (var y = 0; y < 8; y++)
+                for (var column = 0; column < 8; column++)
+                    Buffer.BlockCopy(region, (y * scale * 8 * scale + column * scale) * 4, target, (y * 8 + column) * 4, 4);
+        }
+        ReadFace(8, face); ReadFace(40, hat);
+        if (height * 2 == width)
+        {
+            var legacyHat = new byte[32 * scale * 32 * scale * 4];
+            pixels.CopyPixels(new Int32Rect(32 * scale, 0, 32 * scale, 32 * scale), legacyHat, 32 * scale * 4, 0);
+            if (Enumerable.Range(0, legacyHat.Length / 4).All(index => legacyHat[index * 4 + 3] == 255)) Array.Clear(hat);
+        }
         for (var i = 0; i < face.Length; i += 4)
             for (var channel = 0; channel < 4; channel++)
                 face[i + channel] = (byte)Math.Min(255, hat[i + channel] + (face[i + channel] * (255 - hat[i + 3]) + 127) / 255);
         var head = BitmapSource.Create(8, 8, 96, 96, PixelFormats.Pbgra32, null, face, 32);
         head.Freeze();
-        return new(head, png);
+        var slim = false;
+        if (height == width)
+        {
+            bool Transparent(int x, int y, int w, int h)
+            {
+                var unused = new byte[w * scale * h * scale * 4];
+                pixels.CopyPixels(new Int32Rect(x * scale, y * scale, w * scale, h * scale), unused, w * scale * 4, 0);
+                return Enumerable.Range(0, unused.Length / 4).All(index => unused[index * 4 + 3] == 0);
+            }
+            slim = Transparent(54, 20, 2, 12) && Transparent(50, 16, 2, 4)
+                && Transparent(46, 52, 2, 12) && Transparent(42, 48, 2, 4);
+        }
+        return new(head, png, IsSlim: slim);
+    }
+
+    private static void ValidateCape(byte[] png)
+    {
+        if (png.Length > 1024 * 1024) throw new InvalidDataException("披风图片过大。");
+        using var stream = new MemoryStream(png, false);
+        var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
+        var frame = decoder.Frames[0];
+        if (decoder is not PngBitmapDecoder || frame.PixelWidth < 64 || frame.PixelWidth > 1024 || frame.PixelWidth % 64 != 0 || frame.PixelHeight * 2 != frame.PixelWidth)
+            throw new InvalidDataException("披风图片尺寸或格式无效。");
     }
 }

@@ -1,0 +1,39 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.Accounts.Controls.PlayerModelView"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+ Height="320" Focusable="False" Loaded="ViewLoaded" Unloaded="ViewUnloaded" IsVisibleChanged="ViewVisibilityChanged">
+    <Border Background="{DynamicResource Surface}" CornerRadius="{DynamicResource Radius12}">
+        <Grid>
+            <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <Grid x:Name="RotationSurface" Background="Transparent" Focusable="True" Cursor="Hand"
+                  AutomationProperties.Name="3D 玩家模型" AutomationProperties.HelpText="拖动鼠标旋转，方向键调整视角，Home 键重置"
+                  ToolTip="拖动旋转，方向键调整，Home 重置"
+                  MouseLeftButtonDown="StartRotation" MouseMove="RotatePlayer" MouseLeftButtonUp="EndRotation"
+                  LostMouseCapture="RotationCaptureLost" KeyDown="RotationKeyDown">
+                <Viewport3D x:Name="PlayerViewport" IsHitTestVisible="False" ClipToBounds="True" Margin="12,12,12,0" SizeChanged="ResizeViewport">
+                    <Viewport3D.Camera>
+                        <OrthographicCamera x:Name="PlayerCamera" Position="0,0,80" LookDirection="0,0,-1" UpDirection="0,1,0" Width="50" NearPlaneDistance="1" FarPlaneDistance="160"/>
+                    </Viewport3D.Camera>
+                    <ModelVisual3D>
+                        <ModelVisual3D.Content>
+                            <Model3DGroup>
+                                <AmbientLight Color="#B0B0B0"/>
+                                <DirectionalLight Color="#707070" Direction="-0.4,-0.8,-1"/>
+                            </Model3DGroup>
+                        </ModelVisual3D.Content>
+                    </ModelVisual3D>
+                    <ModelVisual3D x:Name="PlayerVisual"/>
+                </Viewport3D>
+            </Grid>
+            <DockPanel Grid.Row="1" Margin="16,8,12,12" LastChildFill="True">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <CheckBox x:Name="WalkToggle" Content="行走动作" IsChecked="True" VerticalAlignment="Center" Margin="0,0,12,0"
+                              Checked="WalkChanged" Unchecked="WalkChanged"/>
+                    <fluent:Button Content="重置视角" Style="{StaticResource QuietButton}" Padding="10,5" Click="ResetView"/>
+                </StackPanel>
+                <TextBlock Text="拖动旋转" Style="{StaticResource Caption}" VerticalAlignment="Center"/>
+            </DockPanel>
+        </Grid>
+    </Border>
+</UserControl>

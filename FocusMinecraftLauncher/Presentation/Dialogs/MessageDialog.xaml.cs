@@ -8,6 +8,9 @@ namespace FocusMinecraftLauncher.Presentation.Dialogs;
 /// <summary>沿用三套主题画刷与按钮样式的提示及确认卡片，用于替代系统消息框。</summary>
 public partial class MessageDialog : Window
 {
+    public enum CloseChoice { Cancel, Minimize, Close }
+    private CloseChoice _closeChoice = CloseChoice.Close;
+
     private MessageDialog(string headline, string body)
     {
         InitializeComponent();
@@ -57,6 +60,28 @@ public partial class MessageDialog : Window
         return dialog.ShowDialog() == true;
     }
 
+    /// <summary>关闭窗口时区分后台运行和真正退出；Esc 仅取消本次操作。</summary>
+    public static CloseChoice ChooseWindowClose(string body)
+    {
+        var application = Application.Current;
+        if (application == null) return CloseChoice.Cancel;
+        if (!application.Dispatcher.CheckAccess())
+            return application.Dispatcher.Invoke(() => ChooseWindowClose(body));
+        if (application.MainWindow is not { IsLoaded: true } owner) return CloseChoice.Cancel;
+        var dialog = new MessageDialog("关闭启动器", body) { Owner = owner };
+        ThemeVisuals.SetMotionAllowed(dialog, ThemeVisuals.GetMotionAllowed(owner));
+        dialog.ConfirmButton.Content = "关闭启动器";
+        dialog.ConfirmButton.IsDefault = false;
+        dialog.ConfirmButton.IsCancel = false;
+        dialog.ConfirmButton.SetResourceReference(StyleProperty, "DangerButton");
+        System.Windows.Automation.AutomationProperties.SetName(dialog.ConfirmButton, "关闭启动器");
+        dialog.CancelButton.Visibility = Visibility.Visible;
+        dialog.CancelButton.IsCancel = true;
+        dialog.MinimizeButton.Visibility = Visibility.Visible;
+        dialog.MinimizeButton.IsDefault = true;
+        return dialog.ShowDialog() == true ? dialog._closeChoice : CloseChoice.Cancel;
+    }
+
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (ThemeVisuals.GetMotionAllowed(this) && SystemParameters.ClientAreaAnimation)
@@ -64,7 +89,8 @@ public partial class MessageDialog : Window
             {
                 EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
             });
-        if (CancelButton.Visibility == Visibility.Visible) CancelButton.Focus();
+        if (MinimizeButton.Visibility == Visibility.Visible) MinimizeButton.Focus();
+        else if (CancelButton.Visibility == Visibility.Visible) CancelButton.Focus();
         else ConfirmButton.Focus();
     }
 
@@ -77,4 +103,6 @@ public partial class MessageDialog : Window
 
     private void Accept(object sender, RoutedEventArgs e) => DialogResult = true;
     private void Decline(object sender, RoutedEventArgs e) => DialogResult = false;
+    private void Minimize(object sender, RoutedEventArgs e)
+    { _closeChoice = CloseChoice.Minimize; DialogResult = true; }
 }

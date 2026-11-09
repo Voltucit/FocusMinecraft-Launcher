@@ -6,6 +6,8 @@ using System.Text.Json.Nodes;
 
 namespace FocusMinecraftLauncher.Infrastructure.Configuration;
 
+public enum LauncherCloseBehavior { Ask, Close, Minimize }
+
 /// <summary>程序目录内的统一配置入口；串行原子写入，并合并高频修改，不依赖工作目录。</summary>
 public sealed class LauncherConfiguration
 {
@@ -27,6 +29,31 @@ public sealed class LauncherConfiguration
     public string MinecraftDirectory => Path.Combine(BaseDirectory, ".minecraft");
     public string LauncherFile => Path.Combine(ConfigDirectory, "Launcher_config.json");
     public string AccountFile => Path.Combine(ConfigDirectory, "account_config.json");
+    /// <summary>最小化到托盘需用户主动开启，不沿用旧精简模式默认开启的配置。</summary>
+    public bool MinimizeToTray
+    {
+        get { lock (_gate) return Boolean(_launcher["window"]?["minimizeToTray"], false); }
+        set => ChangeLauncher(root => Object(root, "window")["minimizeToTray"] = value);
+    }
+    /// <summary>窗口关闭入口的默认操作；缺少配置或值无效时保持询问。</summary>
+    public LauncherCloseBehavior CloseBehavior
+    {
+        get
+        {
+            lock (_gate)
+                return Text(_launcher["window"]?["closeBehavior"]) switch
+                {
+                    "Close" => LauncherCloseBehavior.Close,
+                    "Minimize" => LauncherCloseBehavior.Minimize,
+                    _ => LauncherCloseBehavior.Ask
+                };
+        }
+        set
+        {
+            var behavior = Enum.IsDefined(value) ? value : LauncherCloseBehavior.Ask;
+            ChangeLauncher(root => Object(root, "window")["closeBehavior"] = behavior.ToString());
+        }
+    }
     public event Action? StatusChanged;
     public void ReportNotice(string message) { lock (_gate) _warnings.Add(message); StatusChanged?.Invoke(); }
     public string Status { get { lock (_gate) return string.Join("\n", _warnings.Concat(_saveError.Length == 0 ? [] : new[] { _saveError })); } }
@@ -185,6 +212,7 @@ public sealed class LauncherConfiguration
             ["homeLayouts"] = new JsonObject { ["Classic"] = new JsonObject(), ["Minimal"] = new JsonObject(), ["Centered"] = new JsonObject() }
         },
         ["selection"] = new JsonObject { ["instanceId"] = null },
+        ["window"] = new JsonObject { ["closeBehavior"] = "Ask", ["minimizeToTray"] = false },
         ["global"] = new JsonObject { ["versionIsolation"] = "All", ["javaPath"] = "", ["memoryMb"] = 4096, ["gameDirectory"] = MinecraftDirectory, ["jvmArguments"] = "" },
         ["downloads"] = new JsonObject(),
         ["updates"] = new JsonObject { ["autoCheck"] = true, ["autoDownload"] = false, ["lastCheckUtc"] = "", ["preparedJob"] = "" }

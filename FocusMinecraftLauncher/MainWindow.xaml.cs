@@ -42,6 +42,7 @@ public partial class MainWindow : FluentWindow
         _navigation.Session.NavigateRequested += NavigateTo;
         _navigation.Session.PropertyChanged += SessionChanged;
         SystemParameters.StaticPropertyChanged += SystemPreferenceChanged;
+        Application.Current.SessionEnding += SystemSessionEnding;
         DataContext = _navigation;
         PresentPage();
     }
@@ -54,6 +55,7 @@ public partial class MainWindow : FluentWindow
     {
         base.OnSourceInitialized(e);
         FitWindowToScreen(false);
+        InitializeTray();
     }
 
     /// <summary>换到不同缩放的显示器后，只在窗口超出新工作区时再调整，保留用户自己拖出的大小。</summary>
@@ -329,35 +331,35 @@ public partial class MainWindow : FluentWindow
         }
         base.OnKeyDown(e);
     }
-    /// <summary>关闭按钮、Alt+F4 及 Close 共用退出过渡；关闭动画时直接退出。</summary>
+    /// <summary>关闭按钮和 Alt+F4 先选择后台或退出；真正退出沿用联机清理、写入等待和退出过渡。</summary>
     private bool _stoppingNetwork;
     protected override async void OnClosing(CancelEventArgs e)
     {
         base.OnClosing(e);
+        if (_sessionEnding) return;
         if (e.Cancel)
         {
-            if (_isExiting) RestoreCancelledExit();
+            if (_isExiting || _exitRequested) RestoreCancelledExit();
             return;
         }
+        if (_stoppingNetwork || _stoppingBackend) { e.Cancel = true; return; }
+        if (ChooseCloseAction(e)) return;
         var network = ((App)Application.Current).Multiplayer;
-        if (_stoppingNetwork) { e.Cancel = true; return; }
         if (network.HasActivity)
         {
             e.Cancel = true;
-            var exitMessage = network.IsInstallingComponents ? "退出会取消联机组件的安装。"
-                : !network.HasSession ? "退出会取消正在进行的联机准备。"
-                : network.IsHosting ? "退出会解散当前房间并结束联机。" : "退出会断开当前联机连接。";
-            if (!Presentation.Dialogs.MessageDialog.Confirm("退出启动器？", exitMessage, "退出并关闭", "取消")) return;
+            if (!_networkExitConfirmed && !Presentation.Dialogs.MessageDialog.Confirm("退出启动器？", NetworkExitMessage(), "退出并关闭", "取消"))
+            { RestoreCancelledExit(); return; }
             _stoppingNetwork = true; network.PreventStart(true);
             try
             {
                 await network.StopAsync();
                 _stoppingNetwork = false;
-                Close();
+                QueueClose();
             }
             catch (Exception error)
             {
-                _stoppingNetwork = false; network.PreventStart(false);
+                _stoppingNetwork = false; RestoreCancelledExit();
                 Presentation.Dialogs.MessageDialog.Show("尚未退出联机", Features.Multiplayer.Services.EasyTierWorker.Describe(error));
             }
             return;
@@ -366,8 +368,13 @@ public partial class MainWindow : FluentWindow
         if(!_backendStopped && _navigation.Session.HasPendingWrites)
         {
             e.Cancel=true;if(_stoppingBackend)return;_stoppingBackend=true;
-            try {await _navigation.Session.StopPendingWritesAsync();}
-            finally {_backendStopped=true;_stoppingBackend=false;Close();}
+            try { await _navigation.Session.StopPendingWritesAsync(); _backendStopped = true; QueueClose(); }
+            catch (Exception error)
+            {
+                RestoreCancelledExit();
+                Presentation.Dialogs.MessageDialog.Show("尚未关闭启动器", Infrastructure.Runtime.RuntimeSupport.Error(error));
+            }
+            finally { _stoppingBackend = false; }
             return;
         }
         if (_exitAnimationFinished || !IsVisible || WindowState == WindowState.Minimized || !_navigation.Session.MotionAllowed)
@@ -405,6 +412,7 @@ public partial class MainWindow : FluentWindow
     /// <summary>其他关闭处理取消退出时，恢复界面，避免窗口保持透明或不可操作。</summary>
     private void RestoreCancelledExit()
     {
+        _exitRequested = _networkExitConfirmed = false;
         ((App)Application.Current).Multiplayer.PreventStart(false);
         ClearExitAnimations();
         WindowSurface.IsHitTestVisible = true;
@@ -423,6 +431,7 @@ public partial class MainWindow : FluentWindow
     {
         base.OnStateChanged(e);
         ThemeVisuals.SetWindowActive(this, WindowState != WindowState.Minimized);
+        if (WindowState == WindowState.Minimized && ((App)Application.Current).Configuration.MinimizeToTray) MinimizeToBackground();
     }
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
@@ -432,6 +441,8 @@ public partial class MainWindow : FluentWindow
     }
     protected override void OnClosed(EventArgs e)
     {
+        Application.Current.SessionEnding -= SystemSessionEnding;
+        _trayService?.Dispose();
         AppTitleBar.WndProcInvoked -= FixedWindowHitTest;
         _captionFeedback?.Dispose();
         SystemParameters.StaticPropertyChanged -= SystemPreferenceChanged;

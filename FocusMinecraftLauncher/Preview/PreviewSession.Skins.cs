@@ -22,7 +22,7 @@ public sealed partial class PreviewSession
             try
             {
                 var cached = await Skins.ReadCacheAsync(account.Uuid, _lifetime.Token);
-                if (cached != null && Accounts.Contains(account)) account.ApplySkin(cached.Head, cached.Png);
+                if (cached != null && Accounts.Contains(account)) account.ApplySkin(cached.Head, cached.Png, cached.IsSlim, cached.CapePng);
             }
             catch (OperationCanceledException) { return; }
             catch (Exception error) when (IsSkinError(error))
@@ -49,8 +49,10 @@ public sealed partial class PreviewSession
                 _ => null
             };
             if (cancellation.IsCancellationRequested || !Accounts.Contains(account) || !ReferenceEquals(account.RuntimeAccount, runtime)) return;
-            account.ApplySkin(skin?.Head, skin?.Png);
-            account.SetSkinState(false, skin == null ? "未获取到自定义皮肤，显示默认头像。" : skin.CacheSaved ? "" : "头像已更新，但皮肤缓存保存失败。");
+            account.ApplySkin(skin?.Head, skin?.Png, skin?.IsSlim ?? false, skin?.CapePng);
+            var message = skin?.Png == null ? "未获取到自定义皮肤，显示默认外观。" : skin.CacheSaved ? "" : "外观已更新，但皮肤缓存保存失败。";
+            if (!string.IsNullOrEmpty(skin?.CapeMessage)) message = (message + " " + skin.CapeMessage).Trim();
+            account.SetSkinState(false, message);
         }
         catch (OperationCanceledException)
         {
@@ -77,6 +79,35 @@ public sealed partial class PreviewSession
     }
     private void CancelSkinRequest(Guid id)
     { if (_skinRequests.Remove(id, out var cancellation)) cancellation.Cancel(); }
+
+    /// <summary>预览已保存的离线本地皮肤，只读取现有游戏目录，不修改皮肤或游戏文件。</summary>
+    public async Task RefreshLocalSkinAsync(PreviewAccount account)
+    {
+        if (account.IsOnline || !Accounts.Contains(account)) return;
+        var name = account.Name;
+        var paths = new[] { CurrentInstance?.GameDirectory, SavedSettings.GameDirectory }
+            .Concat(Instances.Select(instance => instance.GameDirectory))
+            .Where(directory => !string.IsNullOrWhiteSpace(directory))
+            .Select(directory => LocalSkinStore.FileFor(directory!, name)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        try
+        {
+            var skin = await Task.Run(async () =>
+            {
+                var path = paths.FirstOrDefault(File.Exists);
+                if (path == null) return null;
+                if (new FileInfo(path).Length > 1024 * 1024) throw new InvalidDataException("本地皮肤图片过大。");
+                return OfficialSkinService.DecodeSkin(await File.ReadAllBytesAsync(path, _lifetime.Token));
+            }, _lifetime.Token);
+            if (Accounts.Contains(account) && account.Name == name)
+            {
+                account.ApplySkin(skin?.Head, skin?.Png, skin?.IsSlim ?? false);
+                account.SetSkinState(false, "");
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception error) when (IsSkinError(error))
+        { if (Accounts.Contains(account) && account.Name == name) account.SetSkinState(false, "本地皮肤无法读取，请重新选择有效的 PNG 皮肤。"); }
+    }
 
     private readonly HashSet<Guid> _profileRefreshes = [];
     /// <summary>资料的版本号，主页据此重新读取披风，避免两处各存一份过期数据。</summary>
