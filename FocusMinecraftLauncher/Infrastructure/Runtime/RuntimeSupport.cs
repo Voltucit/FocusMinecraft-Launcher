@@ -103,7 +103,9 @@ public static class RuntimeSupport
     ];
     private static string[] GarbageCollectorArguments(string mode, int javaMajor)
     {
-        if (string.Equals(mode, "None", StringComparison.OrdinalIgnoreCase)) return [];
+        // 自动模式使用游戏声明的 GC；游戏未声明时，由 Java 使用自身默认值。
+        if (string.Equals(mode, "Auto", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(mode, "None", StringComparison.OrdinalIgnoreCase)) return [];
         if (string.Equals(mode, "ZGC", StringComparison.OrdinalIgnoreCase))
         {
             if (javaMajor >= 21) return ["-XX:+UseZGC", "-XX:+ZGenerational"];

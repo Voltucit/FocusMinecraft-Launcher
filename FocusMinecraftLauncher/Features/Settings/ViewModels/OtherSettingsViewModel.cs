@@ -46,10 +46,100 @@ public sealed class OtherSettingsViewModel : ObservableObject
     }
     public string CacheUsage => "已用 " + FocusMinecraftLauncher.Infrastructure.Runtime.CommunityCache.DescribeSize(_cacheBytes);
     public UiCommand ClearCache { get; }
+    public Features.Multiplayer.Services.MultiplayerService Network => ((App)System.Windows.Application.Current).Multiplayer;
+    public UiCommand UninstallNetwork { get; }
+    public UiCommand InstallNetwork { get; }
+    public UiCommand CancelNetworkInstall { get; }
+    private string _sharedNode = "", _sharedNodeNotice = "", _sharedNodeSaveError = "";
+    private string _sharedNodeNetworkName = "", _sharedNodePassword = "";
+    private string _sharedNodeConnectivity = "";
+    private bool _sharedNodeConnectivityError;
+    private bool _savingSharedNode;
+    public string SharedNode
+    {
+        get => _sharedNode;
+        set
+        {
+            if (!Set(ref _sharedNode, value)) return;
+            _sharedNodeSaveError = ""; SharedNodeNotice = "";
+            SharedNodeConnectivity = "";
+            Changed(nameof(SharedNodeError));
+            System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+        }
+    }
+    public string SharedNodeNetworkName
+    {
+        get => _sharedNodeNetworkName;
+        set
+        {
+            if (!Set(ref _sharedNodeNetworkName, value)) return;
+            _sharedNodeSaveError = ""; SharedNodeNotice = "";
+            SharedNodeConnectivity = "";
+            Changed(nameof(SharedNodeError));
+            System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+        }
+    }
+    public string SharedNodePassword
+    {
+        get => _sharedNodePassword;
+        set
+        {
+            if (!Set(ref _sharedNodePassword, value)) return;
+            _sharedNodeSaveError = ""; SharedNodeNotice = "";
+            SharedNodeConnectivity = "";
+            Changed(nameof(SharedNodeError));
+            System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+        }
+    }
+    public string SharedNodeError => _sharedNodeSaveError.Length > 0 ? _sharedNodeSaveError : SharedNodeValidationError;
+    public string SharedNodeConnectivity
+    {
+        get => _sharedNodeConnectivity;
+        private set
+        {
+            if (!Set(ref _sharedNodeConnectivity, value)) return;
+            Changed(nameof(HasSharedNodeConnectivity));
+        }
+    }
+    public bool SharedNodeConnectivityError
+    {
+        get => _sharedNodeConnectivityError;
+        private set => Set(ref _sharedNodeConnectivityError, value);
+    }
+    public bool HasSharedNodeConnectivity => SharedNodeConnectivity.Length > 0;
+    private string SharedNodeValidationError
+    {
+        get
+        {
+            try
+            {
+                Features.Multiplayer.Models.RoomInvitation.NormalizeNode(SharedNode);
+                string networkName = SharedNodeNetworkName.Trim();
+                if ((networkName.Length == 0) != (SharedNodePassword.Length == 0))
+                    return "私有节点需要同时填写网络名称和密码；公益节点请将两项都留空。";
+                if (networkName.Length > 64 || networkName.Any(char.IsControl))
+                    return "节点网络名称最多 64 个字符，且不能包含控制字符。";
+                if (SharedNodePassword.Length > 128 || SharedNodePassword.Any(char.IsControl))
+                    return "节点密码最多 128 个字符，且不能包含控制字符。";
+                return "";
+            }
+            catch (FormatException error) { return error.Message; }
+        }
+    }
+    public string SharedNodeNotice { get => _sharedNodeNotice; private set => Set(ref _sharedNodeNotice, value); }
+    public bool IsSavingSharedNode => _savingSharedNode;
+    public UiCommand SaveSharedNode { get; }
 
     private readonly FocusMinecraftLauncher.Infrastructure.Configuration.LauncherConfiguration _configuration = ((App)System.Windows.Application.Current).Configuration;
     public OtherSettingsViewModel()
     {
+        _sharedNode = Network.SharedNode;
+        _sharedNodeNetworkName = Network.SharedNodeNetworkName;
+        _sharedNodePassword = Network.SharedNodePassword;
+        SaveSharedNode = new(async _ => await SaveSharedNodeAsync(), _ => !_savingSharedNode && SharedNodeValidationError.Length == 0);
+        InstallNetwork = new(async _ => await Network.InstallComponentsAsync(), _ => Network.CanInstallComponents);
+        CancelNetworkInstall = new(_ => Network.CancelComponentInstallation(), _ => Network.CanCancelComponentInstallation);
+        UninstallNetwork = new(async _ => await Network.UninstallAsync(), _ => Network.CanUninstall);
         var data = _configuration.ReadLauncher()["downloads"];
         _fileDownloadSource = NormalizeSource(FocusMinecraftLauncher.Infrastructure.Configuration.LauncherConfiguration.Text(data?["fileDownloadSource"], PreferOfficial));
         _versionListSource = NormalizeSource(FocusMinecraftLauncher.Infrastructure.Configuration.LauncherConfiguration.Text(data?["versionListSource"], PreferOfficial));
@@ -67,6 +157,59 @@ public sealed class OtherSettingsViewModel : ObservableObject
             _cacheBytes = FocusMinecraftLauncher.Infrastructure.Runtime.CommunityCache.Measure();
             Changed(nameof(CacheUsage));
         });
+        if (Network.SharedNode.Length > 0) _ = TestSharedNodeStatusAsync(Network.SharedNode, Network.SharedNodeNetworkName, Network.SharedNodePassword);
+    }
+
+    private async Task<bool> TestSharedNodeStatusAsync(string node, string networkName, string password)
+    {
+        SharedNodeConnectivity = "正在测试节点连通性…";
+        SharedNodeConnectivityError = false;
+        try
+        {
+            SharedNodeConnectivity = await Network.TestSharedNodeAsync(node, networkName, password);
+            return true;
+        }
+        catch (Exception error)
+        {
+            SharedNodeConnectivity = "节点连接失败：" + error.Message;
+            SharedNodeConnectivityError = true;
+            return false;
+        }
+    }
+
+    /// <summary>确认保存后再修改节点；校验与写入失败就地反馈，不误报保存成功。</summary>
+    private async Task SaveSharedNodeAsync()
+    {
+        if (_savingSharedNode) return;
+        _savingSharedNode = true; SharedNodeNotice = ""; _sharedNodeSaveError = "";
+        Changed(nameof(IsSavingSharedNode)); Changed(nameof(SharedNodeError));
+        System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+        try
+        {
+            var node = Features.Multiplayer.Models.RoomInvitation.NormalizeNode(SharedNode);
+            var saved = await Network.SaveSharedNodeAsync(node, SharedNodeNetworkName, SharedNodePassword);
+            SharedNode = node;
+            SharedNodeNetworkName = SharedNodeNetworkName.Trim();
+            if (saved)
+            {
+                if (node.Length == 0) SharedNodeNotice = "节点已清除。";
+                else
+                {
+                    SharedNodeNotice = "已保存。";
+                    if (await TestSharedNodeStatusAsync(node, SharedNodeNetworkName, SharedNodePassword)
+                        && System.Windows.Application.Current.MainWindow is MainWindow window)
+                        window.Session.SetGlobalNotification("节点端口连接成功", false);
+                }
+            }
+            else _sharedNodeSaveError = "保存失败，更改仅在本次运行中生效。请检查程序目录的读写权限。";
+        }
+        catch (Exception error) { _sharedNodeSaveError = "节点保存失败：" + error.Message; }
+        finally
+        {
+            _savingSharedNode = false;
+            Changed(nameof(IsSavingSharedNode)); Changed(nameof(SharedNodeError));
+            System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+        }
     }
     private static string NormalizeSource(string value)=>value.StartsWith("优先使用镜像")||value.Contains("BMCLAPI")?"BMCLAPI 镜像源":PreferOfficial;
     /// <summary>只有明确选过官方源才回到官方，其余旧值或空值都按默认的镜像源处理。</summary>

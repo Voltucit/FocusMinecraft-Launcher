@@ -1,0 +1,65 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.Multiplayer.Views.MultiplayerLobbyPage"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+ xmlns:visual="clr-namespace:FocusMinecraftLauncher.Presentation.Controls"
+ Focusable="False" Foreground="{DynamicResource AppText}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="32,0,32,24">
+        <StackPanel Width="720" MaxWidth="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=ScrollContentPresenter}}" HorizontalAlignment="Left">
+            <Border Background="{DynamicResource ControlHover}" CornerRadius="{DynamicResource ControlCornerRadius}" Padding="16" Margin="0,0,0,24"
+                    Visibility="{Binding HasRoom, Converter={StaticResource BoolVisibility}}">
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                        <TextBlock Text="你仍在房间中" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding RoomTitle}" TextTrimming="CharacterEllipsis" ToolTip="{Binding RoomTitle}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                    </StackPanel>
+                    <fluent:Button Grid.Column="1" Content="返回房间" Command="{Binding ReturnToRoom}" Style="{StaticResource PrimaryButton}" IsDefault="{Binding HasRoom}"/>
+                </Grid>
+            </Border>
+                    <TabControl SelectedIndex="{Binding SelectedTab, Mode=TwoWay}" IsEnabled="{Binding CanEditRoom}" AutomationProperties.Name="创建或加入房间">
+                        <TabItem Header="创建房间">
+                            <StackPanel KeyboardNavigation.TabNavigation="Local">
+                                <Grid Margin="0,0,0,24">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <visual:PlayerHead Source="{Binding Session.CurrentAccount.HeadImage}" Width="40" Height="40" Margin="0,0,12,0" AutomationProperties.Name="当前玩家头像"/>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
+                                        <TextBlock Text="{Binding PlayerName}" TextTrimming="CharacterEllipsis" ToolTip="{Binding PlayerName}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="房主" Style="{StaticResource Caption}" Margin="0,3,0,0"/>
+                                    </StackPanel>
+                                    <fluent:Button Grid.Column="2" Content="切换账号" Command="{Binding OpenAccounts}" Style="{StaticResource QuietButton}"/>
+                                </Grid>
+                                <Label Foreground="{DynamicResource AppText}" Content="房间名称" Target="{Binding ElementName=RoomNameBox}" Padding="0" Margin="0,0,0,8"/>
+                                <TextBox x:Name="RoomNameBox" Text="{Binding RoomName, UpdateSourceTrigger=PropertyChanged}" MaxLength="48" AutomationProperties.Name="房间名称"/>
+                                <TextBlock Text="{Binding RoomNameError}" Style="{StaticResource ErrorMessage}" Margin="0,6,0,0"/>
+
+                                <Label Foreground="{DynamicResource AppText}" Content="人数上限（含房主）" Target="{Binding ElementName=PlayerLimitBox}" Padding="0" Margin="0,20,0,8"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBox x:Name="PlayerLimitBox" Text="{Binding PlayerLimit, UpdateSourceTrigger=PropertyChanged}" InputScope="Number" MaxLength="3"
+                                        Width="144" VerticalContentAlignment="Center" AutomationProperties.Name="人数上限，包含房主" AutomationProperties.HelpText="输入 2 到 128 之间的整数"/>
+                                    <TextBlock Text="2–128 人" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding PlayerLimitError}" Style="{StaticResource ErrorMessage}" Margin="0,6,0,0"/>
+
+                                <fluent:Button Content="创建房间" Command="{Binding CreateRoom}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left" IsDefault="True"
+                                    MinWidth="144" Margin="0,24,0,0"/>
+                            </StackPanel>
+                        </TabItem>
+                        <TabItem Header="加入房间">
+                            <StackPanel KeyboardNavigation.TabNavigation="Local">
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <Label Foreground="{DynamicResource AppText}" Content="邀请信息" Target="{Binding ElementName=InvitationBox}" Padding="0" VerticalAlignment="Center"/>
+                                    <fluent:Button Grid.Column="1" Content="粘贴" Command="{Binding PasteInvitation}" Style="{StaticResource QuietButton}"/>
+                                </Grid>
+                                <TextBox x:Name="InvitationBox" Text="{Binding Invitation, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True"
+                                    MinHeight="96" MaxHeight="140" VerticalScrollBarVisibility="Auto" MaxLength="8192" AutomationProperties.Name="房间邀请信息"/>
+                                <TextBlock Text="{Binding InvitationError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
+                                <fluent:Button Content="加入房间" Command="{Binding JoinRoom}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left" IsDefault="True"
+                                    MinWidth="144" Margin="0,24,0,0"/>
+                            </StackPanel>
+                        </TabItem>
+                    </TabControl>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

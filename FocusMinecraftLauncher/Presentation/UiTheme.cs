@@ -62,6 +62,8 @@ public static partial class UiTheme
         colors["PopupSurface"] = colors["Surface"];
         // 图片只作为背景氛围；日间用浅遮罩、夜间用深遮罩，面板与控件继续使用各主题表面。
         colors["BackgroundImageScrim"] = glass ? "#3308090D" : dark ? "#A608090D" : "#B3FFFFFF";
+        // 壁纸本身已经提供画面，遮罩只负责前景可读性；不能沿用图片那种高不透明度浅色遮罩。
+        colors["WallpaperScrim"] = glass ? "#2608090D" : dark ? "#4D08090D" : "#1F000000";
         foreach (var (key, value) in colors)
         {
             // 先完成画刷配置再发布到资源中；WPF 使用资源后可能冻结画刷，不能再修改它。

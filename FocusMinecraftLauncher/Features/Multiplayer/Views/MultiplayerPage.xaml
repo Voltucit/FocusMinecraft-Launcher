@@ -1,0 +1,42 @@
+<UserControl x:Class="FocusMinecraftLauncher.Features.Multiplayer.Views.MultiplayerPage"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+ xmlns:local="clr-namespace:FocusMinecraftLauncher.Features.Multiplayer.Views"
+ Loaded="PageLoaded" Unloaded="PageUnloaded" DataContextChanged="PageDataContextChanged"
+ Focusable="False" Foreground="{DynamicResource AppText}">
+    <UserControl.InputBindings><KeyBinding Key="Escape" Command="{Binding ReturnToLobby}"/></UserControl.InputBindings>
+    <UserControl.Resources>
+        <DataTemplate x:Key="LobbyContent"><local:MultiplayerLobbyPage/></DataTemplate>
+        <DataTemplate x:Key="RoomContent"><local:MultiplayerRoomPage/></DataTemplate>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <Grid Margin="32,24,32,24">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <Grid VerticalAlignment="Center" Margin="0,0,16,0">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <fluent:Button x:Name="BackButton" Content="返回联机" Command="{Binding ReturnToLobby}" Style="{StaticResource QuietButton}" Margin="0,0,16,0"
+                    Visibility="{Binding IsRoomPage, Converter={StaticResource BoolVisibility}}"/>
+                <TextBlock Grid.Column="1" Text="{Binding PageTitle}" Style="{StaticResource PageTitle}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                    ToolTip="{Binding PageTitle}" VerticalAlignment="Center"/>
+            </Grid>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <fluent:Button Content="{Binding EndRoomLabel}" Command="{Binding EndRoom}" Style="{StaticResource DangerOutlineButton}" Margin="0,0,12,0"
+                    Visibility="{Binding IsRoomPage, Converter={StaticResource BoolVisibility}}" IsDefault="False"/>
+            </StackPanel>
+        </Grid>
+        <ContentControl x:Name="PageBody" Grid.Row="1" Content="{Binding}" Focusable="False" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+            <ContentControl.RenderTransform><TranslateTransform x:Name="PageShift"/></ContentControl.RenderTransform>
+            <ContentControl.Style>
+                <Style TargetType="ContentControl">
+                    <Setter Property="ContentTemplate" Value="{StaticResource LobbyContent}"/>
+                    <Style.Triggers><DataTrigger Binding="{Binding IsRoomPage}" Value="True"><Setter Property="ContentTemplate" Value="{StaticResource RoomContent}"/></DataTrigger></Style.Triggers>
+                </Style>
+            </ContentControl.Style>
+        </ContentControl>
+        <TextBlock Grid.Row="2" Text="{Binding Notice}" Style="{StaticResource Muted}" Margin="32,0,32,24"
+            Visibility="{Binding Notice, Converter={StaticResource TextVisibility}}" AutomationProperties.LiveSetting="Polite"/>
+    </Grid>
+</UserControl>

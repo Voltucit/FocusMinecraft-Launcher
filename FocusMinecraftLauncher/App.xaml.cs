@@ -16,6 +16,7 @@ public partial class App : Application
     public LauncherConfiguration Configuration { get; private set; } = null!;
     public BackgroundImageStore BackgroundImages { get; private set; } = null!;
     public LauncherUpdateViewModel Updates { get; private set; } = null!;
+    public Features.Multiplayer.Services.MultiplayerService Multiplayer { get; private set; } = null!;
     private BitmapSource? _initialBackground;
     public string RequestedLaunchId { get; private set; } = "";
     public string RequestedLaunchRoot { get; private set; } = "";
@@ -27,6 +28,13 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        if (e.Args.FirstOrDefault() == Features.Multiplayer.Services.EasyTierWorker.Argument)
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            var exitCode = await Features.Multiplayer.Services.EasyTierWorker.RunAsync(e.Args);
+            Shutdown(exitCode);
+            return;
+        }
         string updateError = "";
         try { if (UpdateBootstrap.RecoverBeforeStartup(e.Args)) { Shutdown(); return; } }
         catch (Exception error) { updateError = "上次更新需要处理，请查看 FMLauncher/Updates 中的记录。"; System.Diagnostics.Trace.TraceError("更新恢复：{0}", error); }
@@ -34,6 +42,7 @@ public partial class App : Application
         {if(e.Args[index]=="--launch-instance")RequestedLaunchId=e.Args[++index];else if(e.Args[index]=="--launch-root")RequestedLaunchRoot=e.Args[++index];}
 
         Configuration = await LauncherConfiguration.OpenAsync();
+        Multiplayer = new(Configuration);
         Infrastructure.Runtime.CommunitySource.Apply(Configuration);
         // 下载由 FMCore 统一发起，在这里补上镜像要求的 UA：名称固定、版本随发布更新。
         FMCore.Downloads.FileDownloader.UserAgent = Infrastructure.Runtime.CommunitySource.UserAgent;
@@ -68,6 +77,7 @@ public partial class App : Application
     /// <summary>补齐最后一次尚在合并等待中的写入，失败时保留明确反馈。</summary>
     protected override void OnExit(ExitEventArgs e)
     {
+        Multiplayer?.Dispose();
         Updates?.Dispose();
         if (Configuration != null && !Configuration.FlushAsync().GetAwaiter().GetResult())
             MessageBox.Show("配置保存失败。请检查程序目录的写入权限，本次更改可能未保存。", "FMLauncher", MessageBoxButton.OK, MessageBoxImage.Warning);

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
@@ -160,7 +161,7 @@ public static class WallpaperEngineService
         if (root.ValueKind != JsonValueKind.Object) throw new InvalidDataException("壁纸的 project.json 内容无效。");
         string directory = System.IO.Path.GetDirectoryName(projectPath) ?? "";
         string type = Text(root, "type").ToLowerInvariant();
-        string title = Text(root, "title");
+        string title = CleanLabel(Text(root, "title"));
         IReadOnlyList<WallpaperProperty> properties = ReadProperties(root);
         if (title.Length == 0) title = System.IO.Path.GetFileName(directory);
         string preview = Text(root, "preview");
@@ -272,6 +273,15 @@ public static class WallpaperEngineService
         root.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
             ? value.GetString() ?? "" : "";
 
+    private static string CleanLabel(string text)
+    {
+        if (text.Length == 0) return "";
+        // Wallpaper Engine 的属性标签允许 HTML/富文本；TextBlock 不解析标签，先去掉。
+        string cleaned = Regex.Replace(text, "<[^>]*>", " ");
+        cleaned = WebUtility.HtmlDecode(cleaned);
+        return Regex.Replace(cleaned, @"\s+", " ").Trim();
+    }
+
     private static IReadOnlyList<WallpaperProperty> ReadProperties(JsonElement root)
     {
         if (!root.TryGetProperty("general", out JsonElement general)
@@ -298,7 +308,7 @@ public static class WallpaperEngineService
                 "text" => WallpaperPropertyKind.Text,
                 _ => WallpaperPropertyKind.Text
             };
-            string label = Text(definition, "text");
+            string label = CleanLabel(Text(definition, "text"));
             if (label.Length == 0) label = key;
             string defaultValue = Scalar(definition, "value");
             double minimum = Number(definition, "min", 0);
@@ -313,8 +323,8 @@ public static class WallpaperEngineService
                 foreach (JsonElement option in array.EnumerateArray())
                 {
                     if (option.ValueKind != JsonValueKind.Object) continue;
-                    string optionLabel = Text(option, "label");
-                    if (optionLabel.Length == 0) optionLabel = Text(option, "text");
+                    string optionLabel = CleanLabel(Text(option, "label"));
+                    if (optionLabel.Length == 0) optionLabel = CleanLabel(Text(option, "text"));
                     string value = Scalar(option, "value");
                     if (optionLabel.Length == 0) optionLabel = value;
                     if (value.Length > 0) options.Add(new(optionLabel, value));

@@ -20,6 +20,7 @@ public sealed partial class PreviewSession
     private readonly HashSet<string> _incomplete = new(StringComparer.OrdinalIgnoreCase);
     private int _refreshRevision;
     private string _selectedRoot = "", _restoreId = "";
+    private InstanceDirectoryWatcher? _instanceWatcher;
     public string SelectedRoot => _selectedRoot;
     private bool _applyingIsolation;
     public bool IsApplyingIsolation => _applyingIsolation;
@@ -61,6 +62,7 @@ public sealed partial class PreviewSession
         // 避免切换文件夹时列表瞬间清空、页面出现空白帧。
         if (!string.Equals(root, SelectedRoot, StringComparison.OrdinalIgnoreCase))
         { _selectedRoot = root; _restoreId = ""; CurrentInstance = null; Changed(nameof(SelectedRoot)); SaveSelectedInstance(); }
+        StartInstanceWatcher();
         await RefreshInstancesAsync();
     }
     public void RememberFolder(string path)
@@ -121,7 +123,33 @@ public sealed partial class PreviewSession
         catch (Exception error) { if (revision == _refreshRevision) { InstanceError = RuntimeSupport.Error(error); Log("读取游戏：" + InstanceError); } }
         finally { if (revision == _refreshRevision) { IsLoading = false; Signal(); } }
     }
-    public async Task InitializeRuntimeAsync() => await RefreshInstancesAsync();
+    public async Task InitializeRuntimeAsync()
+    {
+        StartInstanceWatcher();
+        await RefreshInstancesAsync();
+    }
+
+    private void StartInstanceWatcher()
+    {
+        _instanceWatcher?.Dispose();
+        _instanceWatcher = null;
+        if (_selectedRoot.Length == 0 || !Directory.Exists(_selectedRoot)) return;
+        try
+        {
+            _instanceWatcher = new InstanceDirectoryWatcher(_selectedRoot, () =>
+            {
+                Application.Current?.Dispatcher.BeginInvoke(async () =>
+                {
+                    if (_lifetime.IsCancellationRequested || IsLoading) return;
+                    await RefreshInstancesAsync();
+                });
+            });
+        }
+        catch (Exception error)
+        {
+            Log("监听游戏目录失败：" + RuntimeSupport.Error(error));
+        }
+    }
 
     /// <summary>把 SDK 的实际下载数据调度至 UI；进度百分比不改变任务终态。</summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PreviewTask,long> _progressTimes = new();

@@ -8,6 +8,6 @@
         <Grid x:Name="WebHost" Visibility="Collapsed"/>
         <!-- 加载时以预览覆盖播放器，真正就绪后再揭开，不用截图循环代替实时渲染。 -->
         <Image x:Name="ImageLayer" Stretch="UniformToFill" Visibility="Collapsed" RenderOptions.BitmapScalingMode="HighQuality"/>
-        <Border Background="{DynamicResource BackgroundImageScrim}"/>
+        <Border Background="{DynamicResource WallpaperScrim}"/>
     </Grid>
 </UserControl>

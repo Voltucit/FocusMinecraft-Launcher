@@ -34,7 +34,7 @@ public sealed class MoreViewModel : ObservableObject
         Acknowledgments.Add(new("Voltucit", "https://i0.hdslb.com/bfs/face/876238092f96097678b9a16af77440846aeaa837.webp@150w_150h.jpg", "FML作者，天依中毒者。", "https://space.bilibili.com/38782485"));
         Acknowledgments.Add(new("bangbang93", "https://i0.hdslb.com/bfs/face/1d297f1fc4725391d1910c10988cdb7945747e69.jpg", "BMCLAPI 下载源提供者", "https://space.bilibili.com/9322"));
         Acknowledgments.Add(new("MCIMirror", "https://www.mcimirror.top/brand/logo-mark-192.png", "Modrinth与CurseForge镜像源提供", "https://www.mcimirror.top/"));
-        
+        Acknowledgments.Add(new("EasyTier", "https://avatars.githubusercontent.com/u/169161851?s=60&v=4", "提供了联机框架", "https://github.com/EasyTier/Easytier"));
         
         
         

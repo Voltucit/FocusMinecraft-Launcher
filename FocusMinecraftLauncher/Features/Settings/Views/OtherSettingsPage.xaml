@@ -8,6 +8,66 @@
         <StackPanel>
             <Border Style="{StaticResource GlassCard}" VerticalAlignment="Top" Margin="0,0,0,16">
                 <StackPanel>
+                    <TextBlock Text="联机" Style="{StaticResource SectionTitle}" Margin="0,0,0,4"/>
+                    <ui:SettingRow Title="共享节点" Description="用于下一次创建房间">
+                        <StackPanel>
+                            <TextBlock Text="节点地址" Style="{StaticResource Caption}" Margin="0,0,0,4"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBox Text="{Binding SharedNode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" MaxLength="256"
+                                         IsReadOnly="{Binding IsSavingSharedNode}" MinWidth="160" Margin="0,0,12,0"
+                                         ToolTip="填写 tcp://主机:端口，也可填写 主机:端口"
+                                         AutomationProperties.Name="联机共享节点地址" AutomationProperties.HelpText="填写节点协议、主机地址和端口；省略协议时使用 TCP">
+                                    <TextBox.InputBindings><KeyBinding Key="Enter" Command="{Binding SaveSharedNode}"/></TextBox.InputBindings>
+                                </TextBox>
+                                <fluent:Button Grid.Column="1" Content="保存节点" Command="{Binding SaveSharedNode}" Style="{StaticResource QuietButton}" AutomationProperties.Name="保存联机共享节点配置"/>
+                            </Grid>
+                            <TextBlock Text="私有节点网络名称" Style="{StaticResource Caption}" Margin="0,8,0,4"/>
+                            <TextBox Text="{Binding SharedNodeNetworkName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" MaxLength="64"
+                                     IsReadOnly="{Binding IsSavingSharedNode}" Margin="0,0,0,0"
+                                     ToolTip="私有节点填写节点网络名称；公益节点留空"
+                                     AutomationProperties.Name="私有共享节点网络名称" AutomationProperties.HelpText="公益节点留空；私有节点需填写节点提供者给出的 network-name"/>
+                            <TextBlock Text="私有节点密码" Style="{StaticResource Caption}" Margin="0,8,0,4"/>
+                            <PasswordBox Tag="SharedNodePassword" MaxLength="128" MinHeight="32" Margin="0,0,0,0"
+                                         PasswordChanged="SharedNodePassword_OnPasswordChanged"
+                                         ToolTip="私有节点填写网络密码；公益节点留空"
+                                         AutomationProperties.Name="私有共享节点密码" AutomationProperties.HelpText="公益节点留空；私有节点需填写节点提供者给出的 network-secret"/>
+                            <TextBlock Text="{Binding SharedNodeConnectivity}" Margin="0,8,0,0"
+                                       Visibility="{Binding HasSharedNodeConnectivity, Converter={StaticResource BoolVisibility}}"
+                                       AutomationProperties.LiveSetting="Polite">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource Caption}">
+                                        <Setter Property="Foreground" Value="{DynamicResource AccentText}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SharedNodeConnectivityError}" Value="True">
+                                                <Setter Property="Foreground" Value="{DynamicResource ErrorText}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="{Binding SharedNodeError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0" AutomationProperties.LiveSetting="Polite"/>
+                            <TextBlock Text="{Binding SharedNodeNotice}" Style="{StaticResource Muted}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                       Visibility="{Binding SharedNodeNotice, Converter={StaticResource TextVisibility}}" AutomationProperties.LiveSetting="Polite"/>
+                        </StackPanel>
+                    </ui:SettingRow>
+                    <ui:SettingRow Title="联机组件" Description="按需安装，不随启动器内置">
+                        <StackPanel>
+                            <WrapPanel>
+                                <TextBlock Text="{Binding Network.ComponentStatus}" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                <fluent:Button Content="安装联机组件" Command="{Binding InstallNetwork}" Style="{StaticResource QuietButton}"
+                                               Visibility="{Binding Network.ComponentInstalled, Converter={StaticResource NotVisibility}}" AutomationProperties.Name="提前安装 EasyTier 联机组件"/>
+                                <fluent:Button Content="取消安装" Command="{Binding CancelNetworkInstall}" Style="{StaticResource QuietButton}"
+                                               Visibility="{Binding Network.IsInstallingComponents, Converter={StaticResource BoolVisibility}}" AutomationProperties.Name="取消联机组件安装"/>
+                                <fluent:Button Content="卸载联机组件" Command="{Binding UninstallNetwork}" Style="{StaticResource QuietButton}" AutomationProperties.Name="卸载独立下载的 EasyTier 联机组件"/>
+                            </WrapPanel>
+                            <TextBlock Text="{Binding Network.Notice}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,8,0,0" AutomationProperties.LiveSetting="Polite"/>
+                        </StackPanel>
+                    </ui:SettingRow>
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource GlassCard}" VerticalAlignment="Top" Margin="0,0,0,16">
+                <StackPanel>
                     <TextBlock Text="启动器更新" Style="{StaticResource SectionTitle}" Margin="0,0,0,4"/>
                     <ui:SettingRow Title="检查更新"><CheckBox Content="启动时自动检查" IsChecked="{Binding Updates.AutoCheck, Mode=TwoWay}" AutomationProperties.Name="启动时自动检查启动器更新"/></ui:SettingRow>
                     <ui:SettingRow Title="下载更新"><CheckBox Content="发现新版后自动下载" IsChecked="{Binding Updates.AutoDownload, Mode=TwoWay}" AutomationProperties.Name="自动下载启动器更新"/></ui:SettingRow>

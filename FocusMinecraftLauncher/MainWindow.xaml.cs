@@ -29,9 +29,11 @@ public partial class MainWindow : FluentWindow
     private bool _compactNavigation;
     private bool _expandedBeforeCompact;
 
+    public Preview.PreviewSession Session => _navigation.Session;
+
     public MainWindow()
     {
-        InitializeComponent();
+        InitializeComponent();        InitializeComponent();
         ((App)Application.Current).Updates.Attach(_navigation.Session);
         _settings = new(_navigation.Session);
         AppTitleBar.WndProcInvoked += FixedWindowHitTest;
@@ -281,6 +283,7 @@ public partial class MainWindow : FluentWindow
                 MainPage.Home => new Features.Home.Views.HomePage { DataContext = new Features.Home.ViewModels.HomeViewModel(session, OpenAccountAdder, OpenOfflineAccountRename) },
                 MainPage.Accounts => new Features.Accounts.Views.AccountsPage { DataContext = new Features.Accounts.ViewModels.AccountsViewModel(session) },
                 MainPage.Downloads => new Features.Downloads.Views.DownloadsPage { DataContext = new Features.Downloads.ViewModels.DownloadsViewModel(session) },
+                MainPage.Multiplayer => new Features.Multiplayer.Views.MultiplayerPage { DataContext = new Features.Multiplayer.ViewModels.MultiplayerViewModel(session) },
                 MainPage.Settings => new Features.Settings.Views.SettingsPage { DataContext = _settings },
                 MainPage.More => new Features.More.Views.MorePage { DataContext = new Features.More.ViewModels.MoreViewModel(session) },
                 _ => throw new ArgumentOutOfRangeException(nameof(selected.Page))
@@ -327,6 +330,7 @@ public partial class MainWindow : FluentWindow
         base.OnKeyDown(e);
     }
     /// <summary>关闭按钮、Alt+F4 及 Close 共用退出过渡；关闭动画时直接退出。</summary>
+    private bool _stoppingNetwork;
     protected override async void OnClosing(CancelEventArgs e)
     {
         base.OnClosing(e);
@@ -335,6 +339,30 @@ public partial class MainWindow : FluentWindow
             if (_isExiting) RestoreCancelledExit();
             return;
         }
+        var network = ((App)Application.Current).Multiplayer;
+        if (_stoppingNetwork) { e.Cancel = true; return; }
+        if (network.HasActivity)
+        {
+            e.Cancel = true;
+            var exitMessage = network.IsInstallingComponents ? "退出会取消联机组件的安装。"
+                : !network.HasSession ? "退出会取消正在进行的联机准备。"
+                : network.IsHosting ? "退出会解散当前房间并结束联机。" : "退出会断开当前联机连接。";
+            if (!Presentation.Dialogs.MessageDialog.Confirm("退出启动器？", exitMessage, "退出并关闭", "取消")) return;
+            _stoppingNetwork = true; network.PreventStart(true);
+            try
+            {
+                await network.StopAsync();
+                _stoppingNetwork = false;
+                Close();
+            }
+            catch (Exception error)
+            {
+                _stoppingNetwork = false; network.PreventStart(false);
+                Presentation.Dialogs.MessageDialog.Show("尚未退出联机", Features.Multiplayer.Services.EasyTierWorker.Describe(error));
+            }
+            return;
+        }
+        network.PreventStart(true);
         if(!_backendStopped && _navigation.Session.HasPendingWrites)
         {
             e.Cancel=true;if(_stoppingBackend)return;_stoppingBackend=true;
@@ -377,6 +405,7 @@ public partial class MainWindow : FluentWindow
     /// <summary>其他关闭处理取消退出时，恢复界面，避免窗口保持透明或不可操作。</summary>
     private void RestoreCancelledExit()
     {
+        ((App)Application.Current).Multiplayer.PreventStart(false);
         ClearExitAnimations();
         WindowSurface.IsHitTestVisible = true;
         _isExiting = _exitAnimationFinished = false;
