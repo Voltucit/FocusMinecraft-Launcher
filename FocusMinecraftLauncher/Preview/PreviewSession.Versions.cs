@@ -98,6 +98,13 @@ public sealed partial class PreviewSession
         var check = await checker.CheckAsync(p => Report(task, $"检查完整性 {p.CheckedFiles}/{p.TotalKnownFiles}"), token);
         token.ThrowIfCancellationRequested();
         if (check.FileContentVerified) return;
+        // PCL2 等外部安装可能缺少校验声明，但文件本身是完整的；只有实际缺失或内容不符时才强制补全。
+        if (check.MissingFiles == 0 && check.InvalidFiles == 0)
+        {
+            Log(instance.Id + $"：{check.UnverifiableFiles} 项缺少校验声明，未发现缺失或内容不符，跳过强制补全。");
+            Report(task, "检查完整性完成");
+            return;
+        }
 
         Log(instance.Id + $"：文件检查发现缺失 {check.MissingFiles} 项，内容不符 {check.InvalidFiles} 项，校验声明不足 {check.UnverifiableFiles} 项，交由核心补全并校验。");
         // MetadataMissing 不是损坏；在线补全器正常返回即完成校验，不用同一份不足的本地声明再次拦截。

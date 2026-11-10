@@ -182,6 +182,7 @@ public sealed partial class PreviewSession
     /// <summary>保存全局草稿；隔离方式仅切换读取目录，不迁移文件，写入或游戏任务进行时禁止切换。</summary>
     public async Task<bool> SaveGlobalSettingsAsync(PreviewSettings settings)
     {
+        settings.GameDirectory = Infrastructure.Runtime.InstanceStore.NormalizeRoot(settings.GameDirectory);
         var changingIsolation = settings.VersionIsolation != SavedSettings.VersionIsolation;
         var changingRoot = !string.Equals(settings.GameDirectory, SavedSettings.GameDirectory, StringComparison.OrdinalIgnoreCase);
         if (changingIsolation && (IsBusy || Instances.Any(instance => instance.IsEditingContent)))

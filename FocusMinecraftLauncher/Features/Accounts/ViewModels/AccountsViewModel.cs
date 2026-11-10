@@ -45,6 +45,7 @@ public sealed class AccountsViewModel : ObservableObject, IDisposable
     /// <summary>重新复制授权码（自动复制失败或需要再粘贴一次时用）。</summary>
     public UiCommand CopyLoginCode { get; }
     public UiCommand SetDefault { get; }
+    public UiCommand UseAccount { get; }
     /// <summary>离线账号的 UUID 常被服务器白名单或插件使用，提供一键复制。</summary>
     public UiCommand CopyUuid { get; }
     public UiCommand Relogin { get; }
@@ -105,6 +106,12 @@ public sealed class AccountsViewModel : ObservableObject, IDisposable
         CancelRename = new(_=>CancelRenameEditor(),_=>!_savingRename);
         SetDefault = new(_ => { if (Selected is { } account) { session.SetDefaultAccount(account); Notice = "已设为默认账号。"; } },
             _ => Selected is { IsDefault: false } && CanManage);
+        UseAccount = new(_ =>
+        {
+            if (Selected is not { } account || ReferenceEquals(session.CurrentAccount, account)) return;
+            session.CurrentAccount = account;
+            Notice = "已切换到 " + account.Name + "。";
+        }, _ => Selected is { IsCurrent: false } && CanManage);
         CopyUuid = new(_ =>
         {
             if (Selected is not { } account || account.UuidText.Length == 0) return;

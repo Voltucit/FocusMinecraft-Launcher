@@ -12,11 +12,32 @@ public sealed class JavaDetectionViewModel : ObservableObject
 {
     private JavaDetectionState _state;
     private bool _expanded;
+    private bool _filterExpanded;
+    private bool _hideDuplicateVersions;
     public bool IsExpanded { get => _expanded; set => Set(ref _expanded, value); }
+    public bool IsFilterExpanded
+    {
+        get => _filterExpanded;
+        set { if (Set(ref _filterExpanded, value)) Changed(nameof(FilterToggleText)); }
+    }
+    public string FilterToggleText => IsFilterExpanded ? "收起选项" : "显示选项";
+    public UiCommand ToggleFilter { get; }
+    public bool HideDuplicateVersions
+    {
+        get => _hideDuplicateVersions;
+        set
+        {
+            if (!Set(ref _hideDuplicateVersions, value)) return;
+            RefreshVisibleResults();
+            Changed(nameof(StatusText));
+        }
+    }
     public string SelectionText => _selectedPath.Length == 0 ? "自动选择" : Results.FirstOrDefault(item => item.IsSelected) is { } selected ? "Java " + selected.Major + " / " + selected.Version : "自定义 Java";
     public string SelectedPath => _selectedPath;
-    private string _error = "", _selectedPath = "";
+    private string _error = "", _selectedPath = "", _scanProgress = "";
+    private CancellationTokenSource? _detection;
     public ObservableCollection<JavaRuntimeOption> Results { get; } = [];
+    public ObservableCollection<JavaRuntimeOption> VisibleResults { get; } = [];
     public JavaDetectionState State
     {
         get => _state;
@@ -28,13 +49,17 @@ public sealed class JavaDetectionViewModel : ObservableObject
     public bool HasFailed => State == JavaDetectionState.Failed;
     public string StatusText => State switch
     {
-        JavaDetectionState.Detecting => "正在检测本机 Java…",
-        JavaDetectionState.Succeeded when Results.Count > 0 => $"检测结果：{Results.Count} 项",
-        JavaDetectionState.Succeeded or JavaDetectionState.Empty => "未找到 Java，可浏览选择可执行文件。",
+        JavaDetectionState.Detecting => _scanProgress.Length > 0 ? _scanProgress : "正在检测本机 Java…",
+        JavaDetectionState.Succeeded when Results.Count > 0 => HideDuplicateVersions
+            ? $"检测结果：{VisibleResults.Count} / {Results.Count} 项（已隐藏相同版本）"
+            : $"检测结果：{Results.Count} 项",
+        JavaDetectionState.Succeeded or JavaDetectionState.Empty => _error.Length > 0 ? _error : "未找到 Java，可浏览选择可执行文件。",
         JavaDetectionState.Failed => string.IsNullOrWhiteSpace(Error) ? "检测失败，请重试或浏览选择 Java。" : "检测失败：" + Error,
         _ => "尚未检测"
     };
     public UiCommand Detect { get; }
+    public UiCommand DeepDetect { get; }
+    public UiCommand CancelDetect { get; }
     public UiCommand Select { get; }
     public UiCommand SelectAutomatic { get; }
     public UiCommand Install { get; }
@@ -48,15 +73,36 @@ public sealed class JavaDetectionViewModel : ObservableObject
     public string InstallStatus { get => _installStatus; private set => Set(ref _installStatus, value); }
     private readonly Action<string> _selectPath;
     private readonly Func<bool> _mirror;
+    private readonly Action<IReadOnlyList<FMCore.Java.JavaInfo>>? _saveCache;
 
-    public JavaDetectionViewModel(Action<string> selectPath, Func<bool>? mirror = null)
+    public JavaDetectionViewModel(Action<string> selectPath, Func<bool>? mirror = null, Action<IReadOnlyList<FMCore.Java.JavaInfo>>? saveCache = null)
     {
         _selectPath = selectPath;
         _mirror = mirror ?? (() => false);
-        Detect = new(async _ => { IsExpanded = true; await RunAsync(); }, _ => !IsBusy);
+        _saveCache = saveCache;
+        Detect = new(async _ => { IsExpanded = true; await RunAsync(false); }, _ => !IsBusy);
+        ToggleFilter = new(_ => IsFilterExpanded = !IsFilterExpanded);
+        DeepDetect = new(async _ =>
+        {
+            IsExpanded = true;
+            if (!Presentation.Dialogs.MessageDialog.Confirm("全盘扫描 Java？",
+                    "会遍历所有固定磁盘，可能需要几十秒到几分钟，也可能遇到无权限目录。扫描过程中可以取消。",
+                    "开始全盘扫描", "取消")) return;
+            await RunAsync(true);
+        }, _ => !IsBusy);
+        CancelDetect = new(_ => _detection?.Cancel(), _ => IsBusy);
         Select = new(value => { if (value is JavaRuntimeOption result) { selectPath(result.Path); IsExpanded = false; } },
             value => HasResults && value is JavaRuntimeOption result && !string.IsNullOrWhiteSpace(result.Path));
-        SelectAutomatic = new(_ => { selectPath(""); IsExpanded = false; });
+        SelectAutomatic = new(_ =>
+        {
+            // 实例页知道目标版本时直接选中匹配项；全局设置没有目标版本，保持自动让每个游戏自行匹配。
+            JavaRuntimeOption? best = null;
+            if (RecommendedMajor is { } major)
+                best = Results.FirstOrDefault(java => java.Major == major)
+                    ?? Results.Where(java => java.Major > major).OrderBy(java => java.Major).FirstOrDefault();
+            selectPath(best?.Path ?? "");
+            IsExpanded = false;
+        });
         Install = new(async _ =>
         {
             if (Presentation.Dialogs.JavaDownloadDialog.Ask(RecommendedMajor) is { } major) await InstallAsync(major);
@@ -82,7 +128,7 @@ public sealed class JavaDetectionViewModel : ObservableObject
             }), CancellationToken.None);
             OnUi(() => InstallStatus = $"Java {java.Version} 已安装完成。");
             _selectPath(java.Executable);
-            await RunAsync();
+            await RunAsync(false);
         }
         catch (Exception error)
         {
@@ -97,17 +143,33 @@ public sealed class JavaDetectionViewModel : ObservableObject
         else action();
     }
     /// <summary>启动器打开时预热一次检测，结果保留在选择列表中；已有检测进行时不重复执行。</summary>
-    public Task DetectOnceAsync() => IsBusy ? Task.CompletedTask : RunAsync();
-    private async Task RunAsync()
+    public Task DetectOnceAsync() => IsBusy ? Task.CompletedTask : RunAsync(false);
+    private async Task RunAsync(bool deep)
     {
-        State = JavaDetectionState.Detecting; Error = "";
+        if (IsBusy) return;
+        _detection?.Dispose();
+        _detection = new();
+        State = JavaDetectionState.Detecting; Error = ""; _scanProgress = deep ? "正在全盘扫描 Java…" : "正在检测本机 Java…";
+        Changed(nameof(StatusText));
         try
         {
-            var javas = await Infrastructure.Runtime.JavaScanner.GetJavasAsync();
+            var progress = new Progress<string>(text => OnUi(() => { _scanProgress = text; Changed(nameof(StatusText)); }));
+            var javas = await Infrastructure.Runtime.JavaScanner.GetJavasAsync(deep, progress, _detection.Token);
             Results.Clear(); foreach (var java in javas) Results.Add(new(java.MajorVersion, java.Version, java.Executable, java.Architecture ?? "架构未提供"));
+            _saveCache?.Invoke(javas);
             State = Results.Count > 0 ? JavaDetectionState.Succeeded : JavaDetectionState.Empty;
         }
+        catch (OperationCanceledException)
+        {
+            State = JavaDetectionState.Empty;
+            Error = "已取消检测。";
+        }
         catch (Exception error) { Error = Infrastructure.Runtime.RuntimeSupport.Error(error); State = JavaDetectionState.Failed; }
+        finally
+        {
+            _scanProgress = ""; _detection?.Dispose(); _detection = null;
+            Changed(nameof(StatusText));
+        }
     }
 
     /// <summary>路径变化时同步列表的当前选择标记，结果列表本身不决定保存时机。</summary>
@@ -118,7 +180,15 @@ public sealed class JavaDetectionViewModel : ObservableObject
         Changed(nameof(SelectionText)); Changed(nameof(SelectedPath));
     }
     private void ResultsChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    { UpdateSelection(_selectedPath); RefreshState(); CommandManager.InvalidateRequerySuggested(); }
+    { RefreshVisibleResults(); UpdateSelection(_selectedPath); RefreshState(); CommandManager.InvalidateRequerySuggested(); }
+    private void RefreshVisibleResults()
+    {
+        VisibleResults.Clear();
+        IEnumerable<JavaRuntimeOption> source = HideDuplicateVersions
+            ? Results.GroupBy(java => java.Version, StringComparer.OrdinalIgnoreCase).Select(group => group.First())
+            : Results;
+        foreach (JavaRuntimeOption java in source) VisibleResults.Add(java);
+    }
     private void RefreshState() { Changed(nameof(IsBusy)); Changed(nameof(HasResults)); Changed(nameof(HasFailed)); Changed(nameof(StatusText)); }
 }
 

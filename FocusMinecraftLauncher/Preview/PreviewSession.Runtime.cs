@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json.Nodes;
 using System.Windows;
@@ -6,6 +7,7 @@ using FMCore.Installer;
 using FMCore.Launch;
 using FMCore.Logger;
 using FMCore.Modsloader;
+using FMCore.Versions;
 using FocusMinecraftLauncher.Infrastructure.Configuration;
 using FocusMinecraftLauncher.Infrastructure.Runtime;
 
@@ -57,17 +59,101 @@ public sealed partial class PreviewSession
     }
     public async Task SelectRootAsync(string root)
     {
-        root = Path.GetFullPath(root);
+        root = InstanceStore.NormalizeRoot(root);
         // 不在这里清空实例列表：先保留旧条目，等新目录扫描完成后由刷新逻辑逐条替换，
         // 避免切换文件夹时列表瞬间清空、页面出现空白帧。
         if (!string.Equals(root, SelectedRoot, StringComparison.OrdinalIgnoreCase))
         { _selectedRoot = root; _restoreId = ""; CurrentInstance = null; Changed(nameof(SelectedRoot)); SaveSelectedInstance(); }
+        await EnsureResourceLinksAsync(root);
         StartInstanceWatcher();
         await RefreshInstancesAsync();
     }
+
+    /// <summary>当前根目录单独指定的 assets / libraries；为空时检查同级的常见分离目录。</summary>
+    public string ResourceAssetsDirectory => ReadResourceLink(SelectedRoot, "assets");
+    public string ResourceLibrariesDirectory => ReadResourceLink(SelectedRoot, "libraries");
+
+    public async Task SaveResourceDirectoriesAsync(string assets, string libraries)
+    {
+        string root = InstanceStore.NormalizeRoot(SelectedRoot);
+        assets = ValidateResourceDirectory(assets, "assets");
+        libraries = ValidateResourceDirectory(libraries, "libraries");
+        _configuration.ChangeLauncher(document =>
+        {
+            var links = LauncherConfiguration.Object(document, "resourceLinks");
+            var item = LauncherConfiguration.Object(links, root);
+            item["assets"] = assets;
+            item["libraries"] = libraries;
+        });
+        if (!await _configuration.FlushAsync()) throw new IOException("无法保存资源目录设置。");
+        await EnsureResourceLinksAsync(root);
+        Signal();
+    }
+
+    private static string ValidateResourceDirectory(string path, string kind)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return "";
+        path = Path.GetFullPath(path.Trim());
+        if (path.Any(character => character == '"' || char.IsControl(character)))
+            throw new ArgumentException($"{kind} 目录路径包含无效字符。");
+        if (!Directory.Exists(path)) throw new DirectoryNotFoundException($"所选 {kind} 目录不存在。");
+        return path;
+    }
+
+    private string ReadResourceLink(string root, string kind)
+    {
+        if (string.IsNullOrWhiteSpace(root)) return "";
+        root = InstanceStore.NormalizeRoot(root);
+        return LauncherConfiguration.Text(_configuration.ReadLauncher()["resourceLinks"]?[root]?[kind]).Trim();
+    }
+
+    /// <summary>把分离的 assets/libraries 以目录联接挂到游戏根目录；已存在的目录不覆盖。</summary>
+    public async Task EnsureResourceLinksAsync(string root)
+    {
+        root = InstanceStore.NormalizeRoot(root);
+        foreach (var (kind, configured) in new[] { ("assets", ReadResourceLink(root, "assets")), ("libraries", ReadResourceLink(root, "libraries")) })
+        {
+            string link = Path.Combine(root, kind);
+            if (Directory.Exists(link) || File.Exists(link)) continue;
+            string target = configured.Length > 0 ? configured : FindSiblingResource(root, kind);
+            if (target.Length == 0 || !Directory.Exists(target)) continue;
+            try
+            {
+                Directory.CreateDirectory(root);
+                using var process = Process.Start(new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                });
+                if (process == null || !process.WaitForExit(5000) || process.ExitCode != 0)
+                    throw new IOException("无法创建资源目录联接。");
+                Log($"已关联 {kind}：{target}");
+            }
+            catch (Exception error)
+            {
+                Log($"关联 {kind} 目录失败：{RuntimeSupport.Error(error)}");
+            }
+        }
+        await Task.CompletedTask;
+    }
+
+    private static string FindSiblingResource(string root, string kind)
+    {
+        string parent = Path.GetDirectoryName(root) ?? "";
+        string[] candidates =
+        [
+            Path.Combine(root, kind),
+            Path.Combine(parent, kind),
+            Path.Combine(parent, ".minecraft", kind),
+            Path.Combine(Path.GetDirectoryName(parent) ?? "", kind)
+        ];
+        return candidates.FirstOrDefault(path => path.Length > 0 && Directory.Exists(path) && !string.Equals(Path.GetFullPath(path), Path.Combine(root, kind), StringComparison.OrdinalIgnoreCase)) ?? "";
+    }
     public void RememberFolder(string path)
     {
-        path = Path.GetFullPath(path);
+        path = InstanceStore.NormalizeRoot(path);
         _configuration.ChangeLauncher(root =>
         {
             var list = root["gameFolders"] as JsonArray ?? new JsonArray();
@@ -125,8 +211,44 @@ public sealed partial class PreviewSession
     }
     public async Task InitializeRuntimeAsync()
     {
+        LoadJavaScanCache();
         StartInstanceWatcher();
         await RefreshInstancesAsync();
+    }
+
+    /// <summary>恢复上次扫描到的 Java，重启后自动选择仍能使用全盘扫描结果。</summary>
+    private void LoadJavaScanCache()
+    {
+        if (_configuration.ReadLauncher()["global"]?["javaScanCache"] is not JsonArray values) return;
+        List<FMCore.Java.JavaInfo> javas = [];
+        foreach (JsonNode? item in values)
+        {
+            string path = LauncherConfiguration.Text(item?["path"]);
+            int major = (int)LauncherConfiguration.Number(item?["major"], 0);
+            if (path.Length == 0 || major <= 0 || !File.Exists(path)) continue;
+            javas.Add(new(path, LauncherConfiguration.Text(item?["version"]), major, LauncherConfiguration.Text(item?["architecture"])));
+        }
+        JavaScanner.LoadCached(javas);
+    }
+
+    /// <summary>保存扫描结果供下次启动复用；只写路径和版本摘要，不写命令或其他敏感信息。</summary>
+    public async Task SaveJavaScanCacheAsync(IReadOnlyList<FMCore.Java.JavaInfo> javas)
+    {
+        try
+        {
+            JsonArray values = [];
+            foreach (var java in javas.Where(java => File.Exists(java.Executable)).DistinctBy(java => java.Executable).Take(256))
+                values.Add(new JsonObject
+                {
+                    ["path"] = java.Executable,
+                    ["version"] = java.Version,
+                    ["major"] = java.MajorVersion,
+                    ["architecture"] = java.Architecture
+                });
+            _configuration.ChangeLauncher(root => LauncherConfiguration.Object(root, "global")["javaScanCache"] = values);
+            if (!await _configuration.FlushAsync()) Log("Java 扫描结果未能保存。");
+        }
+        catch (Exception error) { Log("保存 Java 扫描结果失败：" + RuntimeSupport.Error(error)); }
     }
 
     private void StartInstanceWatcher()
@@ -185,6 +307,7 @@ public sealed partial class PreviewSession
         using var cancellation = task.Kind == PreviewTaskKind.Launch ? new CancellationTokenSource() : CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         _operations[task] = cancellation;
         task.State = "进行中"; task.Error = ""; task.Stage = "正在准备"; task.Bytes = task.Total = 0;task.CompletedFiles=task.TotalFiles=0; task.Refresh(); Signal();
+        var retryAfterJavaGuide = false;
         try
         {
             await run(task, cancellation.Token);
@@ -193,6 +316,15 @@ public sealed partial class PreviewSession
             if (!task.IsRunningGame) task.Stage = "已完成";
         }
         catch (OperationCanceledException) when(cancellation.IsCancellationRequested) { task.State = "已取消"; task.Stage = "已取消"; }
+        catch (JavaNotFoundException error)
+        {
+            task.State = "失败";
+            task.Stage = task.Kind switch { PreviewTaskKind.Launch => "启动失败", PreviewTaskKind.Import => "导入失败", PreviewTaskKind.Install => "安装失败", _ => "操作失败" };
+            task.Error = error.Message;
+            Log(task.Name + "：" + error);
+            retryAfterJavaGuide = await GuideJavaAsync(error, task, cancellation.Token);
+            task.Refresh();
+        }
         catch (Exception error)
         {
             task.State = "失败"; task.Error = error is OperationCanceledException ? "服务响应超时，请检查网络后重试。" : RuntimeSupport.Error(error); task.Stage = task.Kind switch { PreviewTaskKind.Launch=>"启动失败", PreviewTaskKind.Repair=>"检查或补全失败", PreviewTaskKind.Import=>"导入失败", PreviewTaskKind.Export=>"导出失败", _=>"下载失败" };
@@ -204,6 +336,8 @@ public sealed partial class PreviewSession
             task.Refresh(); Log(task.Name + "：" + task.State); Signal();
             if (task.Kind is PreviewTaskKind.Resource or PreviewTaskKind.Repair or PreviewTaskKind.Import or PreviewTaskKind.Install)
                 NotifyInstanceContentChanged(task.Root, task.InstanceId);
+            if (retryAfterJavaGuide && task.Kind == PreviewTaskKind.Launch)
+                PostUi(() => _ = BeginLaunchAsync());
         }
     }
     public bool HasPendingWrites=>IsRemovingInstance || _operations.Any(pair=>!pair.Key.IsRunningGame);
@@ -337,9 +471,10 @@ public sealed partial class PreviewSession
             MarkDependencyVersion(root, game);
         }
     }
-    private async Task InstallComponentsAsync(string root, string name, string game, string loader, string loaderVersion, string optifine, PreviewTask task, CancellationToken token)
+    private async Task InstallComponentsAsync(string root, string name, string game, string loader, string loaderVersion, string optifine, PreviewTask task, CancellationToken token, InstanceOptions? installationSettings = null, IReadOnlyList<string>? bundledJava = null)
     {
                 var source = FileSource; var threads = DownloadConcurrency;
+                var javaSettings = installationSettings ?? InstanceStore.Read(new PreviewInstance(name, name, game, loader) { Root = root });
                 OptiFineInstallVersion? optiFineMod=null;
                 if(loader=="Forge"&&optifine.Length>0)
                 {
@@ -348,16 +483,24 @@ public sealed partial class PreviewSession
                     await OptiFineForgeIntegration.CheckCombinationAsync(optiFineMod,loaderVersion,token);
                 }
                 string? java = null;
+                var deferredLoader = false;
                 if (loader is "Forge" or "NeoForge" || optifine.Length > 0)
                 {
-                    if(string.IsNullOrWhiteSpace(SavedSettings.JavaPath))
+                    await new MinecraftInstaller(game,root,threads){Source=source}.InstallAsync(p=>Report(task,p.Message,p.Download),token);
+                    var baseInstance=new PreviewInstance(game,game,game,"原版"){Root=root,IsolationMode=SavedSettings.VersionIsolation};
+                    try { java = await ResolveInstallerJavaAsync(baseInstance, javaSettings, bundledJava, task, token); }
+                    catch (JavaNotFoundException error)
                     {
-                        await new MinecraftInstaller(game,root,threads){Source=source}.InstallAsync(p=>Report(task,p.Message,p.Download),token);
-                        var baseInstance=new PreviewInstance(game,game,game,"原版"){Root=root,IsolationMode=SavedSettings.VersionIsolation};
-                        var selected=await RuntimeSupport.SelectCheckedLauncherAsync(baseInstance,FMCore.Accounts.OfflineAccount.Create("FMLauncher"),new InstanceOptions(),SavedSettings,token);
-                        java=selected.JavaPath;
+                        deferredLoader = true;
+                        Log(error.Message + "先导入文件，启动时再安装" + loader + "。");
+                        NotifyTask("未检测到 Java，已先导入游戏文件；启动时会提示安装 " + loader + "。", true);
                     }
-                    else java=await RuntimeSupport.SelectJavaAsync(SavedSettings.JavaPath,null,token);
+                    catch (OperationCanceledException) when (!token.IsCancellationRequested)
+                    {
+                        deferredLoader = true;
+                        Log("已取消 Java 下载，先导入文件，启动时再安装" + loader + "。");
+                        NotifyTask("已取消 Java 下载，游戏文件会先导入；启动时可再安装 " + loader + "。", true);
+                    }
                 }
                 if (loader == "Fabric")
                 {
@@ -371,20 +514,31 @@ public sealed partial class PreviewSession
                 }
                 else if (loader == "Forge")
                 {
-                    await new ForgeInstaller(game,loaderVersion,root,java!,name,threads){Source=source,RemoveCreatedBaseVersion=true}.InstallAsync(p=>Report(task,p.Message,p.Download,p.InstallerDownload),token);
-                    if(optiFineMod!=null)
+                    if (java != null)
                     {
-                        token.ThrowIfCancellationRequested();
-                        var instance=new PreviewInstance(name,name,game,"Forge"){Root=root,IsolationMode=SavedSettings.VersionIsolation};
-                        ModpackArchive.EnsureInstanceWritePath(instance);
-                        var component=await OptiFineForgeIntegration.InstallAsync(optiFineMod,loaderVersion,instance.GameDirectory,p=>Report(task,"下载 OptiFine（BMCLAPI）",file:p),token);
-                        var options=InstanceStore.Read(instance);options.OptiFineMod=component;
-                        await InstanceStore.SaveAsync(instance,options);
-                        Log("Forge 与 OptiFine 接入完成："+game+" / "+loaderVersion+" / "+component.Edition);
+                        await new ForgeInstaller(game,loaderVersion,root,java,name,threads){Source=source,RemoveCreatedBaseVersion=true}.InstallAsync(p=>Report(task,p.Message,p.Download,p.InstallerDownload),token);
+                        if(optiFineMod!=null)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            var instance=new PreviewInstance(name,name,game,"Forge"){Root=root,IsolationMode=SavedSettings.VersionIsolation};
+                            ModpackArchive.EnsureInstanceWritePath(instance);
+                            var component=await OptiFineForgeIntegration.InstallAsync(optiFineMod,loaderVersion,instance.GameDirectory,p=>Report(task,"下载 OptiFine（BMCLAPI）",file:p),token);
+                            var options=InstanceStore.Read(instance);options.OptiFineMod=component;
+                            await InstanceStore.SaveAsync(instance,options);
+                            Log("Forge 与 OptiFine 接入完成："+game+" / "+loaderVersion+" / "+component.Edition);
+                        }
                     }
                 }
-                else if (loader == "NeoForge") await new NeoForgeInstaller(game, loaderVersion, root, java!, name, threads) { Source = source, RemoveCreatedBaseVersion = true }.InstallAsync(p => Report(task, p.Message, p.Download, p.InstallerDownload), token);
-                else if (optifine.Length > 0) await new OptiFineOnlineInstaller(game, optifine, root, java!, name, threads) { RemoveCreatedBaseVersion = true }.InstallAsync(p => Report(task, p.Message, p.Download, p.InstallerDownload), token);
+                else if (loader == "NeoForge")
+                {
+                    if (java != null)
+                        await new NeoForgeInstaller(game, loaderVersion, root, java, name, threads) { Source = source, RemoveCreatedBaseVersion = true }.InstallAsync(p => Report(task, p.Message, p.Download, p.InstallerDownload), token);
+                }
+                else if (optifine.Length > 0)
+                {
+                    if (java != null)
+                        await new OptiFineOnlineInstaller(game, optifine, root, java, name, threads) { RemoveCreatedBaseVersion = true }.InstallAsync(p => Report(task, p.Message, p.Download, p.InstallerDownload), token);
+                }
                 else
                 {
                     await new MinecraftInstaller(game, root, threads) { Source = source }.InstallAsync(p => Report(task, p.Message, p.Download), token);
@@ -414,7 +568,22 @@ public sealed partial class PreviewSession
                     }
                 }
                 var installed=new PreviewInstance(name,name,game,loader){Root=root,IsolationMode=SavedSettings.VersionIsolation};
-                await InstanceStore.UpdateAsync(installed,options=>options.GameVersion=game);
+                if (deferredLoader)
+                {
+                    await CreatePendingVersionShellAsync(root, name, game, token);
+                    Report(task, "已导入文件，启动时安装 " + loader);
+                }
+                // 原版与 Fabric 安装不需要 Java；Java 解析留到真正启动时。Forge/NeoForge 安装器本身仍需 Java。
+                await InstanceStore.UpdateAsync(installed,options=>
+                {
+                    options.GameVersion=game;
+                    if (deferredLoader)
+                    {
+                        options.PendingLoader=loader;
+                        options.PendingLoaderVersion=loaderVersion;
+                        options.PendingOptiFine=optifine;
+                    }
+                });
                 if(loader is "" or "原版" && optifine.Length==0 && name!=game)
                 {
                     Report(task,"生成独立游戏版本");
@@ -422,6 +591,75 @@ public sealed partial class PreviewSession
                 }
                 // 核心安装器默认使用独立工作目录；共享模式还需将旧版资源映射到实际启动目录。
                 if(!installed.UsesGameIsolation)await CheckAndCompleteFilesAsync(installed,task,token);
+    }
+    /// <summary>启动阶段用已确认的 Java 补装导入时延后的加载器，成功后清除待安装标记。</summary>
+    private async Task InstallPendingLoaderAsync(PreviewInstance instance, InstanceOptions options, string javaPath, PreviewTask task, CancellationToken token)
+    {
+        string game = options.GameVersion.Length > 0 ? options.GameVersion : instance.Version;
+        string loader = options.PendingLoader;
+        Report(task, "安装 " + loader);
+        if (loader == "Forge")
+        {
+            await new ForgeInstaller(game, options.PendingLoaderVersion, instance.Root, javaPath, instance.Id, DownloadConcurrency)
+                { Source = FileSource, RemoveCreatedBaseVersion = true }
+                .InstallAsync(p => Report(task, p.Message, p.Download, p.InstallerDownload), token);
+            if (options.PendingOptiFine.Length > 0)
+            {
+                var optiFineVersions = await OptiFineOnlineInstaller.GetVersionsAsync(game, token);
+                var optiFine = optiFineVersions.SingleOrDefault(v => v.Edition == options.PendingOptiFine)
+                    ?? throw new InvalidOperationException("未找到所选 OptiFine 版本。");
+                await OptiFineForgeIntegration.CheckCombinationAsync(optiFine, options.PendingLoaderVersion, token);
+                var component = await OptiFineForgeIntegration.InstallAsync(optiFine, options.PendingLoaderVersion, instance.GameDirectory,
+                    p => Report(task, "下载 OptiFine（BMCLAPI）", file: p), token);
+                options = await InstanceStore.UpdateAsync(instance, value => value.OptiFineMod = component);
+                instance.Options = options;
+            }
+        }
+        else if (loader == "NeoForge")
+            await new NeoForgeInstaller(game, options.PendingLoaderVersion, instance.Root, javaPath, instance.Id, DownloadConcurrency)
+                { Source = FileSource, RemoveCreatedBaseVersion = true }
+                .InstallAsync(p => Report(task, p.Message, p.Download, p.InstallerDownload), token);
+        else if (options.PendingOptiFine.Length > 0)
+            await new OptiFineOnlineInstaller(game, options.PendingOptiFine, instance.Root, javaPath, instance.Id, DownloadConcurrency)
+                { RemoveCreatedBaseVersion = true }
+                .InstallAsync(p => Report(task, p.Message, p.Download, p.InstallerDownload), token);
+
+        options = await InstanceStore.UpdateAsync(instance, value =>
+        {
+            value.PendingLoader = "";
+            value.PendingLoaderVersion = "";
+            value.PendingOptiFine = "";
+        });
+        instance.Options = options;
+        var versions = await new MinecraftVersionReader().GetVersionsAsync(instance.Root, token);
+        var version = versions.SingleOrDefault(item => item.Id == instance.Id);
+        if (version != null)
+        {
+            var updated = await InstanceStore.ReadVersionAsync(version, versions, instance.Root, token);
+            instance.Version = updated.Version;
+            instance.Loader = updated.Loader;
+            instance.LoaderVersion = updated.LoaderVersion;
+            instance.RequiredJava = updated.RequiredJava;
+            instance.Options = updated.Options;
+        }
+    }
+
+    /// <summary>缺少 Java 时先建立一个继承原版的占位版本，让导入的实例可见并在启动阶段补装加载器。</summary>
+    private static async Task CreatePendingVersionShellAsync(string root, string name, string game, CancellationToken token)
+    {
+        if (string.Equals(name, game, StringComparison.OrdinalIgnoreCase)) return;
+        var directory = ModpackArchive.SafePath(root, "versions/" + name);
+        Directory.CreateDirectory(directory);
+        var profile = Path.Combine(directory, name + ".json");
+        if (File.Exists(profile)) return;
+        var temporary = Path.Combine(directory, ".fmlauncher-" + Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            await File.WriteAllTextAsync(temporary, new JsonObject { ["id"] = name, ["inheritsFrom"] = game, ["type"] = "release" }.ToJsonString(), token);
+            token.ThrowIfCancellationRequested();
+            File.Move(temporary, profile, false);
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
     /// <summary>Fabric 安装完成后自动装 Fabric API；只取与当前游戏和 fabric 加载器匹配的最新版本。</summary>
     private async Task InstallFabricApiAsync(string root, string name, string game, PreviewTask task, CancellationToken token)
@@ -460,17 +698,40 @@ public sealed partial class PreviewSession
             var global = SavedSettings.Copy();
             Report(task, "检测 Java");
             var requiredJava = instance.RequiredJava;
-            var javaCandidates = await RuntimeSupport.ReadLaunchJavaCandidatesAsync(instance, settings, global, token);
+            IReadOnlyList<FMCore.Java.JavaInfo> javaCandidates;
+            try { javaCandidates = await RuntimeSupport.ReadLaunchJavaCandidatesAsync(instance, settings, global, token); }
+            catch (Exception error) when (error is not OperationCanceledException)
+            {
+                throw new JavaNotFoundException(instance, instance.RequiredJava,
+                    "配置的 Java 无法使用，请在设置中重新选择 Java 或切换为自动选择。", error);
+            }
+            // 缺少所需版本时先问用户：下载官方运行时，还是改用已安装的更高版本。
+            javaCandidates = await ResolveJavaAsync(instance, settings, global, javaCandidates, task, token);
+            if (javaCandidates.Count == 0)
+                throw new JavaNotFoundException(instance, instance.RequiredJava, instance.RequiredJava is { } missingJava
+                    ? $"未检测到 Java {missingJava} 或更高版本。"
+                    : "未检测到可用的 Java。");
+            var pendingOptions = InstanceStore.Read(instance);
+            if (pendingOptions.PendingLoader.Length > 0)
+            {
+                await InstallPendingLoaderAsync(instance, pendingOptions, javaCandidates[0].Executable, task, token);
+                settings = InstanceStore.Read(instance);
+            }
+            await EnsureResourceLinksAsync(instance.Root);
             await EnsureFilesAsync(instance, task, token);
             // 恢复缺少的父版本后才能得到完整 Java 声明，此时重新按核心元数据选择。
             if (requiredJava != instance.RequiredJava)
-                javaCandidates = await RuntimeSupport.ReadLaunchJavaCandidatesAsync(instance, settings, global, token);
-            // 缺少所需版本时先问用户：下载官方运行时，还是改用已安装的更高版本。
-            javaCandidates = await ResolveJavaAsync(instance, settings, global, javaCandidates, task, token);
+            {
+                try { javaCandidates = await RuntimeSupport.ReadLaunchJavaCandidatesAsync(instance, settings, global, token); }
+                catch (Exception error) when (error is not OperationCanceledException)
+                {
+                    throw new JavaNotFoundException(instance, instance.RequiredJava,
+                        "配置的 Java 无法使用，请在设置中重新选择 Java 或切换为自动选择。", error);
+                }
+                javaCandidates = await ResolveJavaAsync(instance, settings, global, javaCandidates, task, token);
+            }
             // 缺少匹配版本时使用更高版本的 Java 兜底；这类兜底启动失败要额外弹框说明原因。
             var fallbackJava = instance.RequiredJava is { } required && javaCandidates.Count > 0 && javaCandidates[0].MajorVersion > required;
-            if (javaCandidates.Count == 0)
-                throw new InvalidOperationException(instance.RequiredJava is { } missing ? $"未找到 Java {missing} 或更高版本，请安装并选择可用的 Java。" : "未找到可用的 Java，请先安装并选择 Java。");
             // 启动前自动备份：失败只写日志，不阻断启动。
             if (GameBackupService.ShouldBackup(instance))
             {
@@ -483,12 +744,16 @@ public sealed partial class PreviewSession
                 catch (Exception error) when (error is not OperationCanceledException) { Log("自动备份失败：" + RuntimeSupport.Error(error)); }
             }
             Report(task, "检查启动配置");
+            IReadOnlyList<string> unknownPlaceholders = [];
             try
             {
             // 自动内存按“可选用的内存”计算，先释放启动器占用再读取，读数才反映真实可用量。
             if (settings.GlobalMemory ? global.OptimizeMemory : settings.OptimizeMemory) RuntimeSupport.ReleaseLauncherMemory();
             var selectedLauncher = await RuntimeSupport.SelectCheckedLauncherAsync(instance,account.RuntimeAccount,settings,global,token,javaCandidates);
             var launcher = selectedLauncher.Launcher;
+            unknownPlaceholders = selectedLauncher.UnknownPlaceholders;
+            if (unknownPlaceholders.Count > 0)
+                Log("版本包含未解析占位符：" + string.Join("、", unknownPlaceholders));
             token.ThrowIfCancellationRequested();
             var code = await launcher.LaunchAsync(p => PostUi(() =>
             {
@@ -501,7 +766,20 @@ public sealed partial class PreviewSession
             if (code != 0) throw new InvalidOperationException("游戏异常退出，退出码：" + code + "。请在任务记录中查看日志。");
             task.Stage = "游戏已退出";
             }
-            catch (Exception error) when (fallbackJava && error is not OperationCanceledException)
+            catch (Exception error) when (unknownPlaceholders.Count > 0 && error is not OperationCanceledException)
+            {
+                string names = string.Join("、", unknownPlaceholders);
+                bool openFolder = Presentation.Dialogs.MessageDialog.Confirm("启动失败：未解析占位符",
+                    $"版本包含未解析的启动参数占位符：\n\n{names}\n\n可在当前实例的“启动设置 → 高级参数 → 占位符覆盖”中填写，或直接修改版本 JSON。\n\n{RuntimeSupport.Error(error)}",
+                    "打开版本目录", "关闭");
+                if (openFolder)
+                {
+                    try { RuntimeSupport.OpenFolder(instance.Folder); }
+                    catch (Exception openError) { Log("打开版本目录失败：" + RuntimeSupport.Error(openError)); }
+                }
+                throw new InvalidOperationException("版本包含未解析占位符：" + names + "。请填写占位符覆盖或修改版本 JSON。", error);
+            }
+            catch (Exception error) when (fallbackJava && unknownPlaceholders.Count == 0 && error is not OperationCanceledException)
             {
                 var used = javaCandidates[0].MajorVersion;
                 Presentation.Dialogs.MessageDialog.Show("游戏启动失败",
@@ -509,25 +787,34 @@ public sealed partial class PreviewSession
                 throw;
             }
     }
-    /// <summary>缺少实例所需的 Java 时让用户选择：下载官方运行时、改用已安装的更高版本，或取消启动。</summary>
-    private async Task<IReadOnlyList<FMCore.Java.JavaInfo>> ResolveJavaAsync(PreviewInstance instance, InstanceOptions settings, PreviewSettings global, IReadOnlyList<FMCore.Java.JavaInfo> candidates, PreviewTask task, CancellationToken token)
+    /// <summary>安装或启动缺少所需 Java 时，让用户下载官方运行时、使用更高版本或取消当前操作。</summary>
+    private async Task<IReadOnlyList<FMCore.Java.JavaInfo>> ResolveJavaAsync(PreviewInstance instance, InstanceOptions settings, PreviewSettings global, IReadOnlyList<FMCore.Java.JavaInfo> candidates, PreviewTask task, CancellationToken token, bool installing = false)
     {
         // 手动指定过 Java 就尊重用户选择；不会因为版本不匹配就擅自下载。
         var manual = settings.GlobalJava ? global.JavaPath : settings.JavaPath;
-        if (!string.IsNullOrWhiteSpace(manual) || instance.RequiredJava is not { } required) return candidates;
-        if (candidates.Any(java => java.MajorVersion == required)) return candidates;
+        if (!string.IsNullOrWhiteSpace(manual)) return candidates;
+        var required = instance.RequiredJava;
+        if ((required == null && candidates.Count > 0) || candidates.Any(java => java.MajorVersion == required)) return candidates;
 
-        var higher = candidates.Where(java => java.MajorVersion > required).OrderBy(java => java.MajorVersion).FirstOrDefault();
-        var canDownload = JavaBootstrap.CanInstall(required);
+        var higher = candidates.Where(java => required.HasValue && java.MajorVersion > required.Value).OrderBy(java => java.MajorVersion).FirstOrDefault();
+        var canDownload = !required.HasValue || JavaBootstrap.CanInstall(required.Value);
         if (higher is null && !canDownload)
-            throw new InvalidOperationException($"未找到 Java {required} 或更高版本，请安装并选择可用的 Java。");
+            throw new JavaNotFoundException(instance, required, required.HasValue
+                ? $"未检测到 Java {required} 或更高版本。"
+                : "未检测到可用的 Java。");
 
-        var choice = Presentation.Dialogs.JavaRuntimeDialog.Ask(required, higher?.MajorVersion, canDownload);
-        if (choice == Presentation.Dialogs.JavaRuntimeChoice.Cancel) throw new OperationCanceledException("已取消启动。");
+        var choice = Presentation.Dialogs.JavaRuntimeDialog.Ask(required, higher?.MajorVersion, canDownload, installing);
+        if (choice == Presentation.Dialogs.JavaRuntimeChoice.Cancel) throw new OperationCanceledException(installing ? "已取消安装。" : "已取消启动。");
         if (choice == Presentation.Dialogs.JavaRuntimeChoice.Download)
         {
-            Report(task, $"下载 Java {required}");
-            var installed = await JavaBootstrap.InstallAsync(required, FileSource == DownloadSource.BmclApi, progress => ReportJavaInstall(task, progress), token);
+            var major = required ?? Presentation.Dialogs.JavaDownloadDialog.Ask(null);
+            if (major == null) throw new OperationCanceledException(installing ? "已取消安装。" : "已取消启动。");
+            Report(task, $"下载 Java {major}");
+            var installed = await JavaBootstrap.InstallAsync(major.Value, FileSource == DownloadSource.BmclApi, progress => ReportJavaInstall(task, progress), token);
+            JavaScanner.Remember(installed);
+            try { await SaveJavaPathAsync(instance, installed.Executable); }
+            catch (Exception error) { Log("保存新安装的 Java 路径失败：" + RuntimeSupport.Error(error)); }
+            await SaveJavaScanCacheAsync(JavaScanner.Cached);
             return [installed, .. candidates];
         }
         return [higher!, .. candidates.Where(java => !ReferenceEquals(java, higher))];

@@ -89,6 +89,65 @@ public sealed class CurseForgeClient
         return items;
     }
 
+    /// <summary>镜像没有旧文件时，从 CurseForge 网页接口补文件名和大小；哈希需要下载后本地计算。</summary>
+    public async Task<CurseForgeFallbackFile> GetFallbackFileAsync(long projectId, long fileId, CancellationToken token)
+    {
+        using var client = new HttpClient { BaseAddress = new Uri("https://www.curseforge.com/api/v1/") };
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"mods/{projectId.ToString(CultureInfo.InvariantCulture)}/files/{fileId.ToString(CultureInfo.InvariantCulture)}");
+        request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
+        using var response = await client.SendAsync(request, token);
+        response.EnsureSuccessStatusCode();
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(token), cancellationToken: token);
+        if (!document.RootElement.TryGetProperty("data", out var data)
+            || !data.TryGetProperty("id", out var id) || !id.TryGetInt64(out var actualId)
+            || actualId != fileId
+            || !data.TryGetProperty("projectId", out var project) || !project.TryGetInt64(out var actualProject)
+            || actualProject != projectId
+            || Text(data, "fileName") is not { Length: > 0 } fileName
+            || !string.Equals(Path.GetFileName(fileName), fileName, StringComparison.Ordinal)
+            || fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+            || !data.TryGetProperty("fileLength", out var length) || !length.TryGetInt64(out var size) || size <= 0)
+            throw new InvalidDataException("CurseForge 网页接口没有返回有效的文件信息。");
+        string path = $"{fileId / 1000}/{fileId % 1000}/{Uri.EscapeDataString(fileName)}";
+        return new(fileId, projectId, fileName, size, "https://edge.forgecdn.net/files/" + path);
+    }
+
+    /// <summary>把官方兜底文件下载到本地并计算 SHA-1；返回本次实际校验值。</summary>
+    public async Task<string> DownloadFallbackAsync(CurseForgeFallbackFile fallback, string destination, CancellationToken token)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+        using var request = new HttpRequestMessage(HttpMethod.Get, fallback.DownloadUrl);
+        request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
+        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token);
+        response.EnsureSuccessStatusCode();
+        var temporary = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            await using (var input = await response.Content.ReadAsStreamAsync(token))
+            await using (var output = File.Create(temporary))
+            {
+                var buffer = new byte[81920];
+                long written = 0;
+                int read;
+                while ((read = await input.ReadAsync(buffer, token)) > 0)
+                {
+                    await output.WriteAsync(buffer.AsMemory(0, read), token);
+                    written += read;
+                }
+                if (written != fallback.FileLength) throw new InvalidDataException("CurseForge 兜底文件大小与网页接口不一致。");
+            }
+            await using (var stream = File.OpenRead(temporary))
+            {
+                var hash = Convert.ToHexString(await SHA1.HashDataAsync(stream, token));
+                token.ThrowIfCancellationRequested();
+                File.Move(temporary, destination, true);
+                return hash;
+            }
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+
     public async Task<CurseForgeMod> GetModAsync(long id, CancellationToken token)
     {
         using var document = await GetAsync("mods/" + id.ToString(CultureInfo.InvariantCulture), token);
@@ -268,6 +327,7 @@ public sealed class CurseForgeClient
 public sealed record CurseForgePage(IReadOnlyList<CurseForgeMod> Mods, long Total);
 
 public sealed record CurseForgeCategory(int Id, string Name);
+public sealed record CurseForgeFallbackFile(long Id, long ProjectId, string FileName, long FileLength, string DownloadUrl);
 
 public sealed record CurseForgeMod(long Id, string Name, string Slug, string Summary, string Page, string? Icon,
     string? Author, long Downloads, DateOnly? Updated, string[] Categories, IReadOnlyList<CurseForgeFile> LatestFiles, int ClassId);

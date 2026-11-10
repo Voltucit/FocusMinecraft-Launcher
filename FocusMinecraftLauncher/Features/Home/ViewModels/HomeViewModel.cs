@@ -123,7 +123,7 @@ public sealed class HomeViewModel : ObservableObject, IDisposable
         Accounts = new(_ => session.Navigate(MainPage.Accounts));
         AddAccount = new(_ => OpenAccountEditor(), _ => CanChangeIdentity);
         Relogin = new(async _ => { session.Navigate(MainPage.Accounts); await session.LoginMicrosoftAsync(session.CurrentAccount); }, _ => CanChangeIdentity && NeedsLogin);
-        UseAccount = new(p => { session.CurrentAccount = (PreviewAccount)p!; session.CurrentAccount.Refresh(); Notice = ""; }, p => p is PreviewAccount a && session.Accounts.Contains(a) && a.IsOnline == session.MicrosoftMode && CanChangeIdentity);
+        UseAccount = new(p => { session.CurrentAccount = (PreviewAccount)p!; session.CurrentAccount.Refresh(); Notice = ""; }, p => p is PreviewAccount a && session.Accounts.Contains(a) && CanChangeIdentity);
         OpenInstances = new(_ => { InstanceSelection.Open(); IsManagingInstance=false; IsSelectingInstance = true; }, _ => CanChangeIdentity);
         ReturnHome = new(_ => { IsSelectingInstance=false;IsManagingInstance=false; });
         OpenInstanceSettings=new(_=>OpenWorkspace(),_=>CanOpenInstanceSettings);
@@ -282,13 +282,13 @@ public sealed class HomeViewModel : ObservableObject, IDisposable
     /// <summary>只在来源或账号列表改变时重建菜单，任务进度通知不会打断菜单键盘选择。</summary>
     private void UpdateAccountMenu()
     {
-        var accounts = Session.Accounts.Where(a => a.IsOnline == Session.MicrosoftMode).ToArray();
+        var accounts = Session.Accounts.ToArray();
         if (AccountMenu.Count > 0 && _menuMode == Session.MicrosoftMode && _menuAccounts.SequenceEqual(accounts)&&_menuAccountNames.SequenceEqual(accounts.Select(account=>account.Name))) return;
         _menuMode = Session.MicrosoftMode; _menuAccounts = accounts;
         _menuAccountNames=accounts.Select(account=>account.Name).ToArray();
         AccountMenu.Clear();
-        if (accounts.Length == 0) AccountMenu.Add(new("当前模式下没有账号", null, IsPlaceholder: true));
-        foreach (var account in accounts) AccountMenu.Add(new(account.Name, UseAccount, account, account));
+        if (accounts.Length == 0) AccountMenu.Add(new("没有可用账号", null, IsPlaceholder: true));
+        foreach (var account in accounts) AccountMenu.Add(new(account.IsOnline ? account.Name : account.Name + "（离线）", UseAccount, account, account));
         AccountMenu.Add(new("", null, IsSeparator: true));
         AccountMenu.Add(new(AddAccountText, AddAccount));
         AccountMenu.Add(new("管理账号", Accounts));

@@ -11,10 +11,11 @@ public sealed class InstanceLaunchSettingsViewModel : ObservableObject, IDisposa
 {
     private readonly PreviewSession _session;
     private bool _globalJava=true,_globalMemory=true,_globalWindow=true,_globalArgs=true,_fullscreen;
-    private string _java="",_width="1280",_height="720",_jvm="",_gameArgs="",_notice="",_javaError="",_windowError="";
+    private string _java="",_width="1280",_height="720",_jvm="",_gameArgs="",_notice="",_javaError="",_windowError="",_placeholderOverrides="",_placeholderError="";
     private string? _recommendedJava;
     private SettingsDraft _saved=new();
     private bool _saving;
+    private bool _initializing = true;
     public PreviewInstance Instance { get; }
     public bool UseGlobalJava
     {
@@ -31,7 +32,7 @@ public sealed class InstanceLaunchSettingsViewModel : ObservableObject, IDisposa
         set
         {
             var path = string.IsNullOrWhiteSpace(value) || value.Trim() == "自动选择" ? "" : value;
-            if (Set(ref _java, path)) { JavaError = ""; Notice = ""; JavaDetection.UpdateSelection(path); RefreshJavaDisplay(); }
+            if (Set(ref _java, path)) { JavaError = ""; Notice = ""; JavaDetection.UpdateSelection(path); RefreshJavaDisplay(); if (!_initializing && !UseGlobalJava) _ = SaveJavaPathAsync(path); }
         }
     }
     public MemoryAllocationViewModel MemoryAllocation { get; } = new();
@@ -54,6 +55,9 @@ public sealed class InstanceLaunchSettingsViewModel : ObservableObject, IDisposa
     public bool Fullscreen { get=>_fullscreen;set {Set(ref _fullscreen,value);Notice="";} }
     public string JvmArguments { get=>_jvm;set {Set(ref _jvm,value);Notice="";} }
     public string GameArguments { get=>_gameArgs;set {Set(ref _gameArgs,value);Notice="";} }
+    /// <summary>每行“名称=值”，只用于版本 JSON 中非标准占位符。</summary>
+    public string PlaceholderOverridesText { get=>_placeholderOverrides;set {if(Set(ref _placeholderOverrides,value)){PlaceholderError="";Notice="";}} }
+    public string PlaceholderError {get=>_placeholderError;private set=>Set(ref _placeholderError,value);}
     public string Notice { get=>_notice;private set=>Set(ref _notice,value); }
     public string JavaError { get=>_javaError;private set=>Set(ref _javaError,value); }
     public string WindowError { get=>_windowError;private set=>Set(ref _windowError,value); }
@@ -67,7 +71,7 @@ public sealed class InstanceLaunchSettingsViewModel : ObservableObject, IDisposa
     public InstanceLaunchSettingsViewModel(PreviewSession session,PreviewInstance instance)
     {
         _session=session;Instance=instance;
-        JavaDetection = new(path => JavaPath = path, () => session.FileSource == FMCore.Downloads.DownloadSource.BmclApi);
+        JavaDetection = new(path => JavaPath = path, () => session.FileSource == FMCore.Downloads.DownloadSource.BmclApi, javas => _ = session.SaveJavaScanCacheAsync(javas));
         JavaDetection.RecommendedMajor = instance.RequiredJava;
         BrowseJava=new(_=>{var d=new OpenFileDialog{Filter="Java|java.exe;javaw.exe"};if(d.ShowDialog()==true)JavaPath=d.FileName;}, _=>!UseGlobalJava);
         ClearJava=new(_=>JavaPath="", _=>!UseGlobalJava && !string.IsNullOrWhiteSpace(JavaPath));
@@ -76,6 +80,23 @@ public sealed class InstanceLaunchSettingsViewModel : ObservableObject, IDisposa
         RecommendedJavaVersion = instance.RequiredJava?.ToString();
         MemoryAllocation.ModCount = Infrastructure.Runtime.RuntimeSupport.ModCount(instance);
         LoadStored(); RestoreSaved(); JavaDetection.UpdateSelection(JavaPath); Notice = "";
+        _initializing = false;
+    }
+
+    /// <summary>实例 Java 选择变化后只自动保存 Java 路径，保留其他尚未保存的启动设置草稿。</summary>
+    private async Task SaveJavaPathAsync(string path)
+    {
+        try
+        {
+            var stored = Infrastructure.Runtime.InstanceStore.Read(Instance);
+            if (string.Equals(stored.JavaPath, path, StringComparison.OrdinalIgnoreCase)) return;
+            Instance.Options = await Infrastructure.Runtime.InstanceStore.UpdateAsync(Instance, options => options.JavaPath = path);
+            Notice = "Java 路径已自动保存。";
+        }
+        catch (Exception error)
+        {
+            Notice = "Java 路径未能自动保存：" + Infrastructure.Runtime.RuntimeSupport.Error(error);
+        }
     }
     /// <summary>全局设置变化只更新继承展示，不覆盖实例独立编辑草稿。</summary>
     private void GlobalChanged(object? sender,PropertyChangedEventArgs e)
@@ -93,23 +114,21 @@ public sealed class InstanceLaunchSettingsViewModel : ObservableObject, IDisposa
     {
         JavaError=!UseGlobalJava && !string.IsNullOrWhiteSpace(JavaPath) && !Path.IsPathFullyQualified(JavaPath.Trim())?"请输入完整路径，或留空自动选择。":"";
         WindowError=!UseGlobalWindow && (!int.TryParse(Width,out var w)||w<=0||!int.TryParse(Height,out var h)||h<=0)?"宽度和高度必须为正整数。":"";
-        if(JavaError.Length+WindowError.Length>0){Notice="";return;}
+        var placeholderOverrides = ParsePlaceholderOverrides(PlaceholderOverridesText, out var placeholderError);
+        PlaceholderError = placeholderError;
+        if(JavaError.Length+WindowError.Length+PlaceholderError.Length>0){Notice="";return;}
         _saving=true;System.Windows.Input.CommandManager.InvalidateRequerySuggested();
         try
         {
-            if(!UseGlobalJava&&!string.IsNullOrWhiteSpace(JavaPath))
-            {
-                try{await FMCore.Java.JavaReader.GetJavaInfoAsync(JavaPath.Trim());}
-                catch(Exception error){JavaError=Infrastructure.Runtime.RuntimeSupport.Error(error);return;}
-            }
             var options = await Infrastructure.Runtime.InstanceStore.UpdateAsync(Instance,options=>
             {
             options.GlobalJava=UseGlobalJava;options.GlobalMemory=UseGlobalMemory;options.GlobalWindow=UseGlobalWindow;options.GlobalArguments=UseGlobalArguments;
             options.JavaPath=JavaPath;options.MemoryMb=MemoryAllocation.MemoryMb;options.AutomaticMemory=MemoryAllocation.IsAutomatic;options.OptimizeMemory=MemoryAllocation.OptimizeBeforeLaunch;
             options.Width=int.TryParse(Width,out var width)?width:1280;options.Height=int.TryParse(Height,out var height)?height:720;options.Fullscreen=Fullscreen;options.JvmArguments=JvmArguments;options.GameArguments=GameArguments;
+            options.PlaceholderOverrides=placeholderOverrides;
             });
             Instance.Options=options;
-            _saved=new(UseGlobalJava,UseGlobalMemory,UseGlobalWindow,UseGlobalArguments,JavaPath,MemoryAllocation.MemoryMb,Width,Height,Fullscreen,JvmArguments,GameArguments,MemoryAllocation.IsAutomatic,MemoryAllocation.OptimizeBeforeLaunch);
+            _saved=new(UseGlobalJava,UseGlobalMemory,UseGlobalWindow,UseGlobalArguments,JavaPath,MemoryAllocation.MemoryMb,Width,Height,Fullscreen,JvmArguments,GameArguments,MemoryAllocation.IsAutomatic,MemoryAllocation.OptimizeBeforeLaunch,PlaceholderOverridesText);
             Notice="已保存此游戏的启动设置。";
         }
         catch(Exception error){Notice=Infrastructure.Runtime.RuntimeSupport.Error(error);}
@@ -118,7 +137,7 @@ public sealed class InstanceLaunchSettingsViewModel : ObservableObject, IDisposa
     private void LoadStored()
     {
         var o=Infrastructure.Runtime.InstanceStore.Read(Instance);
-        _saved=new(o.GlobalJava,o.GlobalMemory,o.GlobalWindow,o.GlobalArguments,o.JavaPath,o.MemoryMb,o.Width.ToString(),o.Height.ToString(),o.Fullscreen,o.JvmArguments,o.GameArguments,o.AutomaticMemory,o.OptimizeMemory);
+        _saved=new(o.GlobalJava,o.GlobalMemory,o.GlobalWindow,o.GlobalArguments,o.JavaPath,o.MemoryMb,o.Width.ToString(),o.Height.ToString(),o.Fullscreen,o.JvmArguments,o.GameArguments,o.AutomaticMemory,o.OptimizeMemory,FormatPlaceholderOverrides(o.PlaceholderOverrides));
     }
     private void RestoreSaved()
     {
@@ -126,8 +145,48 @@ public sealed class InstanceLaunchSettingsViewModel : ObservableObject, IDisposa
         JavaPath=_saved.Java;MemoryAllocation.LoadMemoryMb(_saved.MemoryMb);
         MemoryAllocation.IsAutomatic=_saved.AutomaticMemory;MemoryAllocation.OptimizeBeforeLaunch=_saved.OptimizeMemory;
         Width=_saved.Width;Height=_saved.Height;Fullscreen=_saved.Fullscreen;JvmArguments=_saved.Jvm;GameArguments=_saved.Game;
-        JavaError=WindowError="";Notice="已恢复保存的游戏设置。";
+        PlaceholderOverridesText=_saved.Placeholder;PlaceholderError="";JavaError=WindowError="";Notice="已恢复保存的游戏设置。";
+    }
+    private static string FormatPlaceholderOverrides(IReadOnlyDictionary<string,string> values)
+        => string.Join(Environment.NewLine, values.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => pair.Key + "=" + pair.Value));
+
+    private static Dictionary<string,string> ParsePlaceholderOverrides(string text, out string error)
+    {
+        Dictionary<string,string> values = new(StringComparer.Ordinal);
+        error = "";
+        int lineNumber = 0;
+        foreach (string raw in text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').Split('\n'))
+        {
+            lineNumber++;
+            string line = raw.Trim();
+            if (line.Length == 0 || line.StartsWith('#')) continue;
+            int separator = line.IndexOf('=');
+            if (separator <= 0)
+            {
+                error = $"第 {lineNumber} 行格式应为 名称=值。";
+                return values;
+            }
+            string name = line[..separator].Trim();
+            string value = line[(separator + 1)..].Trim();
+            if (name.Length == 0 || name.Contains("${", StringComparison.Ordinal) || name.Contains('}')
+                || name.Any(char.IsWhiteSpace) || name.Any(char.IsControl))
+            {
+                error = $"第 {lineNumber} 行的占位符名称无效。";
+                return values;
+            }
+            if (value.Any(char.IsControl))
+            {
+                error = $"第 {lineNumber} 行的值包含控制字符。";
+                return values;
+            }
+            if (!values.TryAdd(name, value))
+            {
+                error = $"占位符“{name}”重复。";
+                return values;
+            }
+        }
+        return values;
     }
     public void Dispose() { _session.PropertyChanged-=GlobalChanged;MemoryAllocation.PropertyChanged-=MemoryChanged; }
-    private sealed record SettingsDraft(bool GlobalJava=true,bool GlobalMemory=true,bool GlobalWindow=true,bool GlobalArguments=true,string Java="",int MemoryMb=4096,string Width="1280",string Height="720",bool Fullscreen=false,string Jvm="",string Game="",bool AutomaticMemory=true,bool OptimizeMemory=false);
+    private sealed record SettingsDraft(bool GlobalJava=true,bool GlobalMemory=true,bool GlobalWindow=true,bool GlobalArguments=true,string Java="",int MemoryMb=4096,string Width="1280",string Height="720",bool Fullscreen=false,string Jvm="",string Game="",bool AutomaticMemory=true,bool OptimizeMemory=false,string Placeholder="");
 }

@@ -15,6 +15,27 @@ public static class InstanceStore
     private static readonly SemaphoreSlim Writer = new(1, 1);
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true };
     public static string Key(string root, string id) => Path.GetFullPath(root).TrimEnd('\\', '/') + "|" + id;
+    /// <summary>用户可能直接选择 versions 目录或单个版本目录；统一回到包含 versions 的游戏根目录。</summary>
+    public static string NormalizeRoot(string path)
+    {
+        var full = Path.GetFullPath(path);
+        try
+        {
+            if (Directory.Exists(Path.Combine(full, "versions"))) return full;
+            if (string.Equals(Path.GetFileName(full), "versions", StringComparison.OrdinalIgnoreCase))
+                return Directory.GetParent(full)?.FullName ?? full;
+            if (Directory.Exists(full)
+                && File.Exists(Path.Combine(full, Path.GetFileName(full) + ".json"))
+                && Directory.GetParent(full) is { Name: "versions" } versionParent)
+                return versionParent.Parent?.FullName ?? full;
+            if (Directory.Exists(full)
+                && Directory.EnumerateDirectories(full).Any(directory => File.Exists(Path.Combine(directory, Path.GetFileName(directory) + ".json")))
+                && Directory.GetParent(full) is { Name: "versions" } parent)
+                return parent.Parent?.FullName ?? full;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException) { }
+        return full;
+    }
     public static InstanceOptions Read(PreviewInstance instance)
     {
         var path = Path.Combine(instance.Folder, FileName);
@@ -141,6 +162,11 @@ public static class InstanceStore
             var instance = new PreviewInstance(version.Id, version.Id, gameVersion, loader, version.VersionType ?? "release")
             { Root = Path.GetFullPath(root), DirectoryPath = version.Directory, RequiredJava = java, LoaderVersion = loaderVersion, MetadataIssue = issue };
             var settings = Read(instance);
+            if (!string.IsNullOrWhiteSpace(settings.PendingLoader))
+            {
+                instance.Loader = settings.PendingLoader;
+                instance.LoaderVersion = settings.PendingLoaderVersion;
+            }
             if (!string.IsNullOrWhiteSpace(settings.GameVersion)) instance.Version = settings.GameVersion;
             if (loader is "Forge" or "NeoForge" && instance.LoaderVersion.StartsWith(instance.Version + "-")) instance.LoaderVersion = instance.LoaderVersion[(instance.Version.Length + 1)..];
             instance.Name = settings.Name.Length > 0 ? settings.Name : version.Id;
@@ -227,6 +253,10 @@ public sealed class InstanceOptions
 {
     /// <summary>安装或转换时记录真实游戏版本，避免独立配置的自定义 ID 被误当成 Minecraft 版本。</summary>
     public string GameVersion { get; set; } = "";
+    /// <summary>尚未安装的加载器；导入时缺少 Java 会先写入，启动阶段再用可用 Java 安装。</summary>
+    public string PendingLoader { get; set; } = "";
+    public string PendingLoaderVersion { get; set; } = "";
+    public string PendingOptiFine { get; set; } = "";
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
     public string Category { get; set; } = "";
@@ -253,6 +283,8 @@ public sealed class InstanceOptions
     public int BackupRetention { get; set; } = 5;
     public string JvmArguments { get; set; } = "";
     public string GameArguments { get; set; } = "";
+    /// <summary>版本 JSON 中非标准启动参数占位符的名称和值；标准占位符仍由核心管理。</summary>
+    public Dictionary<string, string> PlaceholderOverrides { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, ResourceOrigin> Resources { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, ResourceOrigin> SharedResources { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     internal Dictionary<string, ResourceOrigin> SharedResourceSnapshot { get; set; } = new(StringComparer.OrdinalIgnoreCase);

@@ -61,6 +61,12 @@
                     <ui:SettingRow Title="JVM 参数"><fluent:TextBox Text="{Binding JvmArguments, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" AutomationProperties.Name="此游戏 JVM 参数"/></ui:SettingRow>
                     <ui:SettingRow Title="游戏参数"><fluent:TextBox Text="{Binding GameArguments, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" AutomationProperties.Name="此游戏附加游戏参数"/></ui:SettingRow>
                 </StackPanel>
+                <ui:SettingRow Title="占位符覆盖" Description="每行一个 名称=值，仅用于版本中的非标准占位符">
+                    <StackPanel>
+                        <fluent:TextBox Text="{Binding PlaceholderOverridesText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" AutomationProperties.Name="启动参数占位符覆盖"/>
+                        <TextBlock Text="{Binding PlaceholderError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0" Visibility="{Binding PlaceholderError, Converter={StaticResource TextVisibility}}"/>
+                    </StackPanel>
+                </ui:SettingRow>
             </StackPanel>
         </Expander>
         <WrapPanel Margin="0,20,0,0"><fluent:Button Content="保存游戏设置" Command="{Binding Save}" Style="{StaticResource PrimaryButton}" Margin="0,0,12,12"/><fluent:Button Content="恢复已保存的值" Command="{Binding Restore}" Margin="0,0,0,12"/></WrapPanel>

@@ -106,6 +106,7 @@ public sealed class InstanceSelectionViewModel : ObservableObject, IDisposable
         var dialog = new OpenFolderDialog { Title = "添加已有游戏文件夹", Multiselect = false };
         if (dialog.ShowDialog(Application.Current.MainWindow) != true) return;
         var path = Path.TrimEndingDirectorySeparator(dialog.FolderName);
+        path = Infrastructure.Runtime.InstanceStore.NormalizeRoot(path);
         var existing = Folders.FirstOrDefault(folder => SamePath(folder.FullPath, path));
         if (existing != null) { SelectedFolder = existing; Notice = "已选择列表中的文件夹"; return; }
         var name = Path.GetFileName(path);

@@ -17,7 +17,7 @@ public partial class PackImportDialog : Window
         MinecraftValue.Text = string.IsNullOrWhiteSpace(manifest.Minecraft) ? "未知" : manifest.Minecraft;
         LoaderValue.Text = DescribeLoader(manifest.Loader, manifest.LoaderVersion);
         InstanceValue.Text = instanceName;
-        FilesValue.Text = DescribeFiles(manifest.Files);
+        FilesValue.Text = DescribeFiles(manifest);
         OptionalNote.Text = $"可选文件 {optionalFiles} 项将跳过";
         OptionalNote.Visibility = optionalFiles > 0 ? Visibility.Visible : Visibility.Collapsed;
         Loaded += OnLoaded;
@@ -65,10 +65,10 @@ public partial class PackImportDialog : Window
         return string.IsNullOrWhiteSpace(version) ? name : name + " " + version.Trim();
     }
 
-    private static string DescribeFiles(IReadOnlyList<PackFile> files)
+    private static string DescribeFiles(PackManifest manifest)
     {
-        var count = $"{files.Count} 个文件";
-        var size = files.Sum(file => file.Size);
+        var count = $"{manifest.ResourceCount} 个文件";
+        var size = manifest.PendingCurseForgeFiles.Count == 0 ? manifest.Files.Sum(file => file.Size) : 0;
         return size > 0 ? count + "，共 " + FormatSize(size) : count;
     }
 

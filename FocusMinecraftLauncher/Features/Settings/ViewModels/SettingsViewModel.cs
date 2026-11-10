@@ -13,6 +13,7 @@ namespace FocusMinecraftLauncher.Features.Settings.ViewModels;
 public sealed class SettingsViewModel : ObservableObject
 {
     private string _java, _jvm, _authlib = "", _javaError = "", _notice = "";
+    private string _assetsDirectory = "", _librariesDirectory = "";
     private string _gcMode = "Auto";
     private const int WallpaperPageSize = 12;
     private IReadOnlyList<WallpaperOption> _allWallpapers = [];
@@ -24,6 +25,8 @@ public sealed class SettingsViewModel : ObservableObject
     private bool _wallpapersLoaded;
     private bool _wallpapersLoading;
     private bool _saving, _importingBackground;
+    private bool _initializing = true;
+    private readonly SemaphoreSlim _javaSaveGate = new(1, 1);
     public string BackgroundActionText => _importingBackground ? "正在读取…" : "选择图片";
     private bool _themeSettingsExpanded;
     public bool IsThemeSettingsExpanded { get => _themeSettingsExpanded; set => Set(ref _themeSettingsExpanded, value); }
@@ -54,11 +57,18 @@ public sealed class SettingsViewModel : ObservableObject
             if (!Set(ref _java, path)) return;
             JavaError = ""; Notice = ""; Changed(nameof(IsJavaAutoSelected)); Changed(nameof(JavaDisplayText));
             JavaDetection.UpdateSelection(path);
+            if (!_initializing) _ = SaveJavaPathAsync(path);
             System.Windows.Input.CommandManager.InvalidateRequerySuggested();
         }
     }
     public bool IsJavaAutoSelected => string.IsNullOrWhiteSpace(JavaPath);
     public string JavaDisplayText => IsJavaAutoSelected ? "自动选择" : JavaPath;
+    public string AssetsDirectory { get => _assetsDirectory; set { if (Set(ref _assetsDirectory, value)) Notice = ""; } }
+    public string LibrariesDirectory { get => _librariesDirectory; set { if (Set(ref _librariesDirectory, value)) Notice = ""; } }
+    public UiCommand BrowseAssets { get; }
+    public UiCommand ClearAssets { get; }
+    public UiCommand BrowseLibraries { get; }
+    public UiCommand ClearLibraries { get; }
     public MemoryAllocationViewModel MemoryAllocation { get; } = new();
     public JavaDetectionViewModel JavaDetection { get; }
     public string JvmArguments { get => _jvm; set { if (Set(ref _jvm, value)) Notice = ""; } }
@@ -128,8 +138,10 @@ public sealed class SettingsViewModel : ObservableObject
     public UiCommand ResetBackground { get; }
     public SettingsViewModel(PreviewSession session)
     {
-        JavaDetection = new(path => JavaPath = path, () => session.FileSource == FMCore.Downloads.DownloadSource.BmclApi);
+        JavaDetection = new(path => JavaPath = path, () => session.FileSource == FMCore.Downloads.DownloadSource.BmclApi, javas => _ = session.SaveJavaScanCacheAsync(javas));
         Session = session;
+        _assetsDirectory = session.ResourceAssetsDirectory;
+        _librariesDirectory = session.ResourceLibrariesDirectory;
         _isolation = session.SavedSettings.VersionIsolation;
         _java = string.IsNullOrWhiteSpace(session.SavedSettings.JavaPath) || session.SavedSettings.JavaPath.Trim() == "自动选择" ? "" : session.SavedSettings.JavaPath;
         _authlib = session.SavedSettings.AuthlibInjectorPath;
@@ -151,6 +163,10 @@ public sealed class SettingsViewModel : ObservableObject
             JvmArguments = session.SavedSettings.JvmArguments; GcMode = session.SavedSettings.GcMode; AuthlibInjectorPath = session.SavedSettings.AuthlibInjectorPath; JavaError = ""; Notice = "已恢复已保存的设置。";        });
         BrowseJava = new(_ => { var dialog = new OpenFileDialog { Filter = "Java|java.exe;javaw.exe" }; if (dialog.ShowDialog() == true) JavaPath = dialog.FileName; });
         ClearJava = new(_ => JavaPath = "", _ => !IsJavaAutoSelected);
+        BrowseAssets = new(_ => { var dialog = new OpenFolderDialog { Title = "选择 assets 目录" }; if (dialog.ShowDialog() == true) AssetsDirectory = dialog.FolderName; });
+        ClearAssets = new(_ => AssetsDirectory = "", _ => AssetsDirectory.Length > 0);
+        BrowseLibraries = new(_ => { var dialog = new OpenFolderDialog { Title = "选择 libraries 目录" }; if (dialog.ShowDialog() == true) LibrariesDirectory = dialog.FolderName; });
+        ClearLibraries = new(_ => LibrariesDirectory = "", _ => LibrariesDirectory.Length > 0);
         BrowseAuthlibInjector = new(_ => { var dialog = new OpenFileDialog { Filter = "authlib-injector|*.jar", Title = "选择 authlib-injector" }; if (dialog.ShowDialog() == true) AuthlibInjectorPath = dialog.FileName; });
         ClearAuthlibInjector = new(_ => AuthlibInjectorPath = "", _ => AuthlibInjectorPath.Length > 0);
         BrowseBackground = new(async _ =>
@@ -177,11 +193,37 @@ public sealed class SettingsViewModel : ObservableObject
             foreach (WallpaperPropertyEditorViewModel editor in WallpaperProperties) editor.Reset();
         });
         Session.PropertyChanged += OnSessionPropertyChanged;
+        _initializing = false;
+    }
+
+    /// <summary>Java 选择变化后只自动保存 Java 路径，不影响其他尚未点击保存的草稿。</summary>
+    private async Task SaveJavaPathAsync(string path)
+    {
+        await _javaSaveGate.WaitAsync();
+        try
+        {
+            if (!string.Equals(JavaPath, path, StringComparison.OrdinalIgnoreCase)) return;
+            var saved = Session.SavedSettings.Copy();
+            if (string.Equals(saved.JavaPath, path, StringComparison.OrdinalIgnoreCase)) return;
+            saved.JavaPath = path;
+            if (!await Session.SaveGlobalSettingsAsync(saved))
+                Notice = "Java 路径未能自动保存，请检查程序目录的写入权限。";
+        }
+        catch (Exception error)
+        {
+            Notice = "Java 路径未能自动保存：" + RuntimeSupport.Error(error);
+        }
+        finally { _javaSaveGate.Release(); }
     }
     private void OnSessionPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(PreviewSession.WallpaperProject))
             LoadWallpaperProperties();
+        if (e.PropertyName is nameof(PreviewSession.SelectedRoot))
+        {
+            AssetsDirectory = Session.ResourceAssetsDirectory;
+            LibrariesDirectory = Session.ResourceLibrariesDirectory;
+        }
     }
     private async Task ApplySelectedWallpaperAsync(WallpaperChoiceViewModel wallpaper)
     {
@@ -275,7 +317,7 @@ public sealed class SettingsViewModel : ObservableObject
             System.Windows.Input.CommandManager.InvalidateRequerySuggested();
         }
     }
-    /// <summary>验证实际 Java 可执行文件后保存；错误保留在对应字段旁。</summary>
+    /// <summary>只检查路径格式；Java 是否可用留到启动时解析，避免 Java 未安装时无法保存设置。</summary>
     private async Task SaveEditedAsync()
     {
         // 自动内存由启动时的实际可用内存决定，保留手动值供切换模式时使用。
@@ -287,12 +329,8 @@ public sealed class SettingsViewModel : ObservableObject
         System.Windows.Input.CommandManager.InvalidateRequerySuggested();
         try
         {
-            if(!string.IsNullOrWhiteSpace(JavaPath))
-            {
-                try { await FMCore.Java.JavaReader.GetJavaInfoAsync(JavaPath.Trim()); }
-                catch(Exception error){JavaError=Infrastructure.Runtime.RuntimeSupport.Error(error);return;}
-            }
             if(AuthlibInjectorPath.Trim().Length>0 && !File.Exists(AuthlibInjectorPath.Trim())){JavaError="authlib-injector 文件不存在，请重新选择或留空自动下载。";return;}
+            await Session.SaveResourceDirectoriesAsync(AssetsDirectory, LibrariesDirectory);
             var saved = await Session.SaveGlobalSettingsAsync(new() { VersionIsolation = VersionIsolation, JavaPath = JavaPath.Trim(), GameDirectory = Session.SavedSettings.GameDirectory, MemoryMb = memory, AutomaticMemory = MemoryAllocation.IsAutomatic, OptimizeMemory = MemoryAllocation.OptimizeBeforeLaunch, JvmArguments = JvmArguments, GcMode = GcMode, AuthlibInjectorPath = AuthlibInjectorPath.Trim() });
             Notice = !saved ? "设置未保存，请检查程序目录的写入权限后重试。" : "已保存全局设置。";
         }

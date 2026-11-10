@@ -195,7 +195,11 @@ public sealed partial class PreviewSession
     private static ResourceFileItem CurseForgeItem(long modId,CurseForgeFile file,DownloadSection section)=>new("cf:"+file.Id,file.DisplayName.Length>0?file.DisplayName:file.FileName,file.FileName,file.GameVersions,
         file.Loaders.Length>0?string.Join(" / ",file.Loaders):null,file.Date,file.FileLength,file.Downloads,null)
         {ProjectId="cf-"+modId,Section=section,Loaders=file.Loaders,Download=new ResourceDownload(file.FileName,CurseForgeClient.Rewrite(file.DownloadUrl),file.FileLength,file.Sha1),CurseForgeDependencies=file.Dependencies};
-    private sealed record PackImportRequest(PackManifest Manifest, string Root, string InstanceName);
+    private sealed record PackImportRequest(PackManifest Manifest, string Root, string InstanceName)
+    {
+        public Dictionary<string, string> ManualSources { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public PackManifest? ResolvedManifest { get; set; }
+    }
 
     /// <summary>文件选择和主窗口拖放共用校验及确认；安装失败不登记为可用实例。</summary>
     public async Task ImportModpackAsync(string path,string sourceProjectId="",string sourceVersionId="",string? sourceIcon=null)
@@ -214,7 +218,7 @@ public sealed partial class PreviewSession
     }
     private async Task<PackImportRequest?> PrepareModpackImportAsync(string path,string root,CancellationToken token)
     {
-        var manifest=await ModpackArchive.ReadAsync(path,token);
+        var manifest=await Task.Run(() => ModpackArchive.ReadPreview(path), token);
         token.ThrowIfCancellationRequested();
         var name=string.Join("_",manifest.Name.Split(Path.GetInvalidFileNameChars())).Trim().TrimEnd('.');
         if(name.Length==0)name="Modpack";
@@ -222,26 +226,57 @@ public sealed partial class PreviewSession
         _ = ModpackArchive.SafePath(root,"versions/"+name);
         var original=name;var suffix=1;
         while(Directory.Exists(Path.Combine(root,"versions",name))||Tasks.Any(t=>t.IsActive&&string.Equals(InstanceStore.Key(t.Root,t.InstanceId),InstanceStore.Key(root,name),StringComparison.OrdinalIgnoreCase)))name=original+"-"+suffix++;
-        var optional=manifest.Files.Count(f=>f.Client=="optional");
+        var optional=manifest.OptionalResourceCount;
         if(new PackImportDialog(manifest,name,optional){Owner=Application.Current.MainWindow}.ShowDialog()!=true)return null;
         return new(manifest,root,name);
     }
     /// <summary>在线下载与本地拖拽共用完整安装步骤；同一在线任务包含安装、取消和重试，不提前报告完成。</summary>
     private async Task InstallModpackAsync(string path,PackImportRequest request,PreviewTask task,CancellationToken token,string sourceProjectId,string sourceVersionId,string? sourceIcon)
     {
-        var manifest=request.Manifest;var root=request.Root;var instanceName=request.InstanceName;
+        var manifest=request.ResolvedManifest??request.Manifest;var root=request.Root;var instanceName=request.InstanceName;
+        if (manifest.PendingCurseForgeFiles.Count > 0)
+        {
+            Report(task, "解析整合包资源信息");
+            manifest = await Task.Run(() => ModpackArchive.ReadAsync(path, token, (completed, total) =>
+                Report(task, $"解析整合包资源信息 {completed}/{total}", new DownloadBatchProgress(total, completed, 0, 0, 0, 0))), token);
+            request.ResolvedManifest = manifest;
+        }
+        // 等待用户补齐资源期间不占用游戏根目录写锁；任务重试仍复用本次导入的选择。
+        manifest = await ResolveManualPackFilesAsync(request, manifest, task, token);
         if(!_rootWriters.TryGetValue(root,out var writer))_rootWriters[root]=writer=new(1,1);
         await writer.WaitAsync(token);
+        var writerHeld = true;
         var baseExisted = File.Exists(Path.Combine(root, "versions", manifest.Minecraft, manifest.Minecraft + ".json"));
         try
         {
             await SetIncompleteAsync(root,instanceName,true);
-            await InstallComponentsAsync(root,instanceName,manifest.Minecraft,manifest.Loader,manifest.LoaderVersion,"",task,token);
+            var instance=new PreviewInstance(instanceName,manifest.Name,manifest.Minecraft,manifest.Loader){Root=root,IsolationMode=SavedSettings.VersionIsolation};
+            var javaOptions = InstanceStore.Read(instance);
+            Report(task, "检查整合包自带的 Java");
+            var bundledJava = await Task.Run(() => ModpackArchive.PrepareBundledJavaAsync(path, manifest, instance, javaOptions,
+                DownloadConcurrency, p => Report(task, "准备整合包自带的 Java", p), token), token);
+            await InstallComponentsAsync(root,instanceName,manifest.Minecraft,manifest.Loader,manifest.LoaderVersion,"",task,token,javaOptions,bundledJava);
             await RemoveAutoInstalledBaseAsync(root,manifest.Minecraft,instanceName,baseExisted);
             if(!baseExisted&&!string.Equals(instanceName,manifest.Minecraft,StringComparison.OrdinalIgnoreCase))MarkDependencyVersion(root,manifest.Minecraft);
-            var instance=new PreviewInstance(instanceName,manifest.Name,manifest.Minecraft,manifest.Loader){Root=root,IsolationMode=SavedSettings.VersionIsolation};
             var options=InstanceStore.Read(instance);options.Name=manifest.Name;options.Description=manifest.Summary;options.Source="Modrinth 整合包";options.SourceProjectId=sourceProjectId;options.SourceVersionId=sourceVersionId;
-            await Task.Run(()=>ModpackArchive.InstallContentAsync(path,manifest,instance,options,DownloadConcurrency,p=>Report(task,"收集整合包资源",p),token),token);
+            options.GlobalJava = javaOptions.GlobalJava;
+            options.JavaPath = javaOptions.JavaPath;
+            while (true)
+            {
+                try
+                {
+                    await Task.Run(()=>ModpackArchive.InstallContentAsync(path,manifest,instance,options,DownloadConcurrency,p=>Report(task,"收集整合包资源",p),token),token);
+                    break;
+                }
+                catch (PackDownloadUnavailableException error)
+                {
+                    Log("整合包自动下载来源已耗尽：" + error);
+                    // 自动来源均失败后才询问用户；不占用其他游戏任务的目录写锁。
+                    writer.Release(); writerHeld = false;
+                    manifest = await ResolveManualPackFilesAsync(request, manifest, task, token, error.Files);
+                    await writer.WaitAsync(token); writerHeld = true;
+                }
+            }
             if(sourceIcon!=null&&!File.Exists(Path.Combine(instance.Folder,"icon.png")))
             {
                 try
@@ -260,6 +295,6 @@ public sealed partial class PreviewSession
             if(string.Equals(root,SelectedRoot,StringComparison.OrdinalIgnoreCase))await RefreshInstancesAsync();
             NotifyTask(manifest.Name+"导入完成",false);
         }
-        finally{writer.Release();NotifyInstanceContentChanged(root,instanceName);if(!baseExisted&&!string.Equals(instanceName,manifest.Minecraft,StringComparison.OrdinalIgnoreCase))MarkDependencyVersion(root,manifest.Minecraft);}
+        finally{if(writerHeld)writer.Release();NotifyInstanceContentChanged(root,instanceName);if(!baseExisted&&!string.Equals(instanceName,manifest.Minecraft,StringComparison.OrdinalIgnoreCase))MarkDependencyVersion(root,manifest.Minecraft);}
     }
 }

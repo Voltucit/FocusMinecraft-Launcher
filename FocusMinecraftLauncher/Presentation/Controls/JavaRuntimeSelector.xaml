@@ -5,9 +5,17 @@
     <ui:AnimatedExpander IsExpanded="{Binding IsExpanded, Mode=TwoWay}" AutomationProperties.Name="选择本机 Java">
         <ui:AnimatedExpander.Header><TextBlock Text="{Binding SelectionText}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" ToolTip="{Binding SelectedPath}"/></ui:AnimatedExpander.Header>
         <StackPanel Margin="12,0,12,12">
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                <fluent:Button Content="检测本机 Java" Command="{Binding Detect}" Margin="0,0,8,0"/>
-                <fluent:Button Content="下载 Java" Command="{Binding Install}" AutomationProperties.Name="下载官方 Java 运行时"/>
+            <WrapPanel Margin="0,0,0,12">
+                <fluent:Button Content="快速扫描" Command="{Binding Detect}" Margin="0,0,8,8" AutomationProperties.Name="快速扫描本机 Java"/>
+                <fluent:Button Content="全盘扫描" Command="{Binding DeepDetect}" Margin="0,0,8,8" ToolTip="遍历所有固定磁盘，耗时较长" AutomationProperties.Name="全盘扫描 Java"/>
+                <fluent:Button Content="取消扫描" Command="{Binding CancelDetect}" Margin="0,0,8,8"
+                               Visibility="{Binding IsBusy, Converter={StaticResource BoolVisibility}}" AutomationProperties.Name="取消 Java 扫描"/>
+                <fluent:Button Content="下载 Java" Command="{Binding Install}" Margin="0,0,8,8" AutomationProperties.Name="下载官方 Java 运行时"/>
+                <fluent:Button Content="{Binding FilterToggleText}" Command="{Binding ToggleFilter}" Margin="0,0,0,8" AutomationProperties.Name="显示 Java 过滤选项"/>
+            </WrapPanel>
+            <StackPanel Margin="0,0,0,8" Visibility="{Binding IsFilterExpanded, Converter={StaticResource BoolVisibility}}">
+                <CheckBox Content="隐藏相同版本的 Java" IsChecked="{Binding HideDuplicateVersions, Mode=TwoWay}" AutomationProperties.Name="隐藏相同版本的 Java"/>
+                <TextBlock Text="同一完整版本只保留一项。" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
             </StackPanel>
             <ProgressBar Value="{Binding InstallProgress, Mode=OneWay}" Maximum="100" Visibility="{Binding IsInstalling, Converter={StaticResource BoolVisibility}}" AutomationProperties.Name="Java 下载进度" Margin="0,0,0,8"/>
             <TextBlock Text="{Binding InstallStatus}" Visibility="{Binding InstallStatus, Converter={StaticResource TextVisibility}}" AutomationProperties.LiveSetting="Polite" Style="{StaticResource Caption}" Margin="0,0,0,8"/>
@@ -16,7 +24,7 @@
                 <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource Caption}"><Style.Triggers><DataTrigger Binding="{Binding HasFailed}" Value="True"><Setter Property="Foreground" Value="{DynamicResource ErrorText}"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
             </TextBlock>
             <fluent:Button Content="自动选择" Command="{Binding SelectAutomatic}" Style="{StaticResource QuietButton}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="12" MinHeight="48" AutomationProperties.Name="自动选择合适的 Java"/>
-            <ItemsControl ItemsSource="{Binding Results}"><ItemsControl.ItemTemplate><DataTemplate>
+            <ItemsControl ItemsSource="{Binding VisibleResults}"><ItemsControl.ItemTemplate><DataTemplate>
                 <fluent:Button Command="{Binding DataContext.Select, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}"
                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="12" Margin="0,4,0,0" ToolTip="{Binding Path}">
                     <fluent:Button.Style><Style TargetType="fluent:Button" BasedOn="{StaticResource QuietButton}"><Style.Triggers><DataTrigger Binding="{Binding IsSelected}" Value="True"><Setter Property="Background" Value="{DynamicResource SelectionBackground}"/></DataTrigger></Style.Triggers></Style></fluent:Button.Style>

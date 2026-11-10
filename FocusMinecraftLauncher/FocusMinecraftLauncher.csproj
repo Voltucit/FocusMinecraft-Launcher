@@ -11,7 +11,7 @@
 
     <ItemGroup>
       <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
-      <PackageReference Include="FocusMinecraftCore" Version="2.0.9" />
+      <PackageReference Include="FocusMinecraftCore" Version="2.1.0" />
       <PackageReference Include="WPF-UI" Version="4.3.0" />
       <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
       <ProjectReference Include="..\FMLauncher.UpdateShared\FMLauncher.UpdateShared.csproj">
@@ -41,7 +41,7 @@
         <Description>Minecraft 启动器</Description>
 
         <!-- 软件版本号 -->
-        <Version Condition="'$(Version)' == ''">2.1.1</Version>
+        <Version Condition="'$(Version)' == ''">2.1.2</Version>
         <ReleaseNumber>$([System.Text.RegularExpressions.Regex]::Match('$(Version)', '^\d+\.\d+\.\d+').Value)</ReleaseNumber>
 
         <!-- 程序集版本 -->

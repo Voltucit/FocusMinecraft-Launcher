@@ -31,10 +31,15 @@ public static class RuntimeSupport
         return java?.Executable ?? throw new InvalidOperationException(required.HasValue ? $"未找到 Java {required} 或更高版本，请在设置中选择可用的 Java。" : "未找到可用的 Java，请先安装 Java 并在设置中选择。");
     }
     /// <summary>自动选择逐个调用核心的公开配置检查，不复制核心的 Java 兼容性规则。</summary>
-    public static async Task<(FMCore.Launch.MinecraftLauncher Launcher,string JavaPath)> SelectCheckedLauncherAsync(PreviewInstance instance,FMCore.Accounts.IMinecraftAccount account,InstanceOptions settings,PreviewSettings global,CancellationToken token,IReadOnlyList<JavaInfo>? javaCandidates=null)
+    public static async Task<(FMCore.Launch.MinecraftLauncher Launcher,string JavaPath,IReadOnlyList<string> UnknownPlaceholders)> SelectCheckedLauncherAsync(PreviewInstance instance,FMCore.Accounts.IMinecraftAccount account,InstanceOptions settings,PreviewSettings global,CancellationToken token,IReadOnlyList<JavaInfo>? javaCandidates=null)
     {
         var ordered=javaCandidates??await ReadLaunchJavaCandidatesAsync(instance,settings,global,token);
+        if (ordered.Count == 0)
+            throw new InvalidOperationException(instance.RequiredJava is { } required
+                ? $"未检测到满足要求的 Java {required} 或更高版本，请在设置中下载或手动选择 Java。"
+                : "未检测到可用的 Java，请在设置中下载或手动选择 Java。");
         string reason="";
+        HashSet<string> unknownPlaceholders = new(StringComparer.Ordinal);
         // 外置账号必须带上 authlib-injector；缺少时按设置下载或直接报出路径问题。
         var authlibInjector=account is FMCore.Accounts.YggdrasilAccount?await AuthlibInjectorService.EnsureAsync(global.AuthlibInjectorPath,null,token):null;
         var memory=MemoryMb(settings.GlobalMemory?global.AutomaticMemory:settings.AutomaticMemory,settings.GlobalMemory?global.MemoryMb:settings.MemoryMb,ModCount(instance));
@@ -48,11 +53,13 @@ public static class RuntimeSupport
                 Account=account,
                 GameCoreConfig=new(){Root=instance.Root,Version=instance.Id,GameDirectory=instance.GameDirectory,GameArguments=Arguments(settings.GlobalArguments?"":settings.GameArguments)},
                 JavaConfig=new(){JavaPath=java.Executable,MaxMemoryMb=memory,JvmArguments=jvmArguments,AuthlibInjectorPath=authlibInjector},
-                GameWindowConfig=settings.GlobalWindow?null:new(){Width=settings.Width,Height=settings.Height,Fullscreen=settings.Fullscreen}
+                GameWindowConfig=settings.GlobalWindow?null:new(){Width=settings.Width,Height=settings.Height,Fullscreen=settings.Fullscreen},
+                PlaceholderOverrides=settings.PlaceholderOverrides,
+                UnknownPlaceholderReporter=name => unknownPlaceholders.Add(name)
             });
             var check=await launcher.CheckAsync(cancellationToken:token);
-            if(check.ConfigurationVerified)return(launcher,java.Executable);
-            reason=check.Issue!.Message;
+            if(check.ConfigurationVerified)return(launcher,java.Executable,unknownPlaceholders.ToArray());
+            reason=string.IsNullOrWhiteSpace(check.Issue?.Message) ? "核心未返回具体原因，请检查 Java、游戏文件及启动设置。" : check.Issue.Message;
         }
         throw new InvalidOperationException("启动配置检查未通过："+reason);
     }
@@ -119,9 +126,14 @@ public static class RuntimeSupport
     public static async Task<IReadOnlyList<JavaInfo>> ReadLaunchJavaCandidatesAsync(PreviewInstance instance,InstanceOptions settings,PreviewSettings global,CancellationToken token)
     {
         var preferred=settings.GlobalJava?global.JavaPath:settings.JavaPath;
-        var candidates=string.IsNullOrWhiteSpace(preferred)
-            ?await JavaReader.GetJavasAsync([Path.Combine(AppContext.BaseDirectory,"FMLauncher","Java")],cancellationToken:token)
-            :new[]{await JavaReader.GetJavaInfoAsync(preferred,token)};
+        IReadOnlyList<JavaInfo> candidates;
+        if (string.IsNullOrWhiteSpace(preferred))
+        {
+            // 复用最后一次快速/全盘扫描结果；否则自动选择又会退回核心的有限探测范围。
+            JavaInfo[] cached = JavaScanner.Cached.Where(java => File.Exists(java.Executable)).ToArray();
+            candidates = cached.Length > 0 ? cached : await JavaScanner.GetJavasAsync(cancellationToken: token);
+        }
+        else candidates = [await JavaReader.GetJavaInfoAsync(preferred, token)];
         // 手动指定时尊重用户选择；自动检测缺少目标版本时回退到更高版本，再把兼容性交给核心配置检查。
         var target = instance.RequiredJava;
         var result=candidates.Where(java=>!string.IsNullOrWhiteSpace(preferred)||!target.HasValue||java.MajorVersion>=target.Value)

@@ -65,6 +65,8 @@
                 <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
                     <fluent:Button x:Name="CancelButton" Content="取消" MinWidth="88" Margin="0,0,12,0"
                                    IsCancel="True" Click="Decline" AutomationProperties.Name="取消启动"/>
+                    <fluent:Button x:Name="ManualButton" Content="手动选择" MinWidth="100" Margin="0,0,12,0"
+                                   Click="PickManual" AutomationProperties.Name="手动选择 Java 可执行文件"/>
                     <fluent:Button x:Name="HigherButton" Content="用更高版本启动" MinWidth="132" Margin="0,0,12,0"
                                    Click="UseHigher" AutomationProperties.Name="尝试用更高版本的 Java 启动"/>
                     <fluent:Button x:Name="DownloadButton" Content="下载" Style="{StaticResource PrimaryButton}"

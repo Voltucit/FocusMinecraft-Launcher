@@ -108,11 +108,20 @@ public sealed class PreviewInstance(string id, string name, string version, stri
     private ImageSource? _icon, _fallbackIcon;
     public string Id { get; } = id;
     public string Name { get => _name; set => Set(ref _name, value); }
-    private string _version = version, _metadataIssue = "";
+    private string _version = version, _metadataIssue = "", _loader = loader;
     public string Version { get => _version; set { if (Set(ref _version, value)) Changed(nameof(VersionText)); } }
     public string MetadataIssue { get => _metadataIssue; set { if (Set(ref _metadataIssue, value)) Changed(nameof(ReadinessText)); } }
     public string ReadinessText => MetadataIssue.Length > 0 ? MetadataIssue : "启动前将检查完整性";
-    public string Loader { get; } = loader;
+    public string Loader
+    {
+        get => _loader;
+        set
+        {
+            if (!Set(ref _loader, value)) return;
+            Changed(nameof(SupportsMods)); Changed(nameof(DefaultIcon));
+            Changed(nameof(ComponentsText)); Changed(nameof(DisplayIcon));
+        }
+    }
     public string VersionType { get; } = versionType;
     public string Description { get => _description; set => Set(ref _description, value); }
     public string Category { get => _category; set => Set(ref _category, value); }

@@ -20,6 +20,7 @@ public static class JavaBootstrap
     {
         if (!CanInstall(major)) throw new NotSupportedException($"启动器不能自动安装 Java {major}，请手动安装后在设置中选择。");
         var result = await JavaRuntimeInstaller.InstallAsync(major, Directory(major), mirror, report, cancellationToken);
+        JavaScanner.Remember(result.Java);
         return result.Java;
     }
 }
