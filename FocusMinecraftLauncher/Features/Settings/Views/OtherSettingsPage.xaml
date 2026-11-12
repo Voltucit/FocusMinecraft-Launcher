@@ -100,7 +100,6 @@
             <Border Style="{StaticResource GlassCard}" VerticalAlignment="Top" Margin="0,16,0,0">
                 <StackPanel>
                     <TextBlock Text="社区资源" Style="{StaticResource SectionTitle}" Margin="0,0,0,4"/>
-                    <ui:SettingRow Title="来源"><TextBlock Text="Modrinth 官方服务"/></ui:SettingRow>
                     <ui:SettingRow Title="文件名格式">
                         <StackPanel>
                             <ui:AnimatedComboBox ItemsSource="{Binding FileNameFormats}"

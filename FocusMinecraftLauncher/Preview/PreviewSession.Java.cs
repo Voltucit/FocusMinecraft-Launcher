@@ -21,7 +21,7 @@ public sealed partial class PreviewSession
             if (choice == Presentation.Dialogs.JavaRuntimeChoice.Cancel)
             {
                 task.Error = error.Message;
-                NotifyTask(error.Message, true);
+                if (task.Failure is { } report) NotifyError(report);
                 return false;
             }
             if (choice == Presentation.Dialogs.JavaRuntimeChoice.Manual)
@@ -38,7 +38,7 @@ public sealed partial class PreviewSession
 
             int? major = required ?? Presentation.Dialogs.JavaDownloadDialog.Ask(null);
             if (major == null) return false;
-            task.State = "进行中"; task.Stage = $"下载 Java {major}"; task.Error = ""; task.Refresh(); Signal();
+            task.State = "进行中"; task.Stage = $"下载 Java {major}"; _taskStages[task] = task.Stage; task.Error = ""; task.Refresh(); Signal();
             var installed = await JavaBootstrap.InstallAsync(major.Value, FileSource == FMCore.Downloads.DownloadSource.BmclApi,
                 progress => ReportJavaInstall(task, progress), token);
             JavaScanner.Remember(installed);
@@ -58,8 +58,7 @@ public sealed partial class PreviewSession
         }
         catch (Exception guideError)
         {
-            task.Error = "Java 处理失败：" + RuntimeSupport.Error(guideError);
-            NotifyTask(task.Error, true);
+            await SetTaskFailureAsync(task, guideError, _taskStages.TryGetValue(task, out var stage) ? stage : "配置 Java");
             return false;
         }
     }

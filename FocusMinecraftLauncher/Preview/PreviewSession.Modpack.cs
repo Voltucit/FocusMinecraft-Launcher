@@ -35,7 +35,7 @@ public sealed partial class PreviewSession
         {
             Report(task, $"等待手动补齐 {missing.Count} 项整合包资源");
             var selected = ManualPackFilesDialog.Ask(missing, token);
-            if (selected == null) throw new OperationCanceledException("已取消手动补齐整合包资源。", token);
+            if (selected == null) throw new UserCanceledOperationException("已取消手动补齐整合包资源。");
             foreach (var item in selected) sources[item.Key] = item.Value;
         }
         token.ThrowIfCancellationRequested();

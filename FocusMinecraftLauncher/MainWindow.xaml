@@ -109,6 +109,7 @@
         <visual:BlurImageBackground Grid.RowSpan="3" BlurRadius="{Binding Session.BackgroundBlurRadius}"
                                     IsDynamicBlurEnabled="{Binding Session.DynamicBlurEnabled}" MotionAllowed="{Binding Session.MotionAllowed}"/>
         <visual:WallpaperBackground Grid.RowSpan="3" Kind="{Binding Session.WallpaperKind}"
+                                    StaticMode="{Binding Session.WallpaperStaticMode}"
                                     SourcePath="{Binding Session.WallpaperPath}" PreviewPath="{Binding Session.WallpaperPreviewPath}"
                                     ProjectPath="{Binding Session.WallpaperProject}" PropertiesJson="{Binding Session.WallpaperPropertiesJson}"
                                     RefreshVersion="{Binding Session.WallpaperRefreshVersion}" MotionAllowed="{Binding Session.MotionAllowed}"

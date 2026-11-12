@@ -199,7 +199,7 @@ public sealed class AccountsViewModel : ObservableObject, IDisposable
             Notice = "外置账号已登录。";
         }
         catch (OperationCanceledException) { Notice = "已取消登录。"; }
-        catch (Exception error) { Notice = Infrastructure.Runtime.RuntimeSupport.Error(error); }
+        catch (Exception error) { Notice = (await Session.ReportErrorAsync(error, "外置账号登录", "验证账号与选择角色")).Summary; }
         finally { System.Windows.Input.CommandManager.InvalidateRequerySuggested(); }
     }
     private void SessionChanged(object? sender, PropertyChangedEventArgs e)

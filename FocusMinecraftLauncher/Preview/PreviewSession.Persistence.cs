@@ -381,7 +381,12 @@ public sealed partial class PreviewSession
                 : "认证服务暂时不可用，请稍后重试。";
             if (rejected) existing?.MarkLoginFailure(message);
             else existing?.MarkUnverified("暂时无法校验登录");
-            if (interactive) LoginError = message;
+            if (interactive)
+            {
+                var report = await ReportErrorAsync(error, "Microsoft 登录", LoginProgress);
+                LoginError = report.Summary;
+            }
+            else Log("验证 Microsoft 账号失败：" + SanitizeError(error.ToString()));
         }
         finally
         {

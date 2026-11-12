@@ -10,11 +10,12 @@ public sealed class OtherSettingsViewModel : ObservableObject
 {
     public FocusMinecraftLauncher.Features.More.ViewModels.LauncherUpdateViewModel Updates => ((App)System.Windows.Application.Current).Updates;
     private const string PreferOfficial = "官方源";
+    private const string AutomaticSource = "自动选择";
     private const string ProjectAndFileName = "资源名称 + 原文件名";
-    private string _fileDownloadSource = PreferOfficial;
+    private string _fileDownloadSource = AutomaticSource;
     private string _versionListSource = PreferOfficial;
     private int _maximumThreads = 16;
-    private string _resourceSource = FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.MirrorName;
+    private string _resourceSource = FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.AutomaticName;
     private string _fileNameFormat = ProjectAndFileName;
     private string _modManagementStyle = "标题显示资源名称，详情显示文件名";
     private bool _wikiNames = true;
@@ -22,7 +23,7 @@ public sealed class OtherSettingsViewModel : ObservableObject
     private bool _minimizeToTray;
     private long _cacheBytes = FocusMinecraftLauncher.Infrastructure.Runtime.CommunityCache.Measure();
 
-    public string[] DownloadSources { get; } = [PreferOfficial, "BMCLAPI 镜像源"];
+    public string[] DownloadSources { get; } = [AutomaticSource, PreferOfficial, "BMCLAPI 镜像源"];
     public IReadOnlyList<CloseBehaviorOption> CloseBehaviors { get; } =
     [
         new(LauncherCloseBehavior.Ask, "询问用户"),
@@ -39,7 +40,7 @@ public sealed class OtherSettingsViewModel : ObservableObject
         get => _minimizeToTray;
         set { if (Set(ref _minimizeToTray, value)) _configuration.MinimizeToTray = value; }
     }
-    public string[] ResourceSources { get; } = [FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.MirrorName, FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.OfficialName];
+    public string[] ResourceSources { get; } = [FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.AutomaticName, FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.MirrorName, FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.OfficialName];
     public string[] FileNameFormats { get; } = [ProjectAndFileName, "原文件名", "资源名称 + 版本号"];
     public string[] ModManagementStyles { get; } =
         ["标题显示资源名称，详情显示文件名", "标题显示原名，详情显示文件名", "仅显示文件名"];
@@ -164,10 +165,10 @@ public sealed class OtherSettingsViewModel : ObservableObject
         CancelNetworkInstall = new(_ => Network.CancelComponentInstallation(), _ => Network.CanCancelComponentInstallation);
         UninstallNetwork = new(async _ => await Network.UninstallAsync(), _ => Network.CanUninstall);
         var data = _configuration.ReadLauncher()["downloads"];
-        _fileDownloadSource = NormalizeSource(FocusMinecraftLauncher.Infrastructure.Configuration.LauncherConfiguration.Text(data?["fileDownloadSource"], PreferOfficial));
+        _fileDownloadSource = NormalizeSource(FocusMinecraftLauncher.Infrastructure.Configuration.LauncherConfiguration.Text(data?["fileDownloadSource"], AutomaticSource));
         _versionListSource = NormalizeSource(FocusMinecraftLauncher.Infrastructure.Configuration.LauncherConfiguration.Text(data?["versionListSource"], PreferOfficial));
         _maximumThreads = Math.Clamp((int)FocusMinecraftLauncher.Infrastructure.Configuration.LauncherConfiguration.Number(data?["maximumThreads"], 16), 1, 64);
-        _resourceSource = NormalizeCommunity(FocusMinecraftLauncher.Infrastructure.Configuration.LauncherConfiguration.Text(data?["communitySource"], FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.MirrorName));
+        _resourceSource = NormalizeCommunity(FocusMinecraftLauncher.Infrastructure.Configuration.LauncherConfiguration.Text(data?["communitySource"], FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.AutomaticName));
         _fileNameFormat = FocusMinecraftLauncher.Infrastructure.Configuration.LauncherConfiguration.Text(data?["fileNameFormat"], ProjectAndFileName);
         if(_fileNameFormat=="译名 + 原文件名")_fileNameFormat=ProjectAndFileName;
         _modManagementStyle = FocusMinecraftLauncher.Infrastructure.Configuration.LauncherConfiguration.Text(data?["modManagementStyle"], "标题显示资源名称，详情显示文件名");
@@ -234,9 +235,9 @@ public sealed class OtherSettingsViewModel : ObservableObject
             System.Windows.Input.CommandManager.InvalidateRequerySuggested();
         }
     }
-    private static string NormalizeSource(string value)=>value.StartsWith("优先使用镜像")||value.Contains("BMCLAPI")?"BMCLAPI 镜像源":PreferOfficial;
+    private static string NormalizeSource(string value)=>value==AutomaticSource?AutomaticSource:value.StartsWith("优先使用镜像")||value.Contains("BMCLAPI")?"BMCLAPI 镜像源":PreferOfficial;
     /// <summary>只有明确选过官方源才回到官方，其余旧值或空值都按默认的镜像源处理。</summary>
-    private static string NormalizeCommunity(string value)=>value==FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.OfficialName?value:FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.MirrorName;
+    private static string NormalizeCommunity(string value)=>value is FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.OfficialName or FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.MirrorName ? value : FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.AutomaticName;
     private void SaveChange(Func<bool> change) { if (change()) Persist(); }
     private void Persist()
     {

@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.IO;
+using System.Runtime.CompilerServices;
 using Microsoft.Win32;
 using FocusMinecraftLauncher.Common;
 using FocusMinecraftLauncher.Preview;
@@ -15,24 +16,25 @@ public sealed class InstanceLaunchSettingsViewModel : ObservableObject, IDisposa
     private string? _recommendedJava;
     private SettingsDraft _saved=new();
     private bool _saving;
+    private readonly HashSet<string> _pendingFields = [];
     private bool _initializing = true;
     public PreviewInstance Instance { get; }
     public bool UseGlobalJava
     {
         get => _globalJava;
-        set { if (Set(ref _globalJava, value)) { JavaError = ""; Notice = ""; RefreshJavaDisplay(); } }
+        set { if (Set(ref _globalJava, value)) { JavaError = ""; RefreshJavaDisplay(); QueueSave(); } }
     }
     public bool IsUsingGlobalJavaSettings { get => UseGlobalJava; set => UseGlobalJava = value; }
-    public bool UseGlobalMemory { get=>_globalMemory;set {Set(ref _globalMemory,value);Notice="";} }
-    public bool UseGlobalWindow { get=>_globalWindow;set {Set(ref _globalWindow,value);if(value)WindowError="";Notice="";} }
-    public bool UseGlobalArguments { get=>_globalArgs;set {Set(ref _globalArgs,value);Notice="";} }
+    public bool UseGlobalMemory { get=>_globalMemory;set {if(Set(ref _globalMemory,value))QueueSave();} }
+    public bool UseGlobalWindow { get=>_globalWindow;set {if(Set(ref _globalWindow,value)){if(value)WindowError="";QueueSave();}} }
+    public bool UseGlobalArguments { get=>_globalArgs;set {if(Set(ref _globalArgs,value))QueueSave();} }
     public string JavaPath
     {
         get => _java;
         set
         {
             var path = string.IsNullOrWhiteSpace(value) || value.Trim() == "自动选择" ? "" : value;
-            if (Set(ref _java, path)) { JavaError = ""; Notice = ""; JavaDetection.UpdateSelection(path); RefreshJavaDisplay(); if (!_initializing && !UseGlobalJava) _ = SaveJavaPathAsync(path); }
+            if (Set(ref _java, path)) { JavaError = ""; JavaDetection.UpdateSelection(path); RefreshJavaDisplay(); QueueSave(); }
         }
     }
     public MemoryAllocationViewModel MemoryAllocation { get; } = new();
@@ -50,13 +52,13 @@ public sealed class InstanceLaunchSettingsViewModel : ObservableObject, IDisposa
     }
     public string JavaRecommendationText => string.IsNullOrWhiteSpace(RecommendedJavaVersion)
         ? "版本元数据未声明 Java 要求" : "推荐 Java " + RecommendedJavaVersion;
-    public string Width { get=>_width;set {Set(ref _width,value);WindowError="";Notice="";} }
-    public string Height { get=>_height;set {Set(ref _height,value);WindowError="";Notice="";} }
-    public bool Fullscreen { get=>_fullscreen;set {Set(ref _fullscreen,value);Notice="";} }
-    public string JvmArguments { get=>_jvm;set {Set(ref _jvm,value);Notice="";} }
-    public string GameArguments { get=>_gameArgs;set {Set(ref _gameArgs,value);Notice="";} }
+    public string Width { get=>_width;set {if(Set(ref _width,value)){WindowError="";QueueSave();}} }
+    public string Height { get=>_height;set {if(Set(ref _height,value)){WindowError="";QueueSave();}} }
+    public bool Fullscreen { get=>_fullscreen;set {if(Set(ref _fullscreen,value))QueueSave();} }
+    public string JvmArguments { get=>_jvm;set {if(Set(ref _jvm,value))QueueSave();} }
+    public string GameArguments { get=>_gameArgs;set {if(Set(ref _gameArgs,value))QueueSave();} }
     /// <summary>每行“名称=值”，只用于版本 JSON 中非标准占位符。</summary>
-    public string PlaceholderOverridesText { get=>_placeholderOverrides;set {if(Set(ref _placeholderOverrides,value)){PlaceholderError="";Notice="";}} }
+    public string PlaceholderOverridesText { get=>_placeholderOverrides;set {if(Set(ref _placeholderOverrides,value)){PlaceholderError="";QueueSave();}} }
     public string PlaceholderError {get=>_placeholderError;private set=>Set(ref _placeholderError,value);}
     public string Notice { get=>_notice;private set=>Set(ref _notice,value); }
     public string JavaError { get=>_javaError;private set=>Set(ref _javaError,value); }
@@ -66,8 +68,6 @@ public sealed class InstanceLaunchSettingsViewModel : ObservableObject, IDisposa
     public string IsolationText => Instance.IsolationText;
     public UiCommand BrowseJava { get; }
     public UiCommand ClearJava { get; }
-    public UiCommand Save { get; }
-    public UiCommand Restore { get; }
     public InstanceLaunchSettingsViewModel(PreviewSession session,PreviewInstance instance)
     {
         _session=session;Instance=instance;
@@ -76,27 +76,33 @@ public sealed class InstanceLaunchSettingsViewModel : ObservableObject, IDisposa
         BrowseJava=new(_=>{var d=new OpenFileDialog{Filter="Java|java.exe;javaw.exe"};if(d.ShowDialog()==true)JavaPath=d.FileName;}, _=>!UseGlobalJava);
         ClearJava=new(_=>JavaPath="", _=>!UseGlobalJava && !string.IsNullOrWhiteSpace(JavaPath));
         MemoryAllocation.PropertyChanged += MemoryChanged;
-        Save=new(async _=>await SaveDraftAsync(),_=>!_saving);Restore=new(_=>{LoadStored();RestoreSaved();},_=>!_saving);session.PropertyChanged+=GlobalChanged;
+        session.PropertyChanged+=GlobalChanged;
         RecommendedJavaVersion = instance.RequiredJava?.ToString();
         MemoryAllocation.ModCount = Infrastructure.Runtime.RuntimeSupport.ModCount(instance);
         LoadStored(); RestoreSaved(); JavaDetection.UpdateSelection(JavaPath); Notice = "";
         _initializing = false;
     }
 
-    /// <summary>实例 Java 选择变化后只自动保存 Java 路径，保留其他尚未保存的启动设置草稿。</summary>
-    private async Task SaveJavaPathAsync(string path)
+    /// <summary>每项只保存最后一次修改；写入期间的新修改排队，不覆盖其他入口维护的配置。</summary>
+    private void QueueSave([CallerMemberName] string property = "")
     {
+        if (_initializing) return;
+        _pendingFields.Add(property);
+        if (!_saving) _ = SavePendingAsync();
+    }
+    private async Task SavePendingAsync()
+    {
+        _saving = true;
         try
         {
-            var stored = Infrastructure.Runtime.InstanceStore.Read(Instance);
-            if (string.Equals(stored.JavaPath, path, StringComparison.OrdinalIgnoreCase)) return;
-            Instance.Options = await Infrastructure.Runtime.InstanceStore.UpdateAsync(Instance, options => options.JavaPath = path);
-            Notice = "Java 路径已自动保存。";
+            while (_pendingFields.Count > 0)
+            {
+                var property = _pendingFields.First();
+                _pendingFields.Remove(property);
+                await SaveDraftAsync(property);
+            }
         }
-        catch (Exception error)
-        {
-            Notice = "Java 路径未能自动保存：" + Infrastructure.Runtime.RuntimeSupport.Error(error);
-        }
+        finally { _saving = false; }
     }
     /// <summary>全局设置变化只更新继承展示，不覆盖实例独立编辑草稿。</summary>
     private void GlobalChanged(object? sender,PropertyChangedEventArgs e)
@@ -108,31 +114,58 @@ public sealed class InstanceLaunchSettingsViewModel : ObservableObject, IDisposa
     }
     private void MemoryChanged(object? sender,PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(MemoryAllocationViewModel.AllocatedMemoryGb) or nameof(MemoryAllocationViewModel.IsAutomatic) or nameof(MemoryAllocationViewModel.OptimizeBeforeLaunch)) Notice = "";
+        if (e.PropertyName is nameof(MemoryAllocationViewModel.AllocatedMemoryGb) or nameof(MemoryAllocationViewModel.IsAutomatic) or nameof(MemoryAllocationViewModel.OptimizeBeforeLaunch)) QueueSave(nameof(MemoryAllocation));
     }
-    private async Task SaveDraftAsync()
+    private async Task SaveDraftAsync(string property)
     {
-        JavaError=!UseGlobalJava && !string.IsNullOrWhiteSpace(JavaPath) && !Path.IsPathFullyQualified(JavaPath.Trim())?"请输入完整路径，或留空自动选择。":"";
-        WindowError=!UseGlobalWindow && (!int.TryParse(Width,out var w)||w<=0||!int.TryParse(Height,out var h)||h<=0)?"宽度和高度必须为正整数。":"";
-        var placeholderOverrides = ParsePlaceholderOverrides(PlaceholderOverridesText, out var placeholderError);
-        PlaceholderError = placeholderError;
-        if(JavaError.Length+WindowError.Length+PlaceholderError.Length>0){Notice="";return;}
-        _saving=true;System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+        Notice="";
+        if (property is nameof(JavaPath) or nameof(UseGlobalJava))
+        {
+            JavaError = !UseGlobalJava && !string.IsNullOrWhiteSpace(JavaPath) && !Path.IsPathFullyQualified(JavaPath.Trim()) ? "请输入完整路径，或留空自动选择。" : "";
+            if (JavaError.Length > 0) return;
+        }
+        if (property is nameof(Width) or nameof(Height) or nameof(UseGlobalWindow))
+        {
+            WindowError = (property != nameof(UseGlobalWindow) || !UseGlobalWindow) && (!int.TryParse(Width,out var w)||w<=0||!int.TryParse(Height,out var h)||h<=0) ? "宽度和高度必须为正整数。" : "";
+            if (WindowError.Length > 0) return;
+        }
+        Dictionary<string,string>? placeholderOverrides = null;
+        if (property == nameof(PlaceholderOverridesText))
+        {
+            placeholderOverrides = ParsePlaceholderOverrides(PlaceholderOverridesText, out var error);
+            PlaceholderError = error;
+            if (error.Length > 0) return;
+        }
+        var draft = new SettingsDraft(UseGlobalJava,UseGlobalMemory,UseGlobalWindow,UseGlobalArguments,JavaPath.Trim(),MemoryAllocation.MemoryMb,Width,Height,Fullscreen,JvmArguments,GameArguments,MemoryAllocation.IsAutomatic,MemoryAllocation.OptimizeBeforeLaunch,PlaceholderOverridesText);
         try
         {
             var options = await Infrastructure.Runtime.InstanceStore.UpdateAsync(Instance,options=>
             {
-            options.GlobalJava=UseGlobalJava;options.GlobalMemory=UseGlobalMemory;options.GlobalWindow=UseGlobalWindow;options.GlobalArguments=UseGlobalArguments;
-            options.JavaPath=JavaPath;options.MemoryMb=MemoryAllocation.MemoryMb;options.AutomaticMemory=MemoryAllocation.IsAutomatic;options.OptimizeMemory=MemoryAllocation.OptimizeBeforeLaunch;
-            options.Width=int.TryParse(Width,out var width)?width:1280;options.Height=int.TryParse(Height,out var height)?height:720;options.Fullscreen=Fullscreen;options.JvmArguments=JvmArguments;options.GameArguments=GameArguments;
-            options.PlaceholderOverrides=placeholderOverrides;
+                switch (property)
+                {
+                    case nameof(UseGlobalJava): options.GlobalJava=draft.GlobalJava;if(!draft.GlobalJava)options.JavaPath=draft.Java; break;
+                    case nameof(UseGlobalMemory): options.GlobalMemory=draft.GlobalMemory; break;
+                    case nameof(UseGlobalWindow):
+                        options.GlobalWindow=draft.GlobalWindow;
+                        if(!draft.GlobalWindow){options.Width=int.Parse(draft.Width);options.Height=int.Parse(draft.Height);}
+                        break;
+                    case nameof(UseGlobalArguments): options.GlobalArguments=draft.GlobalArguments; break;
+                    case nameof(JavaPath): options.JavaPath=draft.Java;options.GlobalJava=draft.GlobalJava; break;
+                    case nameof(MemoryAllocation): options.MemoryMb=draft.MemoryMb;options.AutomaticMemory=draft.AutomaticMemory;options.OptimizeMemory=draft.OptimizeMemory; break;
+                    case nameof(Width):
+                    case nameof(Height):
+                        options.Width=int.Parse(draft.Width);options.Height=int.Parse(draft.Height);options.GlobalWindow=draft.GlobalWindow;
+                        break;
+                    case nameof(Fullscreen): options.Fullscreen=draft.Fullscreen; break;
+                    case nameof(JvmArguments): options.JvmArguments=draft.Jvm; break;
+                    case nameof(GameArguments): options.GameArguments=draft.Game; break;
+                    case nameof(PlaceholderOverridesText): options.PlaceholderOverrides=placeholderOverrides!; break;
+                }
             });
             Instance.Options=options;
-            _saved=new(UseGlobalJava,UseGlobalMemory,UseGlobalWindow,UseGlobalArguments,JavaPath,MemoryAllocation.MemoryMb,Width,Height,Fullscreen,JvmArguments,GameArguments,MemoryAllocation.IsAutomatic,MemoryAllocation.OptimizeBeforeLaunch,PlaceholderOverridesText);
-            Notice="已保存此游戏的启动设置。";
+            Notice="已自动保存。";
         }
         catch(Exception error){Notice=Infrastructure.Runtime.RuntimeSupport.Error(error);}
-        finally{_saving=false;System.Windows.Input.CommandManager.InvalidateRequerySuggested();}
     }
     private void LoadStored()
     {

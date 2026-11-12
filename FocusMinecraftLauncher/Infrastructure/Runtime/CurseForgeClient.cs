@@ -11,7 +11,7 @@ using FocusMinecraftLauncher.Features.Downloads.Models;
 namespace FocusMinecraftLauncher.Infrastructure.Runtime;
 
 /// <summary>CurseForge 公开接口的只读客户端，走 mcimirror 镜像转发，不携带官方 API Key。</summary>
-public sealed class CurseForgeClient
+public sealed partial class CurseForgeClient
 {
     private const string Root = "https://mod.mcimirror.top/curseforge/v1/";
     private static readonly HttpClient Http = new()
@@ -26,9 +26,39 @@ public sealed class CurseForgeClient
     /// <summary>下载地址只把 edge.forgecdn.net 换成镜像；mediafilez 等其它 CDN 官方明确不镜像。</summary>
     public static string Rewrite(string address)
     {
+        if (CommunitySource.Current == CommunitySource.Official) return address;
         if (!Uri.TryCreate(address, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps) return address;
         if (!uri.Host.Equals("edge.forgecdn.net", StringComparison.OrdinalIgnoreCase)) return address;
         return "https://mod.mcimirror.top" + uri.PathAndQuery;
+    }
+
+    /// <summary>所有 CurseForge 文件共用候选来源；只在允许镜像时加入 MCIM。</summary>
+    public static string[] DownloadUrls(long fileId, string fileName, string? direct)
+    {
+        var official = new List<string>();
+        var mirrors = new List<string>();
+        void Add(string? address)
+        {
+            if (!Uri.TryCreate(address, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps) return;
+            if (uri.Host.Equals("mod.mcimirror.top", StringComparison.OrdinalIgnoreCase)) mirrors.Add(uri.AbsoluteUri);
+            else official.Add(uri.AbsoluteUri);
+        }
+        Add(direct?.Replace("-service.overwolf.wtf", ".forgecdn.net", StringComparison.OrdinalIgnoreCase));
+        if (fileId > 0)
+        {
+            var path = "/files/" + (fileId / 1000).ToString(CultureInfo.InvariantCulture) + "/"
+                + (fileId % 1000).ToString(CultureInfo.InvariantCulture) + "/" + Uri.EscapeDataString(fileName);
+            Add("https://mediafilez.forgecdn.net" + path);
+            Add("https://edge.forgecdn.net" + path);
+            Add("https://media.forgecdn.net" + path);
+        }
+        if (CommunitySource.Current == CommunitySource.Official) return official.Distinct(StringComparer.Ordinal).ToArray();
+        foreach (var address in official)
+        {
+            var mapped = Rewrite(address);
+            if (mapped != address) mirrors.Add(mapped);
+        }
+        return mirrors.Concat(official).Distinct(StringComparer.Ordinal).ToArray();
     }
 
     public static int ClassId(DownloadSection section) => section switch
@@ -209,6 +239,16 @@ public sealed class CurseForgeClient
     /// <summary>下载到指定路径并按 SHA-1 校验；文件大小与哈希都由接口给出。</summary>
     public async Task DownloadAsync(CurseForgeFile file, string destination, Action<double>? progress, CancellationToken token)
     {
+        if (file.Sha1 is { Length: 40 })
+        {
+            var urls = DownloadUrls(file.Id, file.FileName, file.DownloadUrl);
+            await FMCore.Downloads.FileDownloader.DownloadAsync(new FMCore.Downloads.DownloadRequest
+            {
+                Url = urls[0], FallbackUrls = urls.Skip(1).ToArray(), FilePath = destination,
+                Size = file.FileLength, Sha1 = file.Sha1, UseSourcePerformance = false
+            }, value => progress?.Invoke(value.Percentage), token);
+            return;
+        }
         var address = Rewrite(file.DownloadUrl ?? throw new InvalidDataException("该文件没有可用的下载地址。"));
         using var request = new HttpRequestMessage(HttpMethod.Get, address);
         request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);

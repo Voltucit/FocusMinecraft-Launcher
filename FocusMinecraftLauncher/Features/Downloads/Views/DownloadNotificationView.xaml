@@ -19,5 +19,8 @@
             <SolidColorBrush x:Key="TextFillColorPrimaryBrush" Color="#FFFFFF"/>
             <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="#FFFFFF"/>
         </fluent:InfoBar.Resources>
+        <fluent:Button Content="查看错误详情" Command="{Binding Notification.ShowDetails, ElementName=Root}"
+                       Visibility="{Binding Notification.HasDetails, ElementName=Root, Converter={StaticResource BoolVisibility}, FallbackValue=Collapsed}"
+                       Margin="0,8,0,0"/>
     </fluent:InfoBar>
 </UserControl>

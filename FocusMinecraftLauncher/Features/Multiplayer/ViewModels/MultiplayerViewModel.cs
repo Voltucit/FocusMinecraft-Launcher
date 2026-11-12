@@ -67,8 +67,29 @@ public sealed class MultiplayerViewModel : ObservableObject, IDisposable
             return remote.Select(x => x.Connection).Distinct().Count() == 1 ? remote[0].Connection : "直连与中继";
         }
     }
-    public string ConnectionLatency => _network.Snapshot.Members.FirstOrDefault(x => !x.IsLocal && x.IsHost)?.Latency
-        ?? (_network.Snapshot.Members.Count(x => !x.IsLocal) == 1 ? _network.Snapshot.Members.First(x => !x.IsLocal).Latency : "未测量");
+    public string ConnectionLatency
+    {
+        get
+        {
+            var remote = _network.Snapshot.Members.Where(member => !member.IsLocal).ToArray();
+            // 成员端继续显示到房主的延迟，双人房间保留原始测量值。
+            if (remote.FirstOrDefault(member => member.IsHost) is { } host) return host.Latency;
+            if (remote.Length == 1) return remote[0].Latency;
+
+            // 房主可能有多名远端成员；用有效测量值的范围汇总，不因人数增加而丢弃数据。
+            var measured = remote.Select(member => member.Latency)
+                .Where(text => text.EndsWith(" ms", StringComparison.Ordinal))
+                .Select(text => (Text: text, Milliseconds: double.TryParse(text.AsSpan(0, text.Length - 3),
+                    NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ? value : double.NaN))
+                .Where(value => double.IsFinite(value.Milliseconds) && value.Milliseconds > 0)
+                .OrderBy(value => value.Milliseconds).ToArray();
+            if (measured.Length == 0) return "未测量";
+            var minimum = measured[0];
+            var maximum = measured[^1];
+            return minimum.Milliseconds == maximum.Milliseconds ? minimum.Text
+                : minimum.Text[..^3] + "–" + maximum.Text;
+        }
+    }
     public UiCommand CreateRoom { get; }
     public UiCommand JoinRoom { get; }
     public UiCommand PasteInvitation { get; }

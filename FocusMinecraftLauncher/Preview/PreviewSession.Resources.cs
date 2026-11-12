@@ -130,7 +130,7 @@ public sealed partial class PreviewSession
                 if(MessageBox.Show($"将替换 {plan.Replacements.Count} 个旧资源文件，旧文件会保留备份。\n\n{names}\n\n是否继续？","更换资源版本",MessageBoxButton.OKCancel,MessageBoxImage.Question)!=MessageBoxResult.OK)
                 {Cancel(task);token.ThrowIfCancellationRequested();}
             }
-            await ResourceFileInstaller.ApplyAsync(selected,plan,client,_configuration.ConfigDirectory,(stage,progress)=>Report(task,stage,file:progress),token);
+            await ResourceFileInstaller.ApplyAsync(selected,plan,client,_configuration.ConfigDirectory,(stage,progress)=>Report(task,stage,file:progress),token,DownloadConcurrency);
             NotifyTask(file.FileName + "下载完成", false);
         });
     }
@@ -153,7 +153,7 @@ public sealed partial class PreviewSession
             {
                 var archive=Path.Combine(_configuration.ConfigDirectory,"Downloads","curseforge",file.FileName);
                 Directory.CreateDirectory(Path.GetDirectoryName(archive)!);
-                await FileDownloader.DownloadManyAsync([new DownloadRequest{Url=file.Download.Url,FilePath=archive,Size=file.Download.Size,Sha1=file.Download.Sha1??""}],1,_=>{ },token);
+                await FileDownloader.DownloadManyAsync([CurseForgeRequest(file, archive)],1,p=>Report(task,"下载整合包",p),token);
                 await ImportModpackAsync(archive,file.ProjectId,file.Id);
                 return;
             }
@@ -161,6 +161,9 @@ public sealed partial class PreviewSession
             var client=new CurseForgeClient();
             var pending=new Queue<ResourceFileItem>();pending.Enqueue(file);
             var visited=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var downloads = new List<DownloadRequest>();
+            var dependencyChoices = new Dictionary<long, CurseForgeFile>();
+            Report(task, "解析资源与必需前置");
             while(pending.Count>0)
             {
                 token.ThrowIfCancellationRequested();
@@ -169,21 +172,31 @@ public sealed partial class PreviewSession
                 var relative=CurseForgeFolder(item.Section)+"/"+item.FileName;
                 var destination=ModpackArchive.SafePath(selected.GameDirectory,relative);
                 Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-                if(!File.Exists(destination))
-                {
-                    Report(task,"下载 "+item.FileName);
-                    await FileDownloader.DownloadManyAsync([new DownloadRequest{Url=item.Download!.Url,FilePath=destination,Size=item.Download.Size,Sha1=item.Download.Sha1??""}],2,_=>{ },token);
-                }
+                downloads.Add(CurseForgeRequest(item, destination));
                 foreach(var dependency in item.CurseForgeDependencies?.Where(item=>item.Required)??[])
                 {
-                    var candidates=await client.GetFilesAsync(dependency.ModId,selected.Version,selected.Loader,token);
-                    var best=candidates.Where(file=>!string.IsNullOrWhiteSpace(file.DownloadUrl)&&!file.FileName.EndsWith(".pom",StringComparison.OrdinalIgnoreCase)&&!file.FileName.EndsWith(".module",StringComparison.OrdinalIgnoreCase)).OrderByDescending(file=>file.Date).FirstOrDefault();
-                    if(best==null)throw new InvalidDataException($"前置资源 {dependency.ModId} 在 {selected.Version} / {selected.Loader} 没有可用文件。");
+                    if (!dependencyChoices.TryGetValue(dependency.ModId, out var best))
+                    {
+                        var candidates=await client.GetFilesAsync(dependency.ModId,selected.Version,selected.Loader,token);
+                        best=candidates.Where(candidate=>candidate.Sha1 is {Length:40}&&!candidate.FileName.EndsWith(".pom",StringComparison.OrdinalIgnoreCase)&&!candidate.FileName.EndsWith(".module",StringComparison.OrdinalIgnoreCase)).OrderByDescending(candidate=>candidate.Date).FirstOrDefault();
+                        if(best==null)throw new InvalidDataException($"前置资源 {dependency.ModId} 在 {selected.Version} / {selected.Loader} 没有可用文件。");
+                        dependencyChoices[dependency.ModId] = best;
+                    }
                     pending.Enqueue(CurseForgeItem(dependency.ModId,best,item.Section));
                 }
             }
+            await FileDownloader.DownloadManyAsync(downloads, DownloadConcurrency, p => Report(task, "下载资源与必需前置", p), token);
             NotifyTask(file.FileName+"下载完成",false);
         });
+    }
+    private static DownloadRequest CurseForgeRequest(ResourceFileItem file, string destination)
+    {
+        _ = long.TryParse(file.Id.StartsWith("cf:", StringComparison.Ordinal) ? file.Id[3..] : file.Id, out var fileId);
+        var download = file.Download ?? throw new InvalidDataException("资源没有下载信息。");
+        var urls = CurseForgeClient.DownloadUrls(fileId, file.FileName, download.Url);
+        if (urls.Length == 0) throw new InvalidDataException("资源没有可用的下载地址。");
+        return new DownloadRequest { Url = urls[0], FallbackUrls = urls.Skip(1).ToArray(), FilePath = destination,
+            Size = download.Size, Sha1 = download.Sha1 ?? "", UseSourcePerformance = false };
     }
     private static string CurseForgeFolder(DownloadSection section)=>section switch
     {
@@ -214,7 +227,7 @@ public sealed partial class PreviewSession
             NotifyTask(request.Manifest.Name+"已加入下载列表",false);
         }
         catch(OperationCanceledException) when(_lifetime.IsCancellationRequested) { }
-        catch(Exception error){NotifyTask(RuntimeSupport.Error(error),true);Log("整合包导入："+RuntimeSupport.Error(error));}
+        catch(Exception error){await ReportErrorAsync(error,"导入整合包","读取整合包与安装确认","整合包文件："+path);}
     }
     private async Task<PackImportRequest?> PrepareModpackImportAsync(string path,string root,CancellationToken token)
     {

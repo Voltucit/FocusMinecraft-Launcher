@@ -18,6 +18,7 @@ public sealed partial class PreviewSession
     private readonly Dictionary<PreviewTask, CancellationTokenSource> _operations = [];
     private readonly Dictionary<PreviewTask,Task> _executions = [];
     private readonly Dictionary<PreviewTask, Func<PreviewTask, CancellationToken, Task>> _retryOperations = [];
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<PreviewTask, string> _taskStages = new();
     private readonly Dictionary<string, SemaphoreSlim> _rootWriters = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _incomplete = new(StringComparer.OrdinalIgnoreCase);
     private int _refreshRevision;
@@ -39,9 +40,17 @@ public sealed partial class PreviewSession
     public void SetGlobalNotification(string message,bool error)=>GlobalNotification=new(message,error);
     public void NotifyTask(string message,bool error){SetGlobalNotification(message,error);TaskNotification?.Invoke(message,error);}
     public IReadOnlyList<string> GameFolders => (_configuration.ReadLauncher()["gameFolders"] as JsonArray)?.Select(n => LauncherConfiguration.Text(n)).Where(s => s.Length > 0).ToArray() ?? [];
-    public DownloadSource FileSource => IsMirrorSource(LauncherConfiguration.Text(_configuration.ReadLauncher()["downloads"]?["fileDownloadSource"])) ? DownloadSource.BmclApi : DownloadSource.Official;
+    public DownloadSource FileSource
+    {
+        get
+        {
+            var selected = LauncherConfiguration.Text(_configuration.ReadLauncher()["downloads"]?["fileDownloadSource"]);
+            return selected is "" or "自动选择" ? DownloadSource.Automatic : IsMirrorSource(selected) ? DownloadSource.BmclApi : DownloadSource.Official;
+        }
+    }
     /// <summary>仅用于支持选源的加载器列表查询；原版列表暂沿用核心的官方源入口。</summary>
-    public DownloadSource MetadataSource => IsMirrorSource(LauncherConfiguration.Text(_configuration.ReadLauncher()["downloads"]?["versionListSource"])) ? DownloadSource.BmclApi : DownloadSource.Official;
+    public DownloadSource MetadataSource => LauncherConfiguration.Text(_configuration.ReadLauncher()["downloads"]?["versionListSource"]) == "自动选择"
+        ? DownloadSource.Automatic : IsMirrorSource(LauncherConfiguration.Text(_configuration.ReadLauncher()["downloads"]?["versionListSource"])) ? DownloadSource.BmclApi : DownloadSource.Official;
     private static bool IsMirrorSource(string value)=>value.Contains("BMCLAPI")||value.StartsWith("优先使用镜像");
     public int DownloadConcurrency => Math.Clamp((int)LauncherConfiguration.Number(_configuration.ReadLauncher()["downloads"]?["maximumThreads"], 16), 1, 64);
 
@@ -277,6 +286,8 @@ public sealed partial class PreviewSession
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PreviewTask,long> _progressTimes = new();
     public void Report(PreviewTask task, string stage, DownloadBatchProgress? batch = null, DownloadProgress? file = null)
     {
+        // 诊断阶段不受进度节流和 UI 调度延迟影响；批量下载不能把最近进度文件认作失败文件。
+        _taskStages[task] = stage;
         var now=Environment.TickCount64;
         if(_progressTimes.TryGetValue(task,out var last)&&now-last<100)return;
         _progressTimes[task]=now;
@@ -306,7 +317,7 @@ public sealed partial class PreviewSession
         if (_operations.ContainsKey(task)) return;
         using var cancellation = task.Kind == PreviewTaskKind.Launch ? new CancellationTokenSource() : CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         _operations[task] = cancellation;
-        task.State = "进行中"; task.Error = ""; task.Stage = "正在准备"; task.Bytes = task.Total = 0;task.CompletedFiles=task.TotalFiles=0; task.Refresh(); Signal();
+        task.State = "进行中"; task.Error = ""; task.Failure = null; task.Stage = "正在准备"; _taskStages[task] = task.Stage; task.Bytes = task.Total = 0;task.CompletedFiles=task.TotalFiles=0; task.Refresh(); Signal();
         var retryAfterJavaGuide = false;
         try
         {
@@ -315,24 +326,20 @@ public sealed partial class PreviewSession
             task.State = "已完成";
             if (!task.IsRunningGame) task.Stage = "已完成";
         }
-        catch (OperationCanceledException) when(cancellation.IsCancellationRequested) { task.State = "已取消"; task.Stage = "已取消"; }
+        catch (OperationCanceledException error) when(cancellation.IsCancellationRequested || error is UserCanceledOperationException) { task.State = "已取消"; task.Stage = "已取消"; }
         catch (JavaNotFoundException error)
         {
-            task.State = "失败";
-            task.Stage = task.Kind switch { PreviewTaskKind.Launch => "启动失败", PreviewTaskKind.Import => "导入失败", PreviewTaskKind.Install => "安装失败", _ => "操作失败" };
-            task.Error = error.Message;
-            Log(task.Name + "：" + error);
+            await SetTaskFailureAsync(task, error, notify: false);
             retryAfterJavaGuide = await GuideJavaAsync(error, task, cancellation.Token);
             task.Refresh();
         }
         catch (Exception error)
         {
-            task.State = "失败"; task.Error = error is OperationCanceledException ? "服务响应超时，请检查网络后重试。" : RuntimeSupport.Error(error); task.Stage = task.Kind switch { PreviewTaskKind.Launch=>"启动失败", PreviewTaskKind.Repair=>"检查或补全失败", PreviewTaskKind.Import=>"导入失败", PreviewTaskKind.Export=>"导出失败", _=>"下载失败" };
-            Log(task.Name + "：" + error); NotifyTask(task.Stage, true);
+            await SetTaskFailureAsync(task, error);
         }
         finally
         {
-            _operations.Remove(task); _progressTimes.TryRemove(task,out _); task.IsRunningGame = false; task.BytesPerSecond = 0;
+            _operations.Remove(task); _progressTimes.TryRemove(task,out _); _taskStages.TryRemove(task, out _); task.IsRunningGame = false; task.BytesPerSecond = 0;
             task.Refresh(); Log(task.Name + "：" + task.State); Signal();
             if (task.Kind is PreviewTaskKind.Resource or PreviewTaskKind.Repair or PreviewTaskKind.Import or PreviewTaskKind.Install)
                 NotifyInstanceContentChanged(task.Root, task.InstanceId);
@@ -473,11 +480,13 @@ public sealed partial class PreviewSession
     }
     private async Task InstallComponentsAsync(string root, string name, string game, string loader, string loaderVersion, string optifine, PreviewTask task, CancellationToken token, InstanceOptions? installationSettings = null, IReadOnlyList<string>? bundledJava = null)
     {
+                Report(task, "读取游戏安装设置");
                 var source = FileSource; var threads = DownloadConcurrency;
                 var javaSettings = installationSettings ?? InstanceStore.Read(new PreviewInstance(name, name, game, loader) { Root = root });
                 OptiFineInstallVersion? optiFineMod=null;
                 if(loader=="Forge"&&optifine.Length>0)
                 {
+                    Report(task, "检查 Forge 与 OptiFine 兼容性");
                     var versions=await OptiFineOnlineInstaller.GetVersionsAsync(game,token);
                     optiFineMod=versions.SingleOrDefault(v=>v.Edition==optifine)??throw new InvalidOperationException("未找到所选 OptiFine 版本。");
                     await OptiFineForgeIntegration.CheckCombinationAsync(optiFineMod,loaderVersion,token);
@@ -486,8 +495,10 @@ public sealed partial class PreviewSession
                 var deferredLoader = false;
                 if (loader is "Forge" or "NeoForge" || optifine.Length > 0)
                 {
+                    Report(task, "安装 Minecraft 基础文件");
                     await new MinecraftInstaller(game,root,threads){Source=source}.InstallAsync(p=>Report(task,p.Message,p.Download),token);
                     var baseInstance=new PreviewInstance(game,game,game,"原版"){Root=root,IsolationMode=SavedSettings.VersionIsolation};
+                    Report(task, "检测安装所需的 Java");
                     try { java = await ResolveInstallerJavaAsync(baseInstance, javaSettings, bundledJava, task, token); }
                     catch (JavaNotFoundException error)
                     {
@@ -502,6 +513,7 @@ public sealed partial class PreviewSession
                         NotifyTask("已取消 Java 下载，游戏文件会先导入；启动时可再安装 " + loader + "。", true);
                     }
                 }
+                Report(task, "安装 " + loader);
                 if (loader == "Fabric")
                 {
                     await new FabricInstaller(game, loaderVersion, root, name, threads) { Source = source, RemoveCreatedBaseVersion = true }.InstallAsync(p => Report(task, p.Message, p.Download), token);
@@ -692,8 +704,10 @@ public sealed partial class PreviewSession
     /// <summary>开始及重试都明确传入当前确认的账户与实例，不复用失败任务捕获的旧账户。</summary>
     private async Task RunLaunchAsync(PreviewInstance instance,PreviewAccount account,PreviewTask task,CancellationToken token)
     {
+            Report(task, "验证账号");
             if (account.IsMicrosoft) { await AuthenticateMicrosoftAsync(account, false); if (!account.IsValid) throw new InvalidOperationException("登录已过期，请重新登录。"); }
             if (account.RuntimeAccount == null) throw new InvalidOperationException("账号不可用，请重新登录。");
+            Report(task, "读取启动设置");
             var settings = InstanceStore.Read(instance);
             var global = SavedSettings.Copy();
             Report(task, "检测 Java");
@@ -717,7 +731,9 @@ public sealed partial class PreviewSession
                 await InstallPendingLoaderAsync(instance, pendingOptions, javaCandidates[0].Executable, task, token);
                 settings = InstanceStore.Read(instance);
             }
+            Report(task, "准备共享资源目录");
             await EnsureResourceLinksAsync(instance.Root);
+            Report(task, "检查游戏文件与配置");
             await EnsureFilesAsync(instance, task, token);
             // 恢复缺少的父版本后才能得到完整 Java 声明，此时重新按核心元数据选择。
             if (requiredJava != instance.RequiredJava)
@@ -755,15 +771,40 @@ public sealed partial class PreviewSession
             if (unknownPlaceholders.Count > 0)
                 Log("版本包含未解析占位符：" + string.Join("、", unknownPlaceholders));
             token.ThrowIfCancellationRequested();
-            var code = await launcher.LaunchAsync(p => PostUi(() =>
+            var launchStarted = DateTime.UtcNow;
+            var output = new Queue<string>();
+            var outputLock = new object();
+            void CaptureOutput(string line)
+            {
+                lock (outputLock)
+                {
+                    // 输出回调可能来自工作线程；在生成报告时统一于界面线程脱敏，避免枚举正在变化的账号集合。
+                    output.Enqueue(line);
+                    while (output.Count > 500) output.Dequeue();
+                }
+                Log(line);
+            }
+            Report(task, "创建游戏进程");
+            var code = await launcher.LaunchAsync(p =>
+            {
+                _taskStages[task] = p.Stage == LaunchStage.JavaStarted ? "游戏运行" : p.Stage == LaunchStage.GameExited ? "游戏退出" : "启动游戏进程";
+                PostUi(() =>
             {
                 if (!task.IsActive) return;
                 task.Stage = p.Stage == LaunchStage.JavaStarted ? "已启动" : p.Stage == LaunchStage.GameExited ? "游戏已退出" : "启动中";
                 task.IsRunningGame = p.Stage == LaunchStage.JavaStarted || task.IsRunningGame;
                 task.Total = task.Bytes = 0; task.BytesPerSecond = 0; task.CompletedFiles = task.TotalFiles = 0;
                 task.Refresh(); Signal();
-            }), line => Log(line), line => Log(line), token);
-            if (code != 0) throw new InvalidOperationException("游戏异常退出，退出码：" + code + "。请在任务记录中查看日志。");
+            });
+            }, CaptureOutput, CaptureOutput, token);
+            token.ThrowIfCancellationRequested();
+            if (code != 0)
+            {
+                string captured;
+                lock (outputLock) captured = string.Join(Environment.NewLine, output);
+                var crash = await GameLogs.DescribeExitAsync(instance, code, launchStarted, captured, token);
+                throw crash;
+            }
             task.Stage = "游戏已退出";
             }
             catch (Exception error) when (unknownPlaceholders.Count > 0 && error is not OperationCanceledException)
@@ -804,11 +845,11 @@ public sealed partial class PreviewSession
                 : "未检测到可用的 Java。");
 
         var choice = Presentation.Dialogs.JavaRuntimeDialog.Ask(required, higher?.MajorVersion, canDownload, installing);
-        if (choice == Presentation.Dialogs.JavaRuntimeChoice.Cancel) throw new OperationCanceledException(installing ? "已取消安装。" : "已取消启动。");
+        if (choice == Presentation.Dialogs.JavaRuntimeChoice.Cancel) throw new UserCanceledOperationException(installing ? "已取消安装。" : "已取消启动。");
         if (choice == Presentation.Dialogs.JavaRuntimeChoice.Download)
         {
             var major = required ?? Presentation.Dialogs.JavaDownloadDialog.Ask(null);
-            if (major == null) throw new OperationCanceledException(installing ? "已取消安装。" : "已取消启动。");
+            if (major == null) throw new UserCanceledOperationException(installing ? "已取消安装。" : "已取消启动。");
             Report(task, $"下载 Java {major}");
             var installed = await JavaBootstrap.InstallAsync(major.Value, FileSource == DownloadSource.BmclApi, progress => ReportJavaInstall(task, progress), token);
             JavaScanner.Remember(installed);
@@ -819,9 +860,13 @@ public sealed partial class PreviewSession
         }
         return [higher!, .. candidates.Where(java => !ReferenceEquals(java, higher))];
     }
+    /// <summary>显式区分用户关闭选择框和网络内部超时；不改变安装阶段原有的 Java 延后策略。</summary>
+    private sealed class UserCanceledOperationException(string message) : OperationCanceledException(message) { }
+
     /// <summary>把核心的 Java 下载进度映射到启动任务上，让任务记录显示百分比与速度。</summary>
     private void ReportJavaInstall(PreviewTask task, FMCore.Java.JavaInstallProgress progress)
     {
+        _taskStages[task] = progress.Message;
         PostUi(() =>
         {
             if (!task.IsActive) return;

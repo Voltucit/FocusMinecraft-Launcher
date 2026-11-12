@@ -11,26 +11,7 @@ public static partial class ModpackArchive
 {
     /// <summary>空直链不代表文件不存在；按文件编号生成 CDN 地址，镜像作为最后的候选来源。</summary>
     private static string[] CurseForgeDownloadUrls(CurseForgeFile file)
-    {
-        var urls = new List<string>();
-        void Add(string? address)
-        {
-            if (Uri.TryCreate(address, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps)
-                urls.Add(uri.AbsoluteUri);
-        }
-
-        var direct = file.DownloadUrl?.Replace("-service.overwolf.wtf", ".forgecdn.net", StringComparison.OrdinalIgnoreCase);
-        Add(direct);
-        var path = "/files/" + (file.Id / 1000).ToString(CultureInfo.InvariantCulture) + "/"
-            + (file.Id % 1000).ToString(CultureInfo.InvariantCulture) + "/" + Uri.EscapeDataString(file.FileName);
-        Add("https://mediafilez.forgecdn.net" + path);
-        var edge = "https://edge.forgecdn.net" + path;
-        Add(edge);
-        Add("https://media.forgecdn.net" + path);
-        if (!string.IsNullOrWhiteSpace(direct)) Add(CurseForgeClient.Rewrite(direct));
-        Add(CurseForgeClient.Rewrite(edge));
-        return urls.Distinct(StringComparer.Ordinal).ToArray();
-    }
+        => CurseForgeClient.DownloadUrls(file.Id, file.FileName, file.DownloadUrl);
 
     /// <summary>仅编排资源来源；传输、重试、SHA-1、大小校验和原子写入仍由核心负责。</summary>
     private static async Task DownloadPackFilesAsync(PackFile[] files, PreviewInstance instance, int concurrency,
@@ -69,43 +50,41 @@ public static partial class ModpackArchive
         {
             var file = files[index];
             var destination = SafePath(instance.GameDirectory, file.Path);
-            // 本地文件冲突单独报告，不能误当成 CDN 失败并要求用户重新下载。
-            if (File.Exists(destination) && !await MatchesFileAsync(file, destination, downloadToken))
-                throw new IOException("已有文件与指定版本不同，未覆盖：" + file.FileName);
             lock (gate) { active++; peak = Math.Max(peak, active); Report(); }
             try
             {
                 var errors = new List<Exception>();
-                long previousTransferred = 0;
-                foreach (var url in file.Urls.Distinct(StringComparer.Ordinal))
+                var urls = file.Urls.SelectMany(address =>
                 {
-                    downloadToken.ThrowIfCancellationRequested();
-                    long sourceTransferred = 0;
-                    try
+                    var mapped = CommunitySource.Current.GetUrl(address);
+                    return mapped == address ? new[] { address } : new[] { mapped, address };
+                }).Distinct(StringComparer.Ordinal).ToArray();
+                try
+                {
+                    await FileDownloader.DownloadAsync(new DownloadRequest
                     {
-                        await FileDownloader.DownloadAsync(new DownloadRequest
-                        {
-                            Url = url, FilePath = destination, Size = file.Size, Sha1 = file.Sha1
-                        }, value =>
-                        {
-                            lock (gate)
-                            {
-                                received[index] = value.DownloadedBytes;
-                                sourceTransferred = value.TransferredBytes;
-                                transferred[index] = previousTransferred + sourceTransferred;
-                                Report();
-                            }
-                        }, downloadToken);
-                        lock (gate) { received[index] = file.Size; completed++; Report(); }
-                        return;
-                    }
-                    catch (Exception error) when (!downloadToken.IsCancellationRequested
-                        && error is HttpRequestException or HttpIOException or TimeoutException or InvalidDataException)
+                        Url = urls[0], FallbackUrls = urls.Skip(1).ToArray(), FilePath = destination,
+                        Size = file.Size, Sha1 = file.Sha1, UseSourcePerformance = file.CurseForgeFileId <= 0 && CommunitySource.Current.AutomaticSelection
+                    }, value =>
                     {
-                        errors.Add(new IOException($"{file.FileName}（{new Uri(url).Host}）：{error.Message}", error));
-                        previousTransferred += sourceTransferred;
-                        lock (gate) { received[index] = 0; Report(); }
-                    }
+                        lock (gate)
+                        {
+                            received[index] = value.DownloadedBytes;
+                            transferred[index] = value.TransferredBytes;
+                            Report();
+                        }
+                    }, downloadToken);
+                    lock (gate) { received[index] = file.Size; completed++; Report(); }
+                    return;
+                }
+                catch (Exception error) when (!downloadToken.IsCancellationRequested
+                    && error is HttpRequestException or HttpIOException or TimeoutException or InvalidDataException)
+                {
+                    // 正常复用交给核心校验一次；只在失败时区分已有文件冲突和来源不可用。
+                    if (File.Exists(destination) && !await MatchesFileAsync(file, destination, downloadToken))
+                        throw new IOException("已有文件与指定版本不同，未覆盖：" + file.FileName, error);
+                    errors.Add(new IOException($"{file.FileName}：{error.Message}", error));
+                    lock (gate) { received[index] = 0; Report(); }
                 }
                 var failure = new AggregateException("所有候选来源均下载失败：" + file.FileName, errors);
                 if (file.CurseForgeFileId == 0) throw failure;

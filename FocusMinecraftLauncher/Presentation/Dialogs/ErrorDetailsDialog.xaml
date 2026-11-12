@@ -1,0 +1,56 @@
+<Window x:Class="FocusMinecraftLauncher.Presentation.Dialogs.ErrorDetailsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:visual="clr-namespace:FocusMinecraftLauncher.Presentation.Controls"
+        Title="错误详情" Width="680" SizeToContent="Height" MaxHeight="760"
+        WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        FontFamily="Segoe UI Variable Text, Microsoft YaHei UI" FontSize="14"
+        Foreground="{DynamicResource AppText}" UseLayoutRounding="True"
+        visual:ThemeVisuals.IsSoft="{DynamicResource SoftEnabled}"
+        visual:ThemeVisuals.IsFlat="{DynamicResource FlatEnabled}">
+    <Window.Resources>
+        <Style x:Key="ErrorSurface" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource AppBackground}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SubtleBorder}"/>
+            <Setter Property="BorderThickness" Value="{DynamicResource OutlineThickness}"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource CardCornerRadius}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Path=(visual:ThemeVisuals.IsSoft), RelativeSource={RelativeSource Self}}" Value="True">
+                    <Setter Property="BorderThickness" Value="0"/>
+                    <Setter Property="Effect" Value="{DynamicResource SoftPopupShadow}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+    <Border Style="{StaticResource ErrorSurface}" Margin="20">
+        <Grid Margin="28,24">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <TextBlock Text="错误详情" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,20" MouseLeftButtonDown="DragWindow"/>
+            <ScrollViewer x:Name="ReportScroll" Grid.Row="1" MaxHeight="510" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
+                    <TextBlock Text="{Binding Action}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding Location}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                    <TextBlock Text="{Binding Reason}" Foreground="{DynamicResource ErrorText}" TextWrapping="Wrap" Margin="0,16,0,0"/>
+                    <TextBlock Text="{Binding RelatedInformation}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,8,0,0" Visibility="{Binding RelatedInformation, Converter={StaticResource TextVisibility}}"/>
+                    <TextBlock Text="处理建议" FontWeight="SemiBold" Margin="0,20,0,8"/>
+                    <TextBlock Text="{Binding Advice}" TextWrapping="Wrap"/>
+                    <Expander Header="技术详情" Margin="0,20,0,0">
+                        <TextBox x:Name="DetailsText" IsReadOnly="True" AcceptsReturn="True" Height="220" FontFamily="Consolas, Microsoft YaHei UI" FontSize="12"
+                                 TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                 AutomationProperties.Name="可复制的错误报告" Margin="0,8,0,0"/>
+                    </Expander>
+                    <TextBlock Text="{Binding Reference}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,16,0,0"/>
+                    <TextBlock Text="{Binding SaveNotice}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
+                    <TextBlock x:Name="Feedback" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,8,0,0" AutomationProperties.LiveSetting="Polite"/>
+                </StackPanel>
+            </ScrollViewer>
+            <WrapPanel Grid.Row="2" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <fluent:Button Content="复制错误信息" Click="CopyReport" Margin="0,0,8,8"/>
+                <fluent:Button x:Name="OpenReportButton" Content="打开报告目录" Click="OpenReport" Margin="0,0,8,8"/>
+                <fluent:Button Content="关闭" Style="{StaticResource PrimaryButton}" IsDefault="True" IsCancel="True" Click="CloseDialog" MinWidth="80" Margin="0,0,0,8"/>
+            </WrapPanel>
+        </Grid>
+    </Border>
+</Window>

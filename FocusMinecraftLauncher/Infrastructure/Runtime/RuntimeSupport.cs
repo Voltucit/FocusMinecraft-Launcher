@@ -150,23 +150,21 @@ public static class RuntimeSupport
     /// <summary>日志过滤认证参数，不记录访问令牌、登录密码或启动器的完整命令行。</summary>
     public static string SafeText(string text)
     {
-        text = Regex.Replace(text, @"(?i)(access[_-]?token|refresh[_-]?token|authorization|password|client_secret)([\s""'=:\t]+)([^\s,""}]+)", "$1$2[已隐藏]");
-        return Regex.Replace(text, @"(?i)Bearer\s+[^\s""']+", "Bearer [已隐藏]");
+        text = Regex.Replace(text, @"(?i)Bearer\s+[^\s""']+", "Bearer [已隐藏]");
+        text = Regex.Replace(text, """(?i)(\b(?:access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?token|authorization|password|client_secret|api[_-]?key)\b["']?(?:\s*[:=]\s*|\s+))("(?:\\.|[^"\\])*"|'[^']*'|[^\s,"}]+)""", "$1[已隐藏]");
+        // URL 保留服务和文件路径；签名、授权码及其他查询参数不进入可复制的诊断报告。
+        return Regex.Replace(text, @"https?://[^\s<>""']+", match =>
+        {
+            if (!Uri.TryCreate(match.Value, UriKind.Absolute, out var uri)) return match.Value;
+            var builder = new UriBuilder(uri) { UserName = "", Password = "", Query = "", Fragment = "" };
+            return builder.Uri.GetLeftPart(UriPartial.Path) + (uri.Query.Length > 0 ? "?[参数已隐藏]" : "");
+        });
     }
     public static string Error(Exception error)
     {
-        var text=error switch
-        {
-            OperationCanceledException=>"操作已取消。",
-            UnauthorizedAccessException=>"无法写入所选位置，请检查文件权限。",
-            HttpRequestException {StatusCode:System.Net.HttpStatusCode.TooManyRequests}=>"请求过于频繁，请稍后重试。",
-            HttpRequestException=>"连接服务失败，请检查网络后重试。",
-            DirectoryNotFoundException=>"所选文件夹不存在，请重新选择。",
-            FileNotFoundException=>"找不到所需文件，请检查文件是否已被移动，或重新安装。",
-            TimeoutException=>"操作超时，请稍后重试。",
-            _=>SafeText(error.GetBaseException().Message)
-        };
-        return Regex.Replace(text,@"(?i)\b[A-Z]:[\\/][^\r\n""<>|；，。]*","相关文件");
+        if (error is OperationCanceledException) return "操作已取消或请求超时，请检查操作状态后重试。";
+        var (reason, advice) = LauncherError.Describe(error);
+        return SafeText(reason + Environment.NewLine + "建议：" + advice);
     }
     /// <summary>把字节数写成 1.2 GB / 340 MB 这类短文本，用于进度与列表。</summary>
     public static string FormatSize(long bytes)

@@ -22,7 +22,7 @@ public partial class DownloadNotificationView : UserControl
     public DownloadNotificationView()
     {
         InitializeComponent();
-        _timer.Tick += (_, _) => HideNotification();
+        _timer.Tick += (_, _) => { if (!IsMouseOver && !IsKeyboardFocusWithin) HideNotification(); };
     }
 
     private void ShowNotification()
@@ -38,6 +38,7 @@ public partial class DownloadNotificationView : UserControl
             Slide.BeginAnimation(TranslateTransform.XProperty, Animate(512, 0, true));
             BeginAnimation(OpacityProperty, Animate(0, 1, true));
         }
+        _timer.Interval = TimeSpan.FromSeconds(Notification.IsError ? 15 : 5);
         _timer.Start();
     }
 

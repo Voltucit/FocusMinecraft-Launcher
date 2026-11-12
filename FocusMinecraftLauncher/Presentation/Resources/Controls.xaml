@@ -391,6 +391,7 @@
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <fluent:Button Content="{Binding CancelText}" Command="{Binding DataContext.Session.CancelTask, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Visibility="{Binding IsActive, Converter={StaticResource BoolVisibility}}"/>
                     <fluent:Button Content="重试" Command="{Binding DataContext.Session.RetryTask, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Visibility="{Binding CanRetry, Converter={StaticResource BoolVisibility}}"/>
+                    <fluent:Button Content="查看错误详情" Command="{Binding DataContext.Session.ShowTaskError, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Style="{StaticResource QuietButton}" Margin="0,8,0,0" Visibility="{Binding HasFailure, Converter={StaticResource BoolVisibility}}"/>
                 </StackPanel>
             </Grid>
         </Border>

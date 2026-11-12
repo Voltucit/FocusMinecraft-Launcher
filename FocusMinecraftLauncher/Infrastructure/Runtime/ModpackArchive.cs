@@ -118,6 +118,7 @@ public static partial class ModpackArchive
         var progressGate = new object();
         var completed = 0;
         metadataProgress?.Invoke(0, references.Count);
+        var batch = await CurseForgeClient.GetPackMetadataAsync(references, token);
         await Parallel.ForEachAsync(Enumerable.Range(0, references.Count),
             new ParallelOptions { MaxDegreeOfParallelism = 8, CancellationToken = token }, async (index, readToken) =>
         {
@@ -129,7 +130,8 @@ public static partial class ModpackArchive
                 id => new Lazy<Task<CurseForgeMod?>>(() => ReadProjectAsync(id, readToken))).Value;
             CurseForgeFile file;
             string fallbackSource = "";
-            try { file = await client.GetFileAsync(projectId, fileId, readToken); }
+            try { file = batch.Files.TryGetValue(fileId, out var cached) && cached.ProjectId == projectId
+                ? cached.File : await client.GetFileAsync(projectId, fileId, readToken); }
             catch (Exception error) when (error is HttpRequestException or InvalidDataException or IOException)
             {
                 try
@@ -183,6 +185,7 @@ public static partial class ModpackArchive
 
         async Task<CurseForgeMod?> ReadProjectAsync(long id, CancellationToken readToken)
         {
+            if (batch.Projects.TryGetValue(id, out var cached)) return cached;
             try { return await client.GetModAsync(id, readToken); }
             catch (Exception error) when (error is HttpRequestException or InvalidDataException or IOException) { return null; }
         }

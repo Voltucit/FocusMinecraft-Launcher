@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
+using System.Runtime.CompilerServices;
 using Microsoft.Win32;
 using FocusMinecraftLauncher.Common;
 using FocusMinecraftLauncher.Infrastructure.Runtime;
@@ -25,8 +26,8 @@ public sealed class SettingsViewModel : ObservableObject
     private bool _wallpapersLoaded;
     private bool _wallpapersLoading;
     private bool _saving, _importingBackground;
+    private readonly HashSet<string> _pendingFields = [];
     private bool _initializing = true;
-    private readonly SemaphoreSlim _javaSaveGate = new(1, 1);
     public string BackgroundActionText => _importingBackground ? "正在读取…" : "选择图片";
     private bool _themeSettingsExpanded;
     public bool IsThemeSettingsExpanded { get => _themeSettingsExpanded; set => Set(ref _themeSettingsExpanded, value); }
@@ -44,7 +45,7 @@ public sealed class SettingsViewModel : ObservableObject
         new(HomeLayout.Centered, "居中启动", "头像与启动操作集中显示")
     ];
     private VersionIsolationMode _isolation;
-    public VersionIsolationMode VersionIsolation { get => _isolation; set { if (Set(ref _isolation, value)) Notice = ""; } }
+    public VersionIsolationMode VersionIsolation { get => _isolation; set { if (Set(ref _isolation, value)) QueueSave(); } }
     public IReadOnlyList<VersionIsolationOption> IsolationOptions { get; } =
     [new(VersionIsolationMode.All, "全部隔离"), new(VersionIsolationMode.ModdedOnly, "仅 Mod 版本隔离"), new(VersionIsolationMode.None, "不隔离")];
     public string JavaPath
@@ -57,21 +58,21 @@ public sealed class SettingsViewModel : ObservableObject
             if (!Set(ref _java, path)) return;
             JavaError = ""; Notice = ""; Changed(nameof(IsJavaAutoSelected)); Changed(nameof(JavaDisplayText));
             JavaDetection.UpdateSelection(path);
-            if (!_initializing) _ = SaveJavaPathAsync(path);
+            QueueSave();
             System.Windows.Input.CommandManager.InvalidateRequerySuggested();
         }
     }
     public bool IsJavaAutoSelected => string.IsNullOrWhiteSpace(JavaPath);
     public string JavaDisplayText => IsJavaAutoSelected ? "自动选择" : JavaPath;
-    public string AssetsDirectory { get => _assetsDirectory; set { if (Set(ref _assetsDirectory, value)) Notice = ""; } }
-    public string LibrariesDirectory { get => _librariesDirectory; set { if (Set(ref _librariesDirectory, value)) Notice = ""; } }
+    public string AssetsDirectory { get => _assetsDirectory; set { if (Set(ref _assetsDirectory, value)) QueueSave(); } }
+    public string LibrariesDirectory { get => _librariesDirectory; set { if (Set(ref _librariesDirectory, value)) QueueSave(); } }
     public UiCommand BrowseAssets { get; }
     public UiCommand ClearAssets { get; }
     public UiCommand BrowseLibraries { get; }
     public UiCommand ClearLibraries { get; }
     public MemoryAllocationViewModel MemoryAllocation { get; } = new();
     public JavaDetectionViewModel JavaDetection { get; }
-    public string JvmArguments { get => _jvm; set { if (Set(ref _jvm, value)) Notice = ""; } }
+    public string JvmArguments { get => _jvm; set { if (Set(ref _jvm, value)) QueueSave(); } }
     public UiCommand RefreshWallpaper { get; }
     public UiCommand ClearWallpaper { get; }
     public UiCommand RefreshWallpaperList { get; }
@@ -81,7 +82,7 @@ public sealed class SettingsViewModel : ObservableObject
     public ObservableCollection<WallpaperChoiceViewModel> VisibleWallpapers { get; } = [];
     public ObservableCollection<WallpaperRowViewModel> WallpaperRows { get; } = [];
     public ObservableCollection<WallpaperPropertyEditorViewModel> WallpaperProperties { get; } = [];
-    public bool HasWallpaperProperties => WallpaperProperties.Count > 0;
+    public bool HasWallpaperProperties => WallpaperProperties.Count > 0 && !Session.WallpaperStaticMode;
     public WallpaperChoiceViewModel? SelectedWallpaper
     {
         get => _selectedWallpaper;
@@ -119,17 +120,15 @@ public sealed class SettingsViewModel : ObservableObject
         set
         {
             var normalized = GcChoices.Any(choice => string.Equals(choice.Value, value, StringComparison.OrdinalIgnoreCase)) ? value : "Auto";
-            if (Set(ref _gcMode, normalized)) Notice = "";
+            if (Set(ref _gcMode, normalized)) QueueSave();
         }
     }
     /// <summary>外置账号使用的 authlib-injector；留空表示由启动器下载并维护。</summary>
-    public string AuthlibInjectorPath { get => _authlib; set { if (Set(ref _authlib, value)) { Notice = ""; System.Windows.Input.CommandManager.InvalidateRequerySuggested(); } } }
+    public string AuthlibInjectorPath { get => _authlib; set { if (Set(ref _authlib, value)) { QueueSave(); System.Windows.Input.CommandManager.InvalidateRequerySuggested(); } } }
     public string JavaError { get => _javaError; private set => Set(ref _javaError, value); }
     public string Notice { get => _notice; private set => Set(ref _notice, value); }
     public IReadOnlyList<Presentation.ThemeColorPreset> FlatColorPresets => Presentation.UiTheme.FlatColorPresets;
     public IReadOnlyList<Presentation.ThemeColorPreset> SoftColorPresets => Presentation.UiTheme.SoftColorPresets;
-    public UiCommand Save { get; }
-    public UiCommand Restore { get; }
     public UiCommand BrowseJava { get; }
     public UiCommand ClearJava { get; }
     public UiCommand BrowseAuthlibInjector { get; }
@@ -150,17 +149,9 @@ public sealed class SettingsViewModel : ObservableObject
         GcMode = session.SavedSettings.GcMode;
         MemoryAllocation.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(MemoryAllocationViewModel.AllocatedMemoryGb) or nameof(MemoryAllocationViewModel.IsAutomatic) or nameof(MemoryAllocationViewModel.OptimizeBeforeLaunch)) Notice = "";
+            if (e.PropertyName is nameof(MemoryAllocationViewModel.AllocatedMemoryGb) or nameof(MemoryAllocationViewModel.IsAutomatic) or nameof(MemoryAllocationViewModel.OptimizeBeforeLaunch)) QueueSave(nameof(MemoryAllocation));
         };
         JavaDetection.UpdateSelection(JavaPath);
-        Save = new(async _ => await SaveEditedAsync(), _ => !_saving);
-        Restore = new(_ =>
-        {
-            JavaPath = session.SavedSettings.JavaPath; VersionIsolation = session.SavedSettings.VersionIsolation;
-            MemoryAllocation.LoadMemoryMb(session.SavedSettings.MemoryMb);
-        MemoryAllocation.IsAutomatic = session.SavedSettings.AutomaticMemory; MemoryAllocation.OptimizeBeforeLaunch = session.SavedSettings.OptimizeMemory;
-            MemoryAllocation.IsAutomatic = session.SavedSettings.AutomaticMemory; MemoryAllocation.OptimizeBeforeLaunch = session.SavedSettings.OptimizeMemory;
-            JvmArguments = session.SavedSettings.JvmArguments; GcMode = session.SavedSettings.GcMode; AuthlibInjectorPath = session.SavedSettings.AuthlibInjectorPath; JavaError = ""; Notice = "已恢复已保存的设置。";        });
         BrowseJava = new(_ => { var dialog = new OpenFileDialog { Filter = "Java|java.exe;javaw.exe" }; if (dialog.ShowDialog() == true) JavaPath = dialog.FileName; });
         ClearJava = new(_ => JavaPath = "", _ => !IsJavaAutoSelected);
         BrowseAssets = new(_ => { var dialog = new OpenFolderDialog { Title = "选择 assets 目录" }; if (dialog.ShowDialog() == true) AssetsDirectory = dialog.FolderName; });
@@ -196,33 +187,42 @@ public sealed class SettingsViewModel : ObservableObject
         _initializing = false;
     }
 
-    /// <summary>Java 选择变化后只自动保存 Java 路径，不影响其他尚未点击保存的草稿。</summary>
-    private async Task SaveJavaPathAsync(string path)
+    /// <summary>串行保存；写入期间的修改合并到下一轮，不丢失最后一次编辑。</summary>
+    private void QueueSave([CallerMemberName] string property = "")
     {
-        await _javaSaveGate.WaitAsync();
+        if (_initializing) return;
+        _pendingFields.Add(property);
+        if (!_saving) _ = SavePendingAsync();
+    }
+    private async Task SavePendingAsync()
+    {
+        _saving = true;
         try
         {
-            if (!string.Equals(JavaPath, path, StringComparison.OrdinalIgnoreCase)) return;
-            var saved = Session.SavedSettings.Copy();
-            if (string.Equals(saved.JavaPath, path, StringComparison.OrdinalIgnoreCase)) return;
-            saved.JavaPath = path;
-            if (!await Session.SaveGlobalSettingsAsync(saved))
-                Notice = "Java 路径未能自动保存，请检查程序目录的写入权限。";
+            while (_pendingFields.Count > 0)
+            {
+                var property = _pendingFields.First();
+                _pendingFields.Remove(property);
+                await SaveEditedAsync(property);
+            }
         }
-        catch (Exception error)
-        {
-            Notice = "Java 路径未能自动保存：" + RuntimeSupport.Error(error);
-        }
-        finally { _javaSaveGate.Release(); }
+        finally { _saving = false; }
     }
     private void OnSessionPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName is nameof(PreviewSession.WallpaperStaticMode))
+            Changed(nameof(HasWallpaperProperties));
         if (e.PropertyName is nameof(PreviewSession.WallpaperProject))
             LoadWallpaperProperties();
         if (e.PropertyName is nameof(PreviewSession.SelectedRoot))
         {
-            AssetsDirectory = Session.ResourceAssetsDirectory;
-            LibrariesDirectory = Session.ResourceLibrariesDirectory;
+            _initializing = true;
+            try
+            {
+                AssetsDirectory = Session.ResourceAssetsDirectory;
+                LibrariesDirectory = Session.ResourceLibrariesDirectory;
+            }
+            finally { _initializing = false; }
         }
     }
     private async Task ApplySelectedWallpaperAsync(WallpaperChoiceViewModel wallpaper)
@@ -318,24 +318,45 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
     /// <summary>只检查路径格式；Java 是否可用留到启动时解析，避免 Java 未安装时无法保存设置。</summary>
-    private async Task SaveEditedAsync()
+    private async Task SaveEditedAsync(string property)
     {
-        // 自动内存由启动时的实际可用内存决定，保留手动值供切换模式时使用。
-        var memory = MemoryAllocation.IsAutomatic ? Session.SavedSettings.MemoryMb : MemoryAllocation.MemoryMb;
-        JavaError = !string.IsNullOrWhiteSpace(JavaPath) && !Path.IsPathFullyQualified(JavaPath.Trim()) ? "请输入完整路径，也可以留空。" : "";
         Notice = "";
-        if (JavaError.Length > 0) return;
-        _saving = true;
-        System.Windows.Input.CommandManager.InvalidateRequerySuggested();
         try
         {
-            if(AuthlibInjectorPath.Trim().Length>0 && !File.Exists(AuthlibInjectorPath.Trim())){JavaError="authlib-injector 文件不存在，请重新选择或留空自动下载。";return;}
-            await Session.SaveResourceDirectoriesAsync(AssetsDirectory, LibrariesDirectory);
-            var saved = await Session.SaveGlobalSettingsAsync(new() { VersionIsolation = VersionIsolation, JavaPath = JavaPath.Trim(), GameDirectory = Session.SavedSettings.GameDirectory, MemoryMb = memory, AutomaticMemory = MemoryAllocation.IsAutomatic, OptimizeMemory = MemoryAllocation.OptimizeBeforeLaunch, JvmArguments = JvmArguments, GcMode = GcMode, AuthlibInjectorPath = AuthlibInjectorPath.Trim() });
-            Notice = !saved ? "设置未保存，请检查程序目录的写入权限后重试。" : "已保存全局设置。";
+            // 只提交本次改动，避免覆盖 Java 安装引导等其他入口刚更新的设置。
+            var edited = Session.SavedSettings.Copy();
+            if (property == nameof(JavaPath))
+            {
+                JavaError = !string.IsNullOrWhiteSpace(JavaPath) && !Path.IsPathFullyQualified(JavaPath.Trim()) ? "请输入完整路径，也可以留空。" : "";
+                if (JavaError.Length > 0) { Notice = "尚未保存，请修正 Java 路径。"; return; }
+                edited.JavaPath = JavaPath.Trim();
+            }
+            if (property == nameof(AuthlibInjectorPath))
+            {
+                if (AuthlibInjectorPath.Trim().Length > 0 && !File.Exists(AuthlibInjectorPath.Trim()))
+                { Notice = "authlib-injector 文件不存在，请重新选择或留空自动下载。"; return; }
+                edited.AuthlibInjectorPath = AuthlibInjectorPath.Trim();
+            }
+            if (property == nameof(MemoryAllocation))
+            {
+                if (!MemoryAllocation.IsAutomatic) edited.MemoryMb = MemoryAllocation.MemoryMb;
+                edited.AutomaticMemory = MemoryAllocation.IsAutomatic;
+                edited.OptimizeMemory = MemoryAllocation.OptimizeBeforeLaunch;
+            }
+            if (property == nameof(VersionIsolation)) edited.VersionIsolation = VersionIsolation;
+            if (property == nameof(JvmArguments)) edited.JvmArguments = JvmArguments;
+            if (property == nameof(GcMode)) edited.GcMode = GcMode;
+            if (property is nameof(AssetsDirectory) or nameof(LibrariesDirectory))
+            {
+                var assets = property == nameof(AssetsDirectory) ? AssetsDirectory : Session.ResourceAssetsDirectory;
+                var libraries = property == nameof(LibrariesDirectory) ? LibrariesDirectory : Session.ResourceLibrariesDirectory;
+                await Session.SaveResourceDirectoriesAsync(assets, libraries);
+                Notice = "已自动保存。"; return;
+            }
+            var saved = await Session.SaveGlobalSettingsAsync(edited);
+            Notice = !saved ? "设置未能自动保存，请检查程序目录的写入权限。" : "已自动保存。";
         }
         catch(Exception error){Notice=Infrastructure.Runtime.RuntimeSupport.Error(error);}
-        finally { _saving = false; System.Windows.Input.CommandManager.InvalidateRequerySuggested(); }
     }
 }
 

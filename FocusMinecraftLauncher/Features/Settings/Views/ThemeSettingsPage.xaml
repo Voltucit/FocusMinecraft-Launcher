@@ -97,6 +97,8 @@
                                                HorizontalAlignment="Center" Margin="0,8,0,8"
                                                Visibility="{Binding HasMoreWallpapers, Converter={StaticResource BoolVisibility}}"/>
                                 <TextBlock Text="{Binding Session.WallpaperName}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Session.WallpaperName}" Margin="0,4,0,8"/>
+                                <CheckBox Content="静态模式" IsChecked="{Binding Session.WallpaperStaticMode, Mode=TwoWay}"
+                                          ToolTip="仅显示预览图，降低内存占用" AutomationProperties.Name="Wallpaper Engine 静态模式" Margin="0,0,0,12"/>
                                 <ui:AnimatedExpander IsExpanded="{Binding IsWallpaperPropertiesExpanded, Mode=TwoWay}" Margin="0,0,0,8"
                                                      Visibility="{Binding HasWallpaperProperties, Converter={StaticResource BoolVisibility}}"
                                                      AutomationProperties.Name="壁纸设置">

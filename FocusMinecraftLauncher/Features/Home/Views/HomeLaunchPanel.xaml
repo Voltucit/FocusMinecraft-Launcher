@@ -39,6 +39,7 @@
             <StackPanel>
                 <TextBlock Text="{Binding Session.InstanceError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
                 <TextBlock Text="{Binding LaunchError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
+                <fluent:Button Content="查看错误详情" Command="{Binding Session.ShowTaskError}" CommandParameter="{Binding Session.LaunchTask}" Style="{StaticResource QuietButton}" HorizontalAlignment="Left" Margin="0,8,0,0" Visibility="{Binding Session.LaunchTask.HasFailure, Converter={StaticResource BoolVisibility}, FallbackValue=Collapsed}"/>
                 <TextBlock Text="{Binding LaunchStage}" Style="{StaticResource Caption}" Margin="0,8,0,0" AutomationProperties.LiveSetting="Polite"
                            Visibility="{Binding LaunchStage, Converter={StaticResource TextVisibility}}"/>
                 <TextBlock Text="{Binding LaunchHint}" Style="{StaticResource Caption}" Margin="0,8,0,0"

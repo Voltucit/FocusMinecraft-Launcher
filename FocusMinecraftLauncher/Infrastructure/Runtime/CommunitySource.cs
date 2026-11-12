@@ -5,10 +5,11 @@ using FMCore.ModsResources;
 
 namespace FocusMinecraftLauncher.Infrastructure.Runtime;
 
-/// <summary>社区资源源：默认走 MCIM 镜像，接口路径与官方一致，只替换主机名。</summary>
+/// <summary>社区资源默认自动选择；Modrinth 查询及下载可回退，CurseForge 仍优先 MCIM。</summary>
 public static class CommunitySource
 {
     public const string MirrorName = "MCIM 镜像源";
+    public const string AutomaticName = "自动选择";
     public const string OfficialName = "仅使用官方源";
     /// <summary>镜像按「名称/版本号」识别接入方，注册用的 UA 与这里保持一致；版本号取自程序集，跟随发布走。</summary>
     public static string UserAgent { get; } = "FocusMinecraftLauncher/" + (typeof(CommunitySource).Assembly.GetName().Version is { } version
@@ -17,16 +18,17 @@ public static class CommunitySource
 
     private const string MirrorRoot = "https://mod.mcimirror.top";
 
+    public static DownloadSource Automatic { get; } = new(AutomaticName, Resolve, automaticSelection: true);
     public static DownloadSource Mirror { get; } = new(MirrorName, Resolve);
     public static DownloadSource Official { get; } = DownloadSource.Official;
 
-    /// <summary>当前选中的源，启动时按设置决定一次；没有设置或旧配置一律用镜像。</summary>
-    public static DownloadSource Current { get; private set; } = Mirror;
+    /// <summary>未配置时自动选择；已保存的手动选择继续生效。</summary>
+    public static DownloadSource Current { get; private set; } = Automatic;
 
     public static void Apply(LauncherConfiguration configuration)
     {
         var name = LauncherConfiguration.Text(configuration.ReadLauncher()["downloads"]?["communitySource"]);
-        Current = name == OfficialName ? Official : Mirror;
+        Current = name switch { OfficialName => Official, MirrorName => Mirror, _ => Automatic };
     }
 
     public static ModrinthClient NewClient() => new(UserAgent) { Source = Current };

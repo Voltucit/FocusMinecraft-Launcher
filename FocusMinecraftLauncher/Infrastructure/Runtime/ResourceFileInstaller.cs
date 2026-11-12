@@ -46,7 +46,7 @@ public static class ResourceFileInstaller
     }
 
     /// <summary>使用核心的下载和 SHA 校验；提交失败时恢复原文件，并保留可供手动恢复的旧版本备份。</summary>
-    public static async Task ApplyAsync(PreviewInstance instance,ResourceInstallPlan plan,ModrinthClient client,string configDirectory,Action<string,DownloadProgress?> report,CancellationToken token)
+    public static async Task ApplyAsync(PreviewInstance instance,ResourceInstallPlan plan,ModrinthClient client,string configDirectory,Action<string,DownloadProgress?> report,CancellationToken token,int concurrency=4)
     {
         var staging=ModpackArchive.SafePath(configDirectory,"resource-staging/"+Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(staging);
@@ -54,13 +54,17 @@ public static class ResourceFileInstaller
         var moved=new List<(string Original,string Backup)>();var created=new List<(string Target,string Staged,long Size,string? Sha1)>();
         try
         {
+            var downloads = new List<DownloadRequest>();
             foreach(var item in plan.Files)
             {
                 var target=ModpackArchive.SafePath(instance.GameDirectory,item.RelativePath);
                 if(await MatchesAsync(target,item.File.Size,item.File.Hashes.Sha1,token))continue;
                 var temporary=Path.Combine(staging,staged.Count+".bin");staged[item.RelativePath]=temporary;
-                await client.DownloadAsync(item.File,temporary,progress=>report("下载 "+item.Name,progress),token);
+                downloads.Add(client.CreateDownloadRequest(item.File, temporary));
             }
+            await FileDownloader.DownloadManyAsync(downloads, concurrency, progress => report("下载资源与必需前置",
+                new DownloadProgress("", progress.ProcessedBytes, progress.TotalBytes)
+                { TransferredBytes=progress.TransferredBytes, BytesPerSecond=progress.BytesPerSecond, RemainingTime=progress.RemainingTime }), token);
             token.ThrowIfCancellationRequested();report("准备应用资源",null);
             foreach(var old in plan.Replacements)
                 if(!await MatchesAsync(ModpackArchive.SafePath(instance.GameDirectory,old.RelativePath),old.Origin.Size,old.Origin.Sha1,token))

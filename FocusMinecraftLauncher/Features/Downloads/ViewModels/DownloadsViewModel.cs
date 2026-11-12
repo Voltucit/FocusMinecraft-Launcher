@@ -181,7 +181,8 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
             Session.Log("读取资源详情失败 ["+id+"; "+Infrastructure.Runtime.CommunitySource.Current.Name+"; UA="+Infrastructure.Runtime.CommunitySource.UserAgent+"]："+Infrastructure.Runtime.RuntimeSupport.SafeText(error.ToString()));
             _details.TryGetValue(id,out var failed);
             failed?.StopLoading();
-            failed?.ShowNotice(DescribeDetailFailure(error),true);
+            var report = await Session.ReportErrorAsync(error, "读取资源详情", "读取项目介绍或版本列表", "项目：" + id + "\n资源服务：" + Infrastructure.Runtime.CommunitySource.Current.Name);
+            failed?.ShowNotice(report.Summary,true);
         }
     }
     /// <summary>没有缓存过的项目先用名称做一个占位条目，让详情页立刻有标题可显示。</summary>
@@ -193,14 +194,6 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
         _entries[id]=existing;
         return existing;
     }
-    /// <summary>把网络类的失败翻译成页面里的一句话，不再复用“连接服务失败”的红色提示。</summary>
-    private static string DescribeDetailFailure(Exception error)=>error switch
-    {
-        System.Net.Http.HttpRequestException{StatusCode:System.Net.HttpStatusCode.Forbidden}=>"资源服务拒绝了这次请求，稍后可以重试。",
-        System.Net.Http.HttpRequestException=>"暂时连不上资源服务，稍后可以重试。",
-        System.Threading.Tasks.TaskCanceledException=>"读取资源详情超时，稍后可以重试。",
-        _=>"无法读取资源详情："+Infrastructure.Runtime.RuntimeSupport.Error(error)
-    };
     /// <summary>确认框等待当前文件的前置资料读取结束，不使用上一个版本或尚未完成的资料快照。</summary>
     private async Task OpenDownloadConfirmationAsync(ResourceEntryViewModel entry,ResourceFileItem file)
     {
@@ -214,7 +207,7 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
             if(_disposed||revision!=_navigationRevision||!ReferenceEquals(entry.SelectedFile,file))return;
             Preview=DownloadPreviewViewModel.Resource(entry.Project,file,target,Session,_catalog,OpenResource,()=>ClosePreviewAndNavigate(entry.Project.Category));
         }
-        catch(Exception error){if(!_disposed&&revision==_navigationRevision)ShowNotification(Infrastructure.Runtime.RuntimeSupport.Error(error),true);}
+        catch(Exception error){if(!_disposed&&revision==_navigationRevision)await Session.ReportErrorAsync(error,"准备资源下载","读取前置与下载确认");}
     }
     /// <summary>缩放弹入的目标选择框只列出当前已安装且与文件兼容的实例。</summary>
     private async Task<PreviewInstance?> ChooseTargetAsync(ResourceProject project,ResourceFileItem file)
@@ -250,7 +243,8 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
     {
         if(_section==DownloadSection.Vanilla)DisplayState="加载中";
         try { await Vanilla.LoadAsync(_lifetime.Token);if(_section==DownloadSection.Vanilla)DisplayState="正常"; }
-        catch(Exception error){_loadError=Infrastructure.Runtime.RuntimeSupport.Error(error);if(_section==DownloadSection.Vanilla)DisplayState="失败";}
+        catch(OperationCanceledException) when(_lifetime.IsCancellationRequested) { }
+        catch(Exception error){_loadError=(await Session.ReportErrorAsync(error,"读取游戏版本","获取 Minecraft 版本列表")).Summary;if(_section==DownloadSection.Vanilla)DisplayState="失败";}
     }
     private void BackFromDetail() { _navigationRevision++; _detail = _detailTrail.TryPop(out var previous) ? previous : null; RefreshRoute(); }
     /// <summary>只保留最近打开的详情，避免长期浏览后把每个项目的文件分组都留在内存里。</summary>

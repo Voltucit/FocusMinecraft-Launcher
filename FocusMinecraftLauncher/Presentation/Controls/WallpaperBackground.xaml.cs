@@ -28,6 +28,7 @@ public partial class WallpaperBackground : UserControl
     public static readonly DependencyProperty RefreshVersionProperty = DependencyProperty.Register(nameof(RefreshVersion), typeof(int), typeof(WallpaperBackground), new PropertyMetadata(0, Changed));
     public static readonly DependencyProperty PropertiesJsonProperty = DependencyProperty.Register(nameof(PropertiesJson), typeof(string), typeof(WallpaperBackground), new PropertyMetadata("{}", SettingsChanged));
     public static readonly DependencyProperty MotionAllowedProperty = DependencyProperty.Register(nameof(MotionAllowed), typeof(bool), typeof(WallpaperBackground), new PropertyMetadata(true, SettingsChanged));
+    public static readonly DependencyProperty StaticModeProperty = DependencyProperty.Register(nameof(StaticMode), typeof(bool), typeof(WallpaperBackground), new PropertyMetadata(false, StaticModeChanged));
     public static readonly DependencyProperty BlurPercentProperty = DependencyProperty.Register(nameof(BlurPercent), typeof(double), typeof(WallpaperBackground), new PropertyMetadata(0d, SettingsChanged));
     public string Kind { get => (string)GetValue(KindProperty); set => SetValue(KindProperty, value); }
     public string SourcePath { get => (string)GetValue(SourcePathProperty); set => SetValue(SourcePathProperty, value); }
@@ -36,6 +37,7 @@ public partial class WallpaperBackground : UserControl
     public int RefreshVersion { get => (int)GetValue(RefreshVersionProperty); set => SetValue(RefreshVersionProperty, value); }
     public string PropertiesJson { get => (string)GetValue(PropertiesJsonProperty); set => SetValue(PropertiesJsonProperty, value); }
     public bool MotionAllowed { get => (bool)GetValue(MotionAllowedProperty); set => SetValue(MotionAllowedProperty, value); }
+    public bool StaticMode { get => (bool)GetValue(StaticModeProperty); set => SetValue(StaticModeProperty, value); }
     public double BlurPercent { get => (double)GetValue(BlurPercentProperty); set => SetValue(BlurPercentProperty, value); }
     public event EventHandler<WallpaperRenderEventArgs>? RenderStateChanged;
 
@@ -55,13 +57,14 @@ public partial class WallpaperBackground : UserControl
     public WallpaperBackground()
     {
         InitializeComponent();
+        _backgroundReleaseTimer.Tick += ReleaseBackgroundPlayback;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         IsVisibleChanged += (_, _) => UpdatePlayback();
-        VideoLayer.MediaEnded += (_, _) => { if (!_paused) { VideoLayer.Position = TimeSpan.Zero; VideoLayer.Play(); } };
+        VideoLayer.MediaEnded += (_, _) => { if (!_paused && !StaticMode && !_releasedForBackground) { VideoLayer.Position = TimeSpan.Zero; VideoLayer.Play(); } };
         VideoLayer.MediaOpened += (_, _) =>
         {
-            if (Kind.Equals("video", StringComparison.OrdinalIgnoreCase) && _videoVersion == RefreshVersion)
+            if (!StaticMode && !_releasedForBackground && Kind.Equals("video", StringComparison.OrdinalIgnoreCase) && _videoVersion == RefreshVersion)
             {
                 ImageLayer.Visibility = Visibility.Collapsed;
                 RenderStateChanged?.Invoke(this, new(_videoVersion, ""));
@@ -70,13 +73,20 @@ public partial class WallpaperBackground : UserControl
         };
         VideoLayer.MediaFailed += (_, e) =>
         {
-            if (!Kind.Equals("video", StringComparison.OrdinalIgnoreCase) || _videoVersion != RefreshVersion) return;
+            if (StaticMode || _releasedForBackground || !Kind.Equals("video", StringComparison.OrdinalIgnoreCase) || _videoVersion != RefreshVersion) return;
             VideoLayer.Visibility = Visibility.Collapsed;
             _ = RestorePreviewAsync(_revision, PreviewPath);
             ReportFailure(_videoVersion, e.ErrorException ?? new InvalidOperationException("视频格式无法播放。"));
         };
     }
     private static void Changed(DependencyObject sender, DependencyPropertyChangedEventArgs e) => ((WallpaperBackground)sender).QueueApply();
+    private static void StaticModeChanged(DependencyObject sender, DependencyPropertyChangedEventArgs e)
+    {
+        var control = (WallpaperBackground)sender;
+        control._appliedKey = "";
+        control._load?.Cancel();
+        control.QueueApply();
+    }
     private static void SettingsChanged(DependencyObject sender, DependencyPropertyChangedEventArgs e)
     {
         var control = (WallpaperBackground)sender;
@@ -93,11 +103,14 @@ public partial class WallpaperBackground : UserControl
     {
         if (_owner != null) _owner.StateChanged -= OwnerStateChanged;
         _owner = null;
+        _backgroundReleaseTimer.Stop();
+        _releasedForBackground = false;
         _revision++;
         _load?.Cancel();
         _appliedKey = "";
-        VideoLayer.Stop();
+        VideoLayer.Close();
         VideoLayer.Source = null;
+        ImageLayer.Source = null;
         await ReleaseWebAsync();
     }
     private void OwnerStateChanged(object? sender, EventArgs e) => UpdatePlayback();
@@ -112,9 +125,10 @@ public partial class WallpaperBackground : UserControl
             _queued = false;
             if (!IsLoaded) return;
             string kind = Kind.Trim().ToLowerInvariant();
-            string key = string.Join('\0', kind, SourcePath, ProjectPath, PreviewPath, RefreshVersion);
+            string key = string.Join('\0', kind, SourcePath, ProjectPath, PreviewPath, RefreshVersion, StaticMode);
             if (key == _appliedKey) return;
             _appliedKey = key;
+            _backgroundReleaseTimer.Stop();
             _load?.Cancel();
             var cancellation = new CancellationTokenSource();
             _load = cancellation;
@@ -130,9 +144,18 @@ public partial class WallpaperBackground : UserControl
         {
             await ReleaseWebAsync();
             if (!IsCurrent(revision, token)) return;
-            VideoLayer.Stop(); VideoLayer.Source = null; VideoLayer.Visibility = Visibility.Collapsed;
-            ImageLayer.Source = null; ImageLayer.Visibility = Visibility.Collapsed;
-            if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(kind)) return;
+            _releasedForBackground = false;
+            VideoLayer.Close(); VideoLayer.Source = null; VideoLayer.Visibility = Visibility.Collapsed;
+            if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(kind))
+            { ImageLayer.Source = null; ImageLayer.Visibility = Visibility.Collapsed; return; }
+            if (StaticMode)
+            {
+                var frame = await ReadStaticFrameAsync(kind, source, preview, project, token);
+                if (!IsCurrent(revision, token)) return;
+                if (frame == null) throw new InvalidOperationException("这张壁纸没有可用的静态预览图，请关闭静态模式或选择其他壁纸。");
+                ImageLayer.Source = frame; ImageLayer.Visibility = Visibility.Visible;
+                ApplyBlur(); RenderStateChanged?.Invoke(this, new(version, "")); return;
+            }
             if (kind != "image" || !string.Equals(source, preview, StringComparison.OrdinalIgnoreCase))
                 await RestorePreviewAsync(revision, preview);
             if (!IsCurrent(revision, token)) return;
@@ -149,6 +172,9 @@ public partial class WallpaperBackground : UserControl
                     ApplyBlur(); RenderStateChanged?.Invoke(this, new(version, "")); return;
                 }
             }
+            // 隐藏期间的新选择只准备预览，恢复完整窗口后再创建播放器。
+            if (IsBackgroundHidden)
+            { _releasedForBackground = true; return; }
             if (kind == "video")
             {
                 _videoVersion = version;
@@ -309,7 +335,8 @@ public partial class WallpaperBackground : UserControl
     }
     private void UpdatePlayback()
     {
-        _paused = !IsVisible || _owner?.WindowState == WindowState.Minimized || !MotionAllowed;
+        UpdateMemoryManagement();
+        _paused = IsBackgroundHidden || StaticMode || !MotionAllowed;
         if (VideoLayer.Visibility == Visibility.Visible) { if (_paused) VideoLayer.Pause(); else VideoLayer.Play(); }
         if (_webReady && _web is {} web) _ = SyncWebAsync(web);
     }

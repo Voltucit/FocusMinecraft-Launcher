@@ -20,7 +20,7 @@
                 <StackPanel Margin="0,8,0,0" Visibility="{Binding UseGlobalJava, Converter={StaticResource NotVisibility}}">
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <fluent:TextBox Text="{Binding JavaPath, UpdateSourceTrigger=PropertyChanged}" Tag="自动选择"
+                        <fluent:TextBox Text="{Binding JavaPath, UpdateSourceTrigger=LostFocus}" Tag="自动选择"
                                         ToolTip="{Binding JavaPath}" AutomationProperties.Name="此游戏的 Java 路径，留空自动选择"/>
                         <fluent:Button Grid.Column="1" Content="浏览" Command="{Binding BrowseJava}" Margin="8,0,0,0"/>
                     </Grid>
@@ -46,7 +46,7 @@
         <ui:SettingRow Title="游戏窗口">
             <StackPanel><CheckBox Content="使用全局设置" IsChecked="{Binding UseGlobalWindow, Mode=TwoWay}"/><TextBlock Text="使用游戏默认窗口设置" Style="{StaticResource Caption}" Margin="0,4,0,0" Visibility="{Binding UseGlobalWindow, Converter={StaticResource BoolVisibility}}"/>
                 <StackPanel Margin="0,8,0,0" Visibility="{Binding UseGlobalWindow, Converter={StaticResource NotVisibility}}">
-                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><fluent:TextBox Text="{Binding Width, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="游戏窗口宽度"/><TextBlock Grid.Column="1" Text="×" VerticalAlignment="Center" Margin="12,0"/><fluent:TextBox Grid.Column="2" Text="{Binding Height, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="游戏窗口高度"/></Grid>
+                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><fluent:TextBox Text="{Binding Width, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="游戏窗口宽度"/><TextBlock Grid.Column="1" Text="×" VerticalAlignment="Center" Margin="12,0"/><fluent:TextBox Grid.Column="2" Text="{Binding Height, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="游戏窗口高度"/></Grid>
                     <CheckBox Content="全屏启动" IsChecked="{Binding Fullscreen, Mode=TwoWay}" Margin="0,8,0,0"/>
                 </StackPanel>
                 <TextBlock Text="{Binding WindowError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
@@ -58,20 +58,19 @@
             <StackPanel>
                 <CheckBox Content="使用全局参数" IsChecked="{Binding UseGlobalArguments, Mode=TwoWay}" Margin="0,8,0,8"/>
                 <StackPanel Visibility="{Binding UseGlobalArguments, Converter={StaticResource NotVisibility}}">
-                    <ui:SettingRow Title="JVM 参数"><fluent:TextBox Text="{Binding JvmArguments, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" AutomationProperties.Name="此游戏 JVM 参数"/></ui:SettingRow>
-                    <ui:SettingRow Title="游戏参数"><fluent:TextBox Text="{Binding GameArguments, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" AutomationProperties.Name="此游戏附加游戏参数"/></ui:SettingRow>
+                    <ui:SettingRow Title="JVM 参数"><fluent:TextBox Text="{Binding JvmArguments, UpdateSourceTrigger=LostFocus}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" AutomationProperties.Name="此游戏 JVM 参数"/></ui:SettingRow>
+                    <ui:SettingRow Title="游戏参数"><fluent:TextBox Text="{Binding GameArguments, UpdateSourceTrigger=LostFocus}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" AutomationProperties.Name="此游戏附加游戏参数"/></ui:SettingRow>
                 </StackPanel>
                 <ui:SettingRow Title="占位符覆盖" Description="每行一个 名称=值，仅用于版本中的非标准占位符">
                     <StackPanel>
-                        <fluent:TextBox Text="{Binding PlaceholderOverridesText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" AutomationProperties.Name="启动参数占位符覆盖"/>
+                        <fluent:TextBox Text="{Binding PlaceholderOverridesText, UpdateSourceTrigger=LostFocus}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalContentAlignment="Top" AutomationProperties.Name="启动参数占位符覆盖"/>
                         <TextBlock Text="{Binding PlaceholderError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0" Visibility="{Binding PlaceholderError, Converter={StaticResource TextVisibility}}"/>
                     </StackPanel>
                 </ui:SettingRow>
             </StackPanel>
         </Expander>
-        <WrapPanel Margin="0,20,0,0"><fluent:Button Content="保存游戏设置" Command="{Binding Save}" Style="{StaticResource PrimaryButton}" Margin="0,0,12,12"/><fluent:Button Content="恢复已保存的值" Command="{Binding Restore}" Margin="0,0,0,12"/></WrapPanel>
         <TextBlock Text="{Binding Notice}" Style="{StaticResource Muted}" Visibility="{Binding Notice, Converter={StaticResource TextVisibility}}" AutomationProperties.LiveSetting="Polite"/>
-        <TextBlock Text="此页设置只影响当前游戏。" Style="{StaticResource Caption}" Margin="0,12,0,0"/>
+        <TextBlock Text="更改自动保存，仅影响当前游戏；文本输入在结束编辑后保存。" Style="{StaticResource Caption}" Margin="0,12,0,0"/>
     </StackPanel>
 </ScrollViewer>
 

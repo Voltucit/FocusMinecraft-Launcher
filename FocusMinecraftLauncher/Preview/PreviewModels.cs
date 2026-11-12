@@ -191,6 +191,8 @@ public sealed class PreviewTask(PreviewTaskKind kind, string name, string versio
     public string State { get; set; } = "排队中";
     public string Stage { get; set; } = "等待执行";
     public string Error { get; set; } = "";
+    public Infrastructure.Runtime.LauncherError? Failure { get; set; }
+    public bool HasFailure => Failure != null;
     public long Bytes { get; set; }
     public long Total { get; set; }
     public double BytesPerSecond { get; set; }

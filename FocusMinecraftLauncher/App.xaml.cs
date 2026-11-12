@@ -36,6 +36,7 @@ public partial class App : Application
             return;
         }
         string updateError = "";
+        InitializeErrorReporting();
         try { if (UpdateBootstrap.RecoverBeforeStartup(e.Args)) { Shutdown(); return; } }
         catch (Exception error) { updateError = "上次更新需要处理，请查看 FMLauncher/Updates 中的记录。"; System.Diagnostics.Trace.TraceError("更新恢复：{0}", error); }
         for(var index=0;index<e.Args.Length-1;index++)
@@ -77,6 +78,7 @@ public partial class App : Application
     /// <summary>补齐最后一次尚在合并等待中的写入，失败时保留明确反馈。</summary>
     protected override void OnExit(ExitEventArgs e)
     {
+        DisposeErrorReporting();
         Multiplayer?.Dispose();
         Updates?.Dispose();
         if (Configuration != null && !Configuration.FlushAsync().GetAwaiter().GetResult())

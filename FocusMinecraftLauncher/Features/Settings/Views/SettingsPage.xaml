@@ -17,7 +17,7 @@
             <StackPanel>
                 <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <fluent:TextBox Text="{Binding JavaPath, UpdateSourceTrigger=PropertyChanged}" Tag="自动选择"
+                    <fluent:TextBox Text="{Binding JavaPath, UpdateSourceTrigger=LostFocus}" Tag="自动选择"
                                     ToolTip="{Binding JavaDisplayText}" AutomationProperties.Name="全局 Java 路径，留空自动选择"/>
                     <fluent:Button Grid.Column="1" Content="浏览" Command="{Binding BrowseJava}" Margin="8,0,0,0"/>
                 </Grid>
@@ -30,7 +30,7 @@
             <StackPanel>
                 <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <fluent:TextBox Text="{Binding AuthlibInjectorPath, UpdateSourceTrigger=PropertyChanged}" Tag="自动下载"
+                    <fluent:TextBox Text="{Binding AuthlibInjectorPath, UpdateSourceTrigger=LostFocus}" Tag="自动下载"
                                     AutomationProperties.Name="authlib-injector JAR 路径，留空自动下载"/>
                     <fluent:Button Grid.Column="1" Content="浏览" Command="{Binding BrowseAuthlibInjector}" Margin="8,0,0,0"/>
                     <fluent:Button Grid.Column="2" Content="清除" Command="{Binding ClearAuthlibInjector}" Style="{StaticResource QuietButton}" Margin="8,0,0,0"/>
@@ -45,7 +45,7 @@
                 <ui:SettingRow Title="资源目录" Description="分离安装时选择 assets 目录">
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <fluent:TextBox Text="{Binding AssetsDirectory, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="assets 目录"/>
+                        <fluent:TextBox Text="{Binding AssetsDirectory, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="assets 目录"/>
                         <fluent:Button Grid.Column="1" Content="浏览" Command="{Binding BrowseAssets}" Margin="8,0,0,0"/>
                         <fluent:Button Grid.Column="2" Content="清除" Command="{Binding ClearAssets}" Style="{StaticResource QuietButton}" Margin="8,0,0,0"/>
                     </Grid>
@@ -53,17 +53,16 @@
                 <ui:SettingRow Title="库目录" Description="分离安装时选择 libraries 目录">
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <fluent:TextBox Text="{Binding LibrariesDirectory, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="libraries 目录"/>
+                        <fluent:TextBox Text="{Binding LibrariesDirectory, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="libraries 目录"/>
                         <fluent:Button Grid.Column="1" Content="浏览" Command="{Binding BrowseLibraries}" Margin="8,0,0,0"/>
                         <fluent:Button Grid.Column="2" Content="清除" Command="{Binding ClearLibraries}" Style="{StaticResource QuietButton}" Margin="8,0,0,0"/>
                     </Grid>
                 </ui:SettingRow>
             </StackPanel>
         </ui:AnimatedExpander>
-        <Expander Header="高级启动选项" Margin="0,8,0,0"><StackPanel><ui:SettingRow Title="垃圾回收器"><ui:AnimatedComboBox ItemsSource="{Binding GcChoices}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding GcMode, Mode=TwoWay}" AutomationProperties.Name="垃圾回收器"/></ui:SettingRow><ui:SettingRow Title="JVM 参数"><fluent:TextBox Text="{Binding JvmArguments, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="附加 JVM 参数" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="72" VerticalContentAlignment="Top"/></ui:SettingRow></StackPanel></Expander>
-        <WrapPanel Margin="0,16,0,0"><fluent:Button Content="保存游戏设置" Command="{Binding Save}" Style="{StaticResource PrimaryButton}" Margin="0,0,12,12"/><fluent:Button Content="恢复已保存的值" Command="{Binding Restore}" Margin="0,0,0,12"/></WrapPanel>
+        <Expander Header="高级启动选项" Margin="0,8,0,0"><StackPanel><ui:SettingRow Title="垃圾回收器"><ui:AnimatedComboBox ItemsSource="{Binding GcChoices}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding GcMode, Mode=TwoWay}" AutomationProperties.Name="垃圾回收器"/></ui:SettingRow><ui:SettingRow Title="JVM 参数"><fluent:TextBox Text="{Binding JvmArguments, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="附加 JVM 参数" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="72" VerticalContentAlignment="Top"/></ui:SettingRow></StackPanel></Expander>
         <TextBlock Text="{Binding Notice}" Style="{StaticResource Muted}" AutomationProperties.LiveSetting="Polite" Visibility="{Binding Notice, Converter={StaticResource TextVisibility}}"/>
-        <TextBlock Text="游戏设置保存后生效。" Style="{StaticResource Caption}" Margin="0,16,0,0"/>
+        <TextBlock Text="更改自动保存，文本输入在结束编辑后保存。" Style="{StaticResource Caption}" Margin="0,16,0,0"/>
     </StackPanel>
             </ScrollViewer>
         </TabItem>

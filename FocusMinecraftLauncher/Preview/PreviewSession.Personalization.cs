@@ -23,7 +23,7 @@ public sealed partial class PreviewSession
     { ["Glass"] = new(), ["MinimalistFlat"] = new(), ["SoftUI"] = new() };
     private ThemeBackground ActiveBackground => _themeBackgrounds[ThemeKey(Theme)];
     private bool _dynamicBlurEnabled;
-    private bool _wallpaperEnabled, _wallpaperLoading, _notifyWallpaperReady;
+    private bool _wallpaperEnabled, _wallpaperLoading, _notifyWallpaperReady, _wallpaperStaticMode;
     private int _wallpaperRequestRevision, _wallpaperRefreshVersion;
     private CancellationTokenSource? _wallpaperRead;
     private string _wallpaperKind = "", _wallpaperPath = "", _wallpaperPreview = "", _wallpaperName = "", _wallpaperError = "", _wallpaperProject = "";
@@ -37,6 +37,18 @@ public sealed partial class PreviewSession
     public bool ShowCustomBackgroundImage => HasCustomBackgroundImage && !SystemParameters.HighContrast;
     public bool ShowImageBackground => ShowCustomBackgroundImage && !HasWallpaper;
     public bool WallpaperEnabled => _wallpaperEnabled && !SystemParameters.HighContrast;
+    public bool WallpaperStaticMode
+    {
+        get => _wallpaperStaticMode;
+        set
+        {
+            if (!Set(ref _wallpaperStaticMode, value)) return;
+            _wallpaperRefreshVersion++;
+            _wallpaperError = "";
+            _configuration.ChangeLauncher(root => LauncherConfiguration.Object(root, "appearance")["wallpaperStaticMode"] = value);
+            NotifyWallpaper();
+        }
+    }
     public bool HasWallpaper => WallpaperEnabled && _wallpaperKind.Length > 0 && File.Exists(_wallpaperPath);
     public bool IsWallpaperLoading => _wallpaperLoading;
     public string WallpaperKind => _wallpaperKind;
@@ -104,6 +116,7 @@ public sealed partial class PreviewSession
         var glass = root["appearance"]?["themes"]?["Glass"];
         _dynamicBlurEnabled = LauncherConfiguration.Boolean(glass?["dynamicBlurEnabled"], false);
         _wallpaperEnabled = LauncherConfiguration.Boolean(root["appearance"]?["wallpaperEnabled"], false);
+        _wallpaperStaticMode = LauncherConfiguration.Boolean(root["appearance"]?["wallpaperStaticMode"], false);
         _wallpaperProject = LauncherConfiguration.Text(root["appearance"]?["wallpaperProject"]);
         ActiveBackground.Image = ((App)Application.Current).TakeInitialBackground();
         ActiveBackground.Error = ((App)Application.Current).InitialBackgroundError;
@@ -375,7 +388,7 @@ public sealed partial class PreviewSession
     }
     private void NotifyWallpaper()
     {
-        Changed(nameof(WallpaperEnabled)); Changed(nameof(HasWallpaper)); Changed(nameof(IsWallpaperLoading));
+        Changed(nameof(WallpaperEnabled)); Changed(nameof(WallpaperStaticMode)); Changed(nameof(HasWallpaper)); Changed(nameof(IsWallpaperLoading));
         Changed(nameof(WallpaperKind)); Changed(nameof(WallpaperPath)); Changed(nameof(WallpaperPreviewPath));
         Changed(nameof(WallpaperProject)); Changed(nameof(WallpaperName)); Changed(nameof(WallpaperError)); Changed(nameof(ShowImageBackground));
         Changed(nameof(WallpaperProperties)); Changed(nameof(WallpaperPropertiesJson)); Changed(nameof(WallpaperRefreshVersion));
