@@ -1,0 +1,76 @@
+<Window x:Class="FocusMinecraftLauncher.Features.Settings.Views.DiskUsageDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:visual="clr-namespace:FocusMinecraftLauncher.Presentation.Controls"
+        Title="磁盘占用与缓存清理" Width="680" SizeToContent="Height" WindowStyle="None"
+        ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner" Foreground="{DynamicResource AppText}" FontSize="14"
+        FontFamily="Segoe UI Variable Text, Microsoft YaHei UI" UseLayoutRounding="True"
+        visual:ThemeVisuals.IsSoft="{DynamicResource SoftEnabled}"
+        visual:ThemeVisuals.IsFlat="{DynamicResource FlatEnabled}">
+    <Border Margin="20" Background="{DynamicResource AppBackground}" BorderBrush="{DynamicResource SubtleBorder}"
+            BorderThickness="{DynamicResource OutlineThickness}" CornerRadius="{DynamicResource CardCornerRadius}">
+        <Grid Margin="24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <TextBlock Text="磁盘占用与缓存清理" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,16"
+                       MouseLeftButtonDown="DragWindow"/>
+            <ScrollViewer x:Name="UsageScroll" Grid.Row="1" MaxHeight="440" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="0,0,8,0">
+                    <ItemsControl x:Name="Drives" Margin="0,0,0,12">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,20,6">
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding Size}" Style="{StaticResource Caption}" Margin="8,0,0,0"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Grid x:Name="ColumnHeaders" Visibility="Collapsed" Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="96"/><ColumnDefinition Width="96"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="内容" Style="{StaticResource Caption}"/>
+                        <TextBlock Grid.Column="1" Text="文件大小" HorizontalAlignment="Right" Style="{StaticResource Caption}"/>
+                        <TextBlock Grid.Column="2" Text="可清理" HorizontalAlignment="Right" Style="{StaticResource Caption}"/>
+                    </Grid>
+                    <ItemsControl x:Name="UsageRows">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border BorderBrush="{DynamicResource SubtleBorder}" BorderThickness="0,1,0,0" Padding="0,9">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="96"/><ColumnDefinition Width="96"/></Grid.ColumnDefinitions>
+                                        <StackPanel Margin="0,0,8,0" ToolTip="{Binding Path}">
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                            <TextBlock Text="{Binding Path}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{Binding Size}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding Reclaimable}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock x:Name="CleanupSummary" Text="正在统计文件大小…" TextWrapping="Wrap" Margin="0,12,0,0"
+                               AutomationProperties.LiveSetting="Polite"/>
+                    <TextBlock x:Name="UsageNotice" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                    <TextBlock x:Name="CleanupResult" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,8,0,0"
+                               AutomationProperties.LiveSetting="Polite"/>
+                </StackPanel>
+            </ScrollViewer>
+            <WrapPanel Grid.Row="2" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <fluent:Button x:Name="RefreshButton" Content="重新统计" Click="RefreshUsage" Margin="0,0,8,0"/>
+                <fluent:Button x:Name="CleanupButton" Content="清理预览中的缓存" Style="{StaticResource PrimaryButton}"
+                               Click="CleanUsage" IsEnabled="False" Margin="0,0,8,0"/>
+                <fluent:Button x:Name="CloseButton" Content="关闭" IsCancel="True" Click="CloseDialog"/>
+            </WrapPanel>
+        </Grid>
+    </Border>
+</Window>
