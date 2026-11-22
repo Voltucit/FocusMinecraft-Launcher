@@ -36,7 +36,7 @@ public sealed class SettingsViewModel : ObservableObject
     private int _selectedTab;
     public int SelectedTab { get => _selectedTab; set => Set(ref _selectedTab, value); }
     public PreviewSession Session { get; }
-    public OtherSettingsViewModel Other { get; } = new();
+    public OtherSettingsViewModel Other { get; }
     public string[] Themes { get; } = [Presentation.UiTheme.GlassThemeName, Presentation.UiTheme.FlatThemeName, Presentation.UiTheme.SoftThemeName];
     public IReadOnlyList<HomeLayoutOption> HomeLayouts { get; } =
     [
@@ -139,6 +139,7 @@ public sealed class SettingsViewModel : ObservableObject
     {
         JavaDetection = new(path => JavaPath = path, () => session.FileSource == FMCore.Downloads.DownloadSource.BmclApi, javas => _ = session.SaveJavaScanCacheAsync(javas));
         Session = session;
+        Other = new(session);
         _assetsDirectory = session.ResourceAssetsDirectory;
         _librariesDirectory = session.ResourceLibrariesDirectory;
         _isolation = session.SavedSettings.VersionIsolation;

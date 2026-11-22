@@ -51,38 +51,9 @@ public static class CommunityCache
     public static void WriteBytes(string key, byte[] bytes) => Write(key, bytes, ".bin");
     public static void RemoveBytes(string key) => Remove(key, ".bin");
 
-    /// <summary>当前占用字节数，供设置页显示。</summary>
-    public static long Measure()
+    internal static bool ClearIfUnchanged(CachedFile file)
     {
-        try
-        {
-            EnsureLayout();
-            if (!Directory.Exists(Root)) return 0;
-            long total = 0;
-            foreach (var file in Directory.EnumerateFiles(Root, "*", SearchOption.AllDirectories))
-                try { total += new FileInfo(file).Length; } catch (IOException) { }
-            return total;
-        }
-        catch (Exception error) { Trace(error); return 0; }
-    }
-
-    public static string DescribeSize(long bytes) => bytes switch
-    {
-        <= 0 => "0 MB",
-        < 1024 * 1024 => (bytes / 1024d).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " KB",
-        _ => (bytes / 1024d / 1024d).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " MB"
-    };
-
-    /// <summary>清空缓存目录，返回是否真的删掉了内容。</summary>
-    public static bool Clear()
-    {
-        try
-        {
-            if (!Directory.Exists(Root)) return false;
-            Directory.Delete(Root, true);
-            return true;
-        }
-        catch (Exception error) { Trace(error); return false; }
+        lock (Gate) return LauncherStorage.TryDelete(file);
     }
 
     private static void Remove(string key, string extension)
@@ -136,7 +107,7 @@ public static class CommunityCache
                         var folder = Path.GetDirectoryName(target);
                         if (folder is null) continue;
                         Directory.CreateDirectory(folder);
-                        File.Move(file, target, true);
+                        lock (Gate) File.Move(file, target, true);
                     }
                     Directory.Delete(version, true);
                 }
@@ -155,7 +126,7 @@ public static class CommunityCache
             Directory.CreateDirectory(directory);
             var temporary = path + ".tmp";
             File.WriteAllBytes(temporary, payload);
-            File.Move(temporary, path, true);
+            lock (Gate) File.Move(temporary, path, true);
             Enforce();
         }
         catch (Exception error) { Trace(error); }

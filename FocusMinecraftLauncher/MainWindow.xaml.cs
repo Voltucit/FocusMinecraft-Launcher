@@ -22,7 +22,7 @@ public partial class MainWindow : FluentWindow
     private readonly Dictionary<MainPage, UserControl> _pages = [];
     // 设置页的视图模型提前创建，启动时就能预热一次 Java 检测并让结果直接显示在设置页。
     private readonly Features.Settings.ViewModels.SettingsViewModel _settings;
-    private bool _restoringAccountsStarted;
+    private bool _backendInitializationStarted;
     private bool _isExiting,_stoppingBackend,_backendStopped;
     private bool _exitAnimationFinished;
     private CaptionButtonFeedback? _captionFeedback;
@@ -33,7 +33,7 @@ public partial class MainWindow : FluentWindow
 
     public MainWindow()
     {
-        InitializeComponent();        InitializeComponent();
+        InitializeComponent();
         ((App)Application.Current).Updates.Attach(_navigation.Session);
         _settings = new(_navigation.Session);
         AppTitleBar.WndProcInvoked += FixedWindowHitTest;
@@ -45,6 +45,7 @@ public partial class MainWindow : FluentWindow
         Application.Current.SessionEnding += SystemSessionEnding;
         DataContext = _navigation;
         PresentPage();
+        Loaded += InitializeBackendOnLoaded;
     }
 
     private void Wallpaper_OnRenderStateChanged(object? sender, WallpaperRenderEventArgs e)
@@ -143,15 +144,19 @@ public partial class MainWindow : FluentWindow
     {
         base.OnContentRendered(e);
         UiTheme.ApplyWindowMaterial(this, _navigation.Session.Theme, _navigation.Session.HasCustomBackgroundImage || _navigation.Session.HasWallpaper);
-        if (!_restoringAccountsStarted)
-        {
-            _restoringAccountsStarted = true;
-            // 资源预热独立于账号会话恢复，避免登录服务较慢时拖延社区列表。
-            _ = Features.Downloads.ViewModels.CommunityCatalogViewModel.PrefetchAsync();
-            _ = InitializeBackendAsync();
-        }
         if (_captionFeedback == null && PresentationSource.FromVisual(this) is HwndSource source)
             _captionFeedback = new CaptionButtonFeedback(source, AppTitleBar);
+    }
+
+    /// <summary>窗口加载后就开始读取本地版本，不等待首帧渲染或更新提示；恢复窗口不重复初始化。</summary>
+    private void InitializeBackendOnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (_backendInitializationStarted) return;
+        _backendInitializationStarted = true;
+        Loaded -= InitializeBackendOnLoaded;
+        _ = InitializeBackendAsync();
+        // 联网预热独立执行，不阻挡本地游戏目录扫描。
+        _ = Features.Downloads.ViewModels.CommunityCatalogViewModel.PrefetchAsync();
     }
 
     private async Task InitializeBackendAsync()
@@ -222,6 +227,13 @@ public partial class MainWindow : FluentWindow
         MenuToggle.IsEnabled = !compact;
     }
     private void NavigateTo(MainPage page) => _navigation.SelectedItem = _navigation.Items.First(i => i.Page == page);
+    internal void OpenDownloadSettings()
+    {
+        RestoreFromTray();
+        _settings.SelectedTab = 2;
+        NavigateTo(MainPage.Settings);
+        if (PageContent.Content is Features.Settings.Views.SettingsPage page) page.ScrollToDownloadSettings();
+    }
     private void OpenAccountAdder(bool microsoft)
     {
         NavigateTo(MainPage.Accounts);

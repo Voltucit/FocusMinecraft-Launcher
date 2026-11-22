@@ -5,12 +5,26 @@ using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace FocusMinecraftLauncher.Infrastructure.Runtime;
+
+internal enum RecoveryHint { None, DiskSpace, Network, MissingGameEntry, LocalFile, Integrity }
 
 /// <summary>面向玩家的原因与建议，以及保留异常链的诊断记录。诊断不改变任务或游戏进程生命周期。</summary>
 public sealed class LauncherError
 {
+    private const int SavedReportLimit = 100;
+    private const int SavedReportDays = 7;
+    private static readonly string[] ReportFolders =
+    [
+        Path.Combine(AppContext.BaseDirectory, "FMLauncher", "Logs", "Errors"),
+        Path.Combine(Path.GetTempPath(), "FMLauncher", "Errors")
+    ];
+    private static readonly SemaphoreSlim ReportFiles = new(1, 1);
+    private static readonly Regex SavedReportName = new(@"^FMLauncher-error-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.log\z",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
     public string Id { get; } = DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..8];
     public DateTime Created { get; } = DateTime.Now;
     public string Action { get; }
@@ -25,6 +39,10 @@ public sealed class LauncherError
     public string Location => "出错位置：" + Stage;
     public string Reference => Created.ToString("yyyy-MM-dd HH:mm:ss") + "  错误编号：" + Id;
     public string Summary => Reason + Environment.NewLine + "建议：" + Advice;
+    internal RecoveryHint Recovery { get; }
+    internal (Preview.PreviewInstance Instance, int? RequiredMajor)? Java { get; }
+    internal string GameEvidence { get; } = "";
+    internal DiagnosticContext? DiagnosticContext { get; set; }
 
     public LauncherError(Exception error, string action, string stage, Func<string, string>? sanitize = null, string context = "")
     {
@@ -32,36 +50,127 @@ public sealed class LauncherError
         Action = sanitize(action);
         Stage = sanitize(string.IsNullOrWhiteSpace(stage) ? action : stage);
         var diagnosis = Describe(error);
-        Reason = sanitize(diagnosis.Reason);
-        Advice = sanitize(diagnosis.Advice);
-        var messages = string.Join(Environment.NewLine, Chain(error).Select(e => e.Message).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().Take(8));
-        if (Chain(error).OfType<GameExitException>().FirstOrDefault() is { Analysis.Length: > 0 } exit)
-            messages += Environment.NewLine + exit.Analysis;
+        Reason = sanitize(RuntimeSupport.UseCommonSizeUnits(diagnosis.Reason));
+        Advice = sanitize(RuntimeSupport.UseCommonSizeUnits(diagnosis.Advice));
+        var chain = Chain(error).ToArray();
+        if (chain.OfType<Preview.JavaNotFoundException>().FirstOrDefault() is { } java)
+            Java = (java.Instance, java.RequiredMajor);
+        Recovery = RecoveryFor(chain);
+        var messages = string.Join(Environment.NewLine, chain.Select(e => e.Message).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().Take(8));
+        if (chain.OfType<GameExitException>().FirstOrDefault() is { } exit)
+        {
+            GameEvidence = sanitize(exit.Evidence);
+            if (exit.Analysis.Length > 0) messages += Environment.NewLine + exit.Analysis;
+        }
+        messages = RuntimeSupport.UseCommonSizeUnits(messages);
         Context = sanitize(string.IsNullOrWhiteSpace(context) ? messages : context + Environment.NewLine + messages);
         Details = sanitize(error.ToString());
     }
 
-    public string BuildText() => $"FMLauncher {typeof(LauncherError).Assembly.GetName().Version}\n{Reference}\n操作：{Action}\n{Location}\n原因：{Reason}\n建议：{Advice}\n\n相关信息：\n{Context}\n\n技术详情：\n{Details}";
+    private static RecoveryHint RecoveryFor(Exception[] chain)
+    {
+        if (chain.Any(error => error is IOException && (error.HResult & 0xffff) is 112 or 39
+                               || error is Win32Exception { NativeErrorCode: 112 or 39 }))
+            return RecoveryHint.DiskSpace;
+        if (chain.Any(error => error is UnauthorizedAccessException ||
+                               error is IOException && (error.HResult & 0xffff) is 32 or 33 or 206))
+            return RecoveryHint.None;
+        if (chain.Any(error => error is GameExitException { GameEntryMissing: true })) return RecoveryHint.MissingGameEntry;
+        if (chain.Any(error => error is FileNotFoundException or DirectoryNotFoundException))
+            return RecoveryHint.LocalFile;
+        if (chain.Any(error => error is HttpRequestException or SocketException or AuthenticationException or TimeoutException or OperationCanceledException))
+            return RecoveryHint.Network;
+        if (IntegrityFailure(chain)) return RecoveryHint.Integrity;
+        return chain.Any(error => error is InvalidDataException) ? RecoveryHint.LocalFile : RecoveryHint.None;
+    }
+
+    private static bool IntegrityFailure(Exception[] chain) =>
+        chain.Any(error => error is InvalidDataException) &&
+        new[] { "SHA-1", "SHA1", "SHA-512", "校验", "hash mismatch", "size mismatch", "大小不匹配" }
+            .Any(key => chain.Any(error => error.Message.Contains(key, StringComparison.OrdinalIgnoreCase)));
+
+    public string BuildText() => BuildText(Details);
+
+    internal string BuildDiagnosticText() => BuildText(GameEvidence.Length == 0 ? Details
+        : Details.Replace(Environment.NewLine + GameEvidence, "", StringComparison.Ordinal));
+
+    private string BuildText(string details) =>
+        $"FMLauncher {typeof(LauncherError).Assembly.GetName().Version}\n{Reference}\n操作：{Action}\n{Location}\n原因：{Reason}\n建议：{Advice}\n\n相关信息：\n{Context}\n\n技术详情：\n{details}";
 
     /// <summary>优先保存在启动器日志目录；目录不可写时退回本机临时目录，均不影响原来的失败处理。</summary>
     public async Task SaveAsync()
     {
         var fileName = "FMLauncher-error-" + Id + ".log";
-        foreach (var folder in new[] { Path.Combine(AppContext.BaseDirectory, "FMLauncher", "Logs", "Errors"), Path.Combine(Path.GetTempPath(), "FMLauncher", "Errors") })
+        await ReportFiles.WaitAsync().ConfigureAwait(false);
+        try
         {
-            try
+            foreach (var folder in ReportFolders)
             {
-                Directory.CreateDirectory(folder);
-                var path = Path.Combine(folder, fileName);
-                await File.WriteAllTextAsync(path, BuildText(), new UTF8Encoding(false)).ConfigureAwait(false);
-                ReportPath = path;
-                SaveNotice = "";
-                return;
+                try
+                {
+                    Directory.CreateDirectory(folder);
+                    var path = Path.Combine(folder, fileName);
+                    await File.WriteAllTextAsync(path, BuildText(), new UTF8Encoding(false)).ConfigureAwait(false);
+                    ReportPath = path;
+                    SaveNotice = "";
+                    await Task.Run(() => PruneReportFolder(folder, path)).ConfigureAwait(false);
+                    return;
+                }
+                catch (Exception error) when (IsReportFileError(error))
+                { SaveNotice = "错误报告未能保存到文件，可使用“复制错误信息”。"; }
             }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException)
-            { SaveNotice = "错误报告未能保存到文件，可使用“复制错误信息”。"; }
         }
+        finally { ReportFiles.Release(); }
     }
+
+    internal static void PruneSavedReports()
+    {
+        ReportFiles.Wait();
+        try
+        {
+            foreach (var folder in ReportFolders) PruneReportFolder(folder);
+        }
+        finally { ReportFiles.Release(); }
+    }
+
+    private static void PruneReportFolder(string folder, string? justSaved = null)
+    {
+        try
+        {
+            var directory = new DirectoryInfo(folder);
+            if (!directory.Exists) return;
+            // 清理限定在错误报告目录的直接文件，遇到目录联接或符号链接则跳过。
+            for (DirectoryInfo? ancestor = directory; ancestor != null; ancestor = ancestor.Parent)
+                if (ancestor.Attributes.HasFlag(FileAttributes.ReparsePoint)) return;
+
+            var cutoff = DateTime.UtcNow.AddDays(-SavedReportDays);
+            var files = directory.EnumerateFiles("FMLauncher-error-*.log")
+                .Where(file => SavedReportName.IsMatch(file.Name) && !file.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                .OrderByDescending(file => string.Equals(file.FullName, justSaved, StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(file => file.LastWriteTimeUtc)
+                .ThenByDescending(file => file.Name, StringComparer.Ordinal)
+                .ToArray();
+
+            for (var index = 0; index < files.Length; index++)
+            {
+                var file = files[index];
+                if (string.Equals(file.FullName, justSaved, StringComparison.OrdinalIgnoreCase)
+                    || (index < SavedReportLimit && file.LastWriteTimeUtc >= cutoff)) continue;
+                try
+                {
+                    file.Refresh();
+                    if (file.Exists && !file.Attributes.HasFlag(FileAttributes.ReparsePoint)) file.Delete();
+                }
+                catch (Exception error) when (IsReportFileError(error))
+                { System.Diagnostics.Trace.TraceWarning("旧错误报告清理失败：{0}", error.GetType().Name); }
+            }
+        }
+        catch (Exception error) when (IsReportFileError(error))
+        { System.Diagnostics.Trace.TraceWarning("错误报告目录清理失败：{0}", error.GetType().Name); }
+    }
+
+    private static bool IsReportFileError(Exception error) =>
+        error is IOException or UnauthorizedAccessException or System.Security.SecurityException;
 
     public static (string Reason, string Advice) Describe(Exception error)
     {
@@ -120,8 +229,7 @@ public sealed class LauncherError
             return ("无法连接服务器，或连接在传输过程中中断。", "检查网络、系统代理和防火墙后重试；相关服务及原始错误见错误详情。");
         if (chain.OfType<JsonException>().Any())
             return ("无法解析 JSON 配置或服务返回的数据。", "查看详情中的文件、行号与字段；本地配置有误时先备份再修正，网络数据有误时刷新或切换下载源。");
-        var messages = string.Join("\n", chain.Select(e => e.Message));
-        if (chain.Any(e => e is InvalidDataException) && new[] { "SHA-1", "SHA1", "SHA-512", "校验", "hash mismatch", "size mismatch", "大小不匹配" }.Any(key => messages.Contains(key, StringComparison.OrdinalIgnoreCase)))
+        if (IntegrityFailure(chain))
             return ("文件完整性校验未通过。", "重新下载对应文件或切换下载源；不要跳过校验。整合包手动补充文件时需选择完全相同的版本。");
         if (chain.Any(e => e is InvalidDataException))
             return ("文件内容无效、损坏，或不符合要求的格式。", "查看相关信息中的具体文件；压缩包请重新获取完整文件，下载资源请刷新信息或切换下载源。");

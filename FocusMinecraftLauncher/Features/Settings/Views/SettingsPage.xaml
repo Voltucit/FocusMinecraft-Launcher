@@ -67,7 +67,7 @@
             </ScrollViewer>
         </TabItem>
         <TabItem Header="主题"><views:ThemeSettingsPage/></TabItem>
-        <TabItem Header="其他"><views:OtherSettingsPage DataContext="{Binding Other}"/></TabItem>
+        <TabItem Header="其他"><views:OtherSettingsPage x:Name="OtherPage" DataContext="{Binding Other}"/></TabItem>
     </TabControl>
 </Grid>
 

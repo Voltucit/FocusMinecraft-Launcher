@@ -81,7 +81,6 @@ public sealed class HomeViewModel : ObservableObject, IDisposable
     public string LaunchHint => ShowTask ? "" : Session.IsLoading ? "正在读取游戏" : Session.InstanceError.Length > 0 ? "游戏暂不可用" : !HasCurrentAccount ? "请先添加账号" : NeedsLogin ? "请重新登录后启动" : Session.IsBusy ? "正在处理任务" : IsClassicHome && HasInstance ? "" : "";
     public string LaunchStage => Session.LaunchTask?.Stage ?? "";
     public string LaunchError => Session.LaunchTask?.Error ?? "";
-    public bool CanRetryLaunch => Session.LaunchTask?.CanRetry == true;
     public string InstanceSettingsHint => HasInstance ? "管理当前游戏" : "请先选择游戏版本";
     public bool CanOpenInstanceSettings => HasInstance && CanChangeIdentity;
     public UiCommand Accounts { get; }

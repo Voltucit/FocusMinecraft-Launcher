@@ -115,7 +115,7 @@ public static class OptiFineForgeIntegration
                     int count;
                     while ((count = await source.ReadAsync(buffer, token).ConfigureAwait(false)) > 0)
                     {
-                        if (received + count > maximumSize || (total.HasValue && received + count > total.Value)) throw new InvalidDataException("OptiFine 安装包超过声明大小或 64 MiB。");
+                        if (received + count > maximumSize || (total.HasValue && received + count > total.Value)) throw new InvalidDataException("OptiFine 安装包超过声明大小或 64 MB。");
                         await output.WriteAsync(buffer.AsMemory(0, count), token).ConfigureAwait(false); received += count;
                         var elapsed = clock.Elapsed.TotalSeconds;
                         if (elapsed - measuredAt >= .2) { speed = (received - measuredBytes) / (elapsed - measuredAt); measuredBytes = received; measuredAt = elapsed; }

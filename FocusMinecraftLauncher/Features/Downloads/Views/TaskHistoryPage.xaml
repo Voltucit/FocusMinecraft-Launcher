@@ -11,12 +11,37 @@
 
     </UserControl.Resources>
     <Grid>
-        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <DockPanel Margin="0,0,0,16">
             <fluent:Button DockPanel.Dock="Right" Content="返回资源列表" Command="{Binding Back}" Style="{StaticResource QuietButton}"/>
             <TextBlock Text="任务记录" Style="{StaticResource SectionTitle}" VerticalAlignment="Center"/>
         </DockPanel>
-        <Grid Grid.Row="1">
+        <Expander Grid.Row="1" Header="启动耗时明细" Margin="0,0,0,12">
+            <ScrollViewer MaxHeight="230" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="0,8,8,0">
+                    <TextBlock Text="{Binding Session.CurrentInstance.Name}" TextTrimming="CharacterEllipsis" FontWeight="SemiBold"
+                               Visibility="{Binding Session.CurrentInstance.Name, Converter={StaticResource TextVisibility}, FallbackValue=Collapsed}"/>
+                    <TextBlock Text="{Binding LaunchTimingNotice}" Style="{StaticResource Caption}" TextWrapping="Wrap"
+                               Visibility="{Binding LaunchTimingNotice, Converter={StaticResource TextVisibility}}"/>
+                    <ItemsControl ItemsSource="{Binding LaunchTimings}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border BorderBrush="{DynamicResource SubtleBorder}" BorderThickness="0,0,0,1" Padding="0,8">
+                                    <StackPanel>
+                                        <DockPanel LastChildFill="True">
+                                            <TextBlock DockPanel.Dock="Right" Text="{Binding Elapsed}" FontWeight="SemiBold" Margin="12,0,0,0"/>
+                                            <TextBlock Text="{Binding StartedAt}" Style="{StaticResource Caption}"/>
+                                        </DockPanel>
+                                        <TextBlock Text="{Binding Breakdown}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
+        </Expander>
+        <Grid Grid.Row="2">
             <ListBox ItemsSource="{Binding Items}" AutomationProperties.Name="下载与任务记录">
                 <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
                     <Setter Property="Padding" Value="0"/><Setter Property="Focusable" Value="False"/>

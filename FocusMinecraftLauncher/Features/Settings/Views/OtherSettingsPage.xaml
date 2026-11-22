@@ -68,7 +68,7 @@
             </Border>
             <Border Style="{StaticResource GlassCard}" VerticalAlignment="Top">
                 <StackPanel>
-                    <TextBlock Text="下载" Style="{StaticResource SectionTitle}" Margin="0,0,0,4"/>
+                    <TextBlock x:Name="DownloadSettingsHeading" Text="下载" Style="{StaticResource SectionTitle}" Margin="0,0,0,4"/>
                     <ui:SettingRow Title="文件下载源" Description="镜像服务由 BMCLAPI 提供">
                         <ui:AnimatedComboBox ItemsSource="{Binding DownloadSources}"
                                              SelectedItem="{Binding FileDownloadSource, Mode=TwoWay}"
@@ -119,12 +119,9 @@
                         <CheckBox Content="在列表里显示中文名" IsChecked="{Binding WikiNames, Mode=TwoWay}"
                                   AutomationProperties.Name="使用 MC 百科补全中文名"/>
                     </ui:SettingRow>
-                    <ui:SettingRow Title="资源缓存" Description="保存在启动器目录，上限 300 MB">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{Binding CacheUsage}" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                            <fluent:Button Content="清空缓存" Command="{Binding ClearCache}" Style="{StaticResource QuietButton}"
-                                           AutomationProperties.Name="清空资源缓存"/>
-                        </StackPanel>
+                    <ui:SettingRow Title="资源缓存" Description="查看游戏与启动器的磁盘占用，预览可清理缓存">
+                        <fluent:Button Content="磁盘占用与缓存清理" Command="{Binding OpenDiskUsage}"
+                                       Style="{StaticResource QuietButton}"/>
                     </ui:SettingRow>
                 </StackPanel>
             </Border>

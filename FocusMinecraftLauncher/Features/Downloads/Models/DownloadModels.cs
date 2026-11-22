@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
+using FocusMinecraftLauncher.Infrastructure.Runtime;
 using FocusMinecraftLauncher.Presentation;
 
 namespace FocusMinecraftLauncher.Features.Downloads.Models;
@@ -116,7 +117,7 @@ public static class ResourceText
         .OrderByDescending(version => version, MinecraftVersionOrder.Instance).ToArray();
 
     public static string Count(long number) => number >= 10000 ? (number / 10000d).ToString("0.#", CultureInfo.InvariantCulture) + " 万" : number.ToString("N0", CultureInfo.InvariantCulture);
-    public static string Size(long bytes) => bytes >= 1048576 ? (bytes / 1048576d).ToString("0.##", CultureInfo.InvariantCulture) + " MiB" : (bytes / 1024d).ToString("0.##", CultureInfo.InvariantCulture) + " KiB";
+    public static string Size(long bytes) => RuntimeSupport.FormatSize(bytes);
 }
 
 /// <summary>缺失资源图片时提供统一内嵌图标，远程图片通过受控异步加载器读取。</summary>

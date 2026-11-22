@@ -21,7 +21,6 @@ public sealed class OtherSettingsViewModel : ObservableObject
     private bool _wikiNames = true;
     private LauncherCloseBehavior _closeBehavior;
     private bool _minimizeToTray;
-    private long _cacheBytes = FocusMinecraftLauncher.Infrastructure.Runtime.CommunityCache.Measure();
 
     public string[] DownloadSources { get; } = [AutomaticSource, PreferOfficial, "BMCLAPI 镜像源"];
     public IReadOnlyList<CloseBehaviorOption> CloseBehaviors { get; } =
@@ -66,8 +65,7 @@ public sealed class OtherSettingsViewModel : ObservableObject
             Persist();
         }
     }
-    public string CacheUsage => "已用 " + FocusMinecraftLauncher.Infrastructure.Runtime.CommunityCache.DescribeSize(_cacheBytes);
-    public UiCommand ClearCache { get; }
+    public UiCommand OpenDiskUsage { get; }
     public Features.Multiplayer.Services.MultiplayerService Network => ((App)System.Windows.Application.Current).Multiplayer;
     public UiCommand UninstallNetwork { get; }
     public UiCommand InstallNetwork { get; }
@@ -153,7 +151,7 @@ public sealed class OtherSettingsViewModel : ObservableObject
     public UiCommand SaveSharedNode { get; }
 
     private readonly FocusMinecraftLauncher.Infrastructure.Configuration.LauncherConfiguration _configuration = ((App)System.Windows.Application.Current).Configuration;
-    public OtherSettingsViewModel()
+    public OtherSettingsViewModel(Preview.PreviewSession session)
     {
         _closeBehavior = _configuration.CloseBehavior;
         _minimizeToTray = _configuration.MinimizeToTray;
@@ -167,7 +165,7 @@ public sealed class OtherSettingsViewModel : ObservableObject
         var data = _configuration.ReadLauncher()["downloads"];
         _fileDownloadSource = NormalizeSource(FocusMinecraftLauncher.Infrastructure.Configuration.LauncherConfiguration.Text(data?["fileDownloadSource"], AutomaticSource));
         _versionListSource = NormalizeSource(FocusMinecraftLauncher.Infrastructure.Configuration.LauncherConfiguration.Text(data?["versionListSource"], PreferOfficial));
-        _maximumThreads = Math.Clamp((int)FocusMinecraftLauncher.Infrastructure.Configuration.LauncherConfiguration.Number(data?["maximumThreads"], 16), 1, 64);
+        _maximumThreads = _configuration.MaximumDownloadThreads;
         _resourceSource = NormalizeCommunity(FocusMinecraftLauncher.Infrastructure.Configuration.LauncherConfiguration.Text(data?["communitySource"], FocusMinecraftLauncher.Infrastructure.Runtime.CommunitySource.AutomaticName));
         _fileNameFormat = FocusMinecraftLauncher.Infrastructure.Configuration.LauncherConfiguration.Text(data?["fileNameFormat"], ProjectAndFileName);
         if(_fileNameFormat=="译名 + 原文件名")_fileNameFormat=ProjectAndFileName;
@@ -175,12 +173,7 @@ public sealed class OtherSettingsViewModel : ObservableObject
         if(_modManagementStyle=="标题显示译名，详情显示文件名")_modManagementStyle="标题显示资源名称，详情显示文件名";
         _wikiNames = FocusMinecraftLauncher.Infrastructure.Configuration.LauncherConfiguration.Boolean(data?["wikiNames"], true);
         FocusMinecraftLauncher.Infrastructure.Runtime.WikiNameService.Enabled = _wikiNames;
-        ClearCache = new(_ =>
-        {
-            FocusMinecraftLauncher.Infrastructure.Runtime.CommunityCache.Clear();
-            _cacheBytes = FocusMinecraftLauncher.Infrastructure.Runtime.CommunityCache.Measure();
-            Changed(nameof(CacheUsage));
-        });
+        OpenDiskUsage = new(_ => Views.DiskUsageDialog.Show(session));
         if (Network.SharedNode.Length > 0) _ = TestSharedNodeStatusAsync(Network.SharedNode, Network.SharedNodeNetworkName, Network.SharedNodePassword);
     }
 

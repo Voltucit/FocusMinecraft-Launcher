@@ -387,10 +387,17 @@
                     <ProgressBar Value="{Binding Percent, Mode=OneWay}" IsIndeterminate="{Binding IsIndeterminate, Mode=OneWay}" Margin="0,12,0,0" Visibility="{Binding ShowProgress, Converter={StaticResource BoolVisibility}}" AutomationProperties.Name="任务进度"/>
                     <WrapPanel Margin="0,8,0,0" Visibility="{Binding HasBytes, Converter={StaticResource BoolVisibility}}"><TextBlock Text="{Binding DownloadLabel}" Style="{StaticResource Caption}" Margin="0,0,16,0"/><TextBlock Text="{Binding Speed}" Style="{StaticResource Caption}"/></WrapPanel>
                     <TextBlock Text="{Binding Error}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
+                    <Expander Header="下载详情" Margin="0,12,0,0" Visibility="{Binding ShowDownloadDetails, Converter={StaticResource BoolVisibility}}">
+                        <TextBlock Text="{Binding DownloadDetails}" Style="{StaticResource Caption}"
+                                   TextWrapping="Wrap" Margin="0,8,0,0"/>
+                    </Expander>
                 </StackPanel>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <fluent:Button Content="{Binding CancelText}" Command="{Binding DataContext.Session.CancelTask, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Visibility="{Binding IsActive, Converter={StaticResource BoolVisibility}}"/>
-                    <fluent:Button Content="重试" Command="{Binding DataContext.Session.RetryTask, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Visibility="{Binding CanRetry, Converter={StaticResource BoolVisibility}}"/>
+                    <fluent:Button Content="{Binding RetryText}" Command="{Binding DataContext.Session.RetryTask, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Visibility="{Binding CanRetry, Converter={StaticResource BoolVisibility}}"/>
+                    <fluent:Button Content="移除安装记录" Command="{Binding DataContext.Session.ForgetInstallation, RelativeSource={RelativeSource AncestorType=Window}}"
+                                   CommandParameter="{Binding}" Style="{StaticResource QuietButton}" Margin="0,8,0,0"
+                                   ToolTip="已下载的文件会保留" Visibility="{Binding CanForgetInstallation, Converter={StaticResource BoolVisibility}}"/>
                     <fluent:Button Content="查看错误详情" Command="{Binding DataContext.Session.ShowTaskError, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Style="{StaticResource QuietButton}" Margin="0,8,0,0" Visibility="{Binding HasFailure, Converter={StaticResource BoolVisibility}}"/>
                 </StackPanel>
             </Grid>

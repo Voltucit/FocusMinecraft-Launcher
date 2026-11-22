@@ -9,7 +9,7 @@ using System.Security.Principal;
 namespace FocusMinecraftLauncher.Features.Multiplayer.Services;
 
 /// <summary>仅在用户同意后下载独立组件；发布产物不包含 EasyTier，组件可单独卸载。</summary>
-public static class EasyTierComponents
+public static partial class EasyTierComponents
 {
     public const string Version = "2.6.4";
     public static string Root => Path.Combine(AppContext.BaseDirectory, "FMLauncher", "Networking", "EasyTier");
@@ -81,22 +81,31 @@ public static class EasyTierComponents
     }
 
     /// <summary>提权进程先验证完整官方压缩包，再解压到仅管理员可写的运行目录，避免执行被替换的散装文件。</summary>
-    internal static async Task<string> PrepareWorkerAsync(CancellationToken token)
+    internal static async Task<WorkerDirectory> PrepareWorkerAsync(CancellationToken token)
     {
         byte[] bytes = await ReadVerifiedArchiveAsync(token).ConfigureAwait(false);
-        var applicationRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "FMLauncher");
+        var applicationRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "FMLauncher"));
         if (Directory.Exists(applicationRoot) && (File.GetAttributes(applicationRoot) & FileAttributes.ReparsePoint) != 0)
             throw new IOException("联机运行目录不能是链接。");
-        var parent = Path.Combine(applicationRoot, "EasyTier-Runtime");
+        var parent = WorkerRoot;
         SecureDirectory(parent);
+        await CleanupAbandonedWorkerDirectoriesAsync(token).ConfigureAwait(false);
+        token.ThrowIfCancellationRequested();
         var work = Path.Combine(parent, Guid.NewGuid().ToString("N"));
         SecureDirectory(work);
+        WorkerDirectory? directory = null;
         try
         {
+            directory = new WorkerDirectory(work);
             await ExtractAsync(bytes, work, token).ConfigureAwait(false);
-            return work;
+            return directory;
         }
-        catch { DeleteWorkerDirectory(work); throw; }
+        catch
+        {
+            directory?.Dispose();
+            await DeleteWorkerDirectoryAsync(work).ConfigureAwait(false);
+            throw;
+        }
     }
 
     /// <summary>设置页的连通性预检使用当前用户临时目录，不提权；文件仍先经过官方 SHA-256 校验。</summary>
@@ -161,11 +170,4 @@ public static class EasyTierComponents
         else FileSystemAclExtensions.SetAccessControl(directory, security);
     }
 
-    internal static void DeleteWorkerDirectory(string work)
-    {
-        var parent = Path.GetFullPath(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "FMLauncher", "EasyTier-Runtime")) + Path.DirectorySeparatorChar;
-        var target = Path.GetFullPath(work);
-        if (!target.StartsWith(parent, StringComparison.OrdinalIgnoreCase) || !Guid.TryParseExact(Path.GetFileName(target), "N", out _)) return;
-        if (Directory.Exists(target) && (File.GetAttributes(target) & FileAttributes.ReparsePoint) == 0) Directory.Delete(target, true);
-    }
 }

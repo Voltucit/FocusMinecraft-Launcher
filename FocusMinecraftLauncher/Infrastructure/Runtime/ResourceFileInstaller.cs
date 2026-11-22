@@ -46,7 +46,8 @@ public static class ResourceFileInstaller
     }
 
     /// <summary>使用核心的下载和 SHA 校验；提交失败时恢复原文件，并保留可供手动恢复的旧版本备份。</summary>
-    public static async Task ApplyAsync(PreviewInstance instance,ResourceInstallPlan plan,ModrinthClient client,string configDirectory,Action<string,DownloadProgress?> report,CancellationToken token,int concurrency=4)
+    public static async Task ApplyAsync(PreviewInstance instance,ResourceInstallPlan plan,ModrinthClient client,string configDirectory,
+        Action<string,DownloadBatchProgress?> report,CancellationToken token,int concurrency=4,Action<string>? recordSource=null)
     {
         var staging=ModpackArchive.SafePath(configDirectory,"resource-staging/"+Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(staging);
@@ -62,9 +63,8 @@ public static class ResourceFileInstaller
                 var temporary=Path.Combine(staging,staged.Count+".bin");staged[item.RelativePath]=temporary;
                 downloads.Add(client.CreateDownloadRequest(item.File, temporary));
             }
-            await FileDownloader.DownloadManyAsync(downloads, concurrency, progress => report("下载资源与必需前置",
-                new DownloadProgress("", progress.ProcessedBytes, progress.TotalBytes)
-                { TransferredBytes=progress.TransferredBytes, BytesPerSecond=progress.BytesPerSecond, RemainingTime=progress.RemainingTime }), token);
+            var results = await FileDownloader.DownloadManyAsync(downloads, concurrency, progress => report("下载资源与必需前置", progress), token);
+            foreach (var result in results) recordSource?.Invoke(result.SourceHost);
             token.ThrowIfCancellationRequested();report("准备应用资源",null);
             foreach(var old in plan.Replacements)
                 if(!await MatchesAsync(ModpackArchive.SafePath(instance.GameDirectory,old.RelativePath),old.Origin.Size,old.Origin.Sha1,token))

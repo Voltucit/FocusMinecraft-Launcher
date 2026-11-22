@@ -18,7 +18,7 @@ public static class InstanceStore
     /// <summary>用户可能直接选择 versions 目录或单个版本目录；统一回到包含 versions 的游戏根目录。</summary>
     public static string NormalizeRoot(string path)
     {
-        var full = Path.GetFullPath(path);
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
         try
         {
             if (Directory.Exists(Path.Combine(full, "versions"))) return full;
@@ -130,7 +130,7 @@ public static class InstanceStore
             return !(instance.Loader == "原版" && loaderGames.Contains(instance.Id));
         }).ToArray();
     }
-    /// <summary>单个实例的父版本缺失不阻止其他实例展示；修复仍使用核心的公开安装及转换接口。</summary>
+    /// <summary>单个实例的父版本缺失不阻止其他实例展示，启动时可尝试补齐官方父版本。</summary>
     public static async Task<PreviewInstance> ReadVersionAsync(MinecraftVersion version, IReadOnlyList<MinecraftVersion> versions, string root, CancellationToken token)
     {
             IReadOnlyList<MinecraftVersion> chain;
@@ -141,11 +141,15 @@ public static class InstanceStore
             int? java = null;
             string? mainClass = null;
             string? clientVersion = null;
+            bool hasLegacyArguments = false;
+            bool hasModernArguments = false;
             foreach (var part in chain)
             {
                 var file = Path.Combine(part.Directory, Path.GetFileName(part.Directory) + ".json");
                 var json = JsonNode.Parse(await File.ReadAllTextAsync(file, token));
                 java ??= json?["javaVersion"]?["majorVersion"]?.GetValue<int>();
+                hasLegacyArguments |= Text(json, "minecraftArguments") is { Length: > 0 };
+                hasModernArguments |= json is JsonObject data && data.ContainsKey("arguments");
                 mainClass = Text(json, "mainClass") ?? mainClass;
                 // 整合包会把自己的完整启动信息写进版本文件，缺 inheritsFrom 时版本号只能从这些字段推断。
                 clientVersion = Text(json, "clientVersion") ?? clientVersion;
@@ -161,6 +165,8 @@ public static class InstanceStore
             if(loader=="Forge"&&loaderVersion.EndsWith("-"+gameVersion,StringComparison.Ordinal))loaderVersion=loaderVersion[..^(gameVersion.Length+1)];
             var instance = new PreviewInstance(version.Id, version.Id, gameVersion, loader, version.VersionType ?? "release")
             { Root = Path.GetFullPath(root), DirectoryPath = version.Directory, RequiredJava = java, LoaderVersion = loaderVersion, MetadataIssue = issue };
+            instance.PrefersLegacyJava8 = java is null && hasLegacyArguments && !hasModernArguments
+                && Version.TryParse(gameVersion, out var release) && release.Major == 1 && release.Minor <= 12;
             var settings = Read(instance);
             if (!string.IsNullOrWhiteSpace(settings.PendingLoader))
             {

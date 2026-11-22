@@ -26,6 +26,7 @@ public sealed class InstanceDirectoryWatcher : IDisposable
         _watcher.Changed += OnChanged;
         _watcher.Deleted += OnChanged;
         _watcher.Renamed += OnRenamed;
+        _watcher.Error += (_, _) => Schedule();
         _watcher.EnableRaisingEvents = true;
     }
 

@@ -2,6 +2,7 @@ using FocusMinecraftLauncher.Common;
 using System.Windows.Media;
 using FocusMinecraftLauncher.Presentation;
 using FocusMinecraftLauncher.Features.Home.Models;
+using FocusMinecraftLauncher.Infrastructure.Runtime;
 namespace FocusMinecraftLauncher.Preview;
 /// <summary>账户资料与运行时认证结果分离，读取配置不等于 Microsoft 认证成功。</summary>
 public sealed class PreviewAccount : ObservableObject
@@ -151,6 +152,7 @@ public sealed class PreviewInstance(string id, string name, string version, stri
     public bool IsEditingContent { get; set; }
 
     public int? RequiredJava { get; set; }
+    internal bool PrefersLegacyJava8 { get; set; }
     public string LoaderVersion { get; set; } = "";
     private string _optiFineVersion="";
     public string OptiFineVersion {get=>_optiFineVersion;private set {if(Set(ref _optiFineVersion,value))Changed(nameof(ComponentsText));}}
@@ -187,17 +189,85 @@ public sealed class PreviewTask(PreviewTaskKind kind, string name, string versio
     public string Name { get; } = name;
     public string Version { get; } = version;
     public string Root { get; init; } = "";
-    public string InstanceId { get; init; } = "";
+    public string InstanceId { get; internal set; } = "";
+    internal PendingInstallation? Installation { get; set; }
+    internal bool ForgettingInstallation { get; set; }
     public string State { get; set; } = "排队中";
     public string Stage { get; set; } = "等待执行";
     public string Error { get; set; } = "";
     public Infrastructure.Runtime.LauncherError? Failure { get; set; }
+    internal PreviewInstance? RecoveryInstance { get; set; }
+    internal string? DiagnosticJava { get; set; }
     public bool HasFailure => Failure != null;
     public long Bytes { get; set; }
     public long Total { get; set; }
     public double BytesPerSecond { get; set; }
     public int CompletedFiles { get; set; }
     public int TotalFiles { get; set; }
+    internal int? ActiveFiles { get; set; }
+    internal int PeakActiveFiles { get; set; }
+    internal TimeSpan? RemainingTime { get; set; }
+    internal string DownloadSourceSetting { get; set; } = "";
+    private readonly HashSet<string> _downloadHosts = new(StringComparer.OrdinalIgnoreCase);
+    private string _downloadAttempt = "";
+    private string _downloadNote = "";
+
+    internal void RecordDownloadHost(string host)
+    {
+        if (string.IsNullOrWhiteSpace(host)) return;
+        lock (_downloadHosts)
+            if (_downloadHosts.Count < 10) _downloadHosts.Add(host);
+    }
+
+    internal void RecordDownloadAttempt(string file, int attempt)
+    {
+        lock (_downloadHosts)
+            _downloadAttempt = $"{System.IO.Path.GetFileName(file)}（第 {attempt} 次下载尝试）";
+    }
+
+    internal void RecordDownloadNote(string note)
+    {
+        lock (_downloadHosts) _downloadNote = note;
+    }
+
+    internal void ResetDownloadDetails()
+    {
+        ActiveFiles = null;
+        PeakActiveFiles = 0;
+        RemainingTime = null;
+        DownloadSourceSetting = "";
+        lock (_downloadHosts)
+        {
+            _downloadHosts.Clear();
+            _downloadAttempt = "";
+            _downloadNote = "";
+        }
+    }
+
+    public string DownloadDetails
+    {
+        get
+        {
+            var lines = new List<string>();
+            if (TotalFiles > 0) lines.Add($"当前阶段已处理 {CompletedFiles} / {TotalFiles} 项");
+            if (IsActive && ActiveFiles is { } active) lines.Add($"正在处理 {active} 个文件");
+            if (PeakActiveFiles > 0) lines.Add($"本次最多并行处理 {PeakActiveFiles} 个文件");
+            if (IsActive && RemainingTime is { TotalSeconds: >= 1 } remaining)
+                lines.Add(remaining.TotalMinutes < 1
+                    ? $"预计还需 {Math.Ceiling(remaining.TotalSeconds)} 秒"
+                    : $"预计还需 {Math.Ceiling(remaining.TotalMinutes)} 分钟");
+            if (DownloadSourceSetting.Length > 0) lines.Add("下载源设置：" + DownloadSourceSetting);
+            lock (_downloadHosts)
+            {
+                if (_downloadHosts.Count > 0) lines.Add("本次记录的下载源：" + string.Join("、", _downloadHosts));
+                if (_downloadAttempt.Length > 0) lines.Add(_downloadAttempt);
+                if (_downloadNote.Length > 0) lines.Add(_downloadNote);
+            }
+            if (HasFailure) lines.Add("失败原因和处理建议见“查看错误详情”。");
+            return lines.Count > 0 ? string.Join(Environment.NewLine, lines)
+                : IsActive ? "等待当前阶段报告下载数据。" : "此任务暂无下载数据。";
+        }
+    }
     private bool _runningGame;
     public bool IsRunningGame
     {
@@ -205,19 +275,37 @@ public sealed class PreviewTask(PreviewTaskKind kind, string name, string versio
         set
         {
             if (!Set(ref _runningGame, value)) return;
-            Changed(nameof(ShowProgress)); Changed(nameof(IsIndeterminate)); Changed(nameof(CancelText));
+            Changed(nameof(ShowProgress));
+            Changed(nameof(IsIndeterminate));
+            Changed(nameof(ProgressLabel));
+            Changed(nameof(CancelText));
         }
     }
     public bool IsActive => State is "排队中" or "进行中";
-    public bool CanRetry => State is "失败" or "已取消";
+    public bool CanRetry => !ForgettingInstallation && (State is "失败" or "已取消" or "待继续");
+    public string RetryText => State == "待继续" ? "继续安装" : "重试";
+    public bool CanForgetInstallation => Installation != null && !IsActive && !ForgettingInstallation;
+    public bool ShowDownloadDetails => Kind is PreviewTaskKind.Install or PreviewTaskKind.Import or PreviewTaskKind.Resource or PreviewTaskKind.Repair;
     public bool HasBytes => Total > 0 || Bytes > 0;
     /// <summary>游戏进程已启动后只保留运行状态和关闭操作，不再显示启动或下载进度。</summary>
     public bool ShowProgress => IsActive && !IsRunningGame;
     public bool IsIndeterminate => ShowProgress && Total <= 0 && TotalFiles<=0;
     public string CancelText => IsRunningGame ? "关闭游戏" : Kind == PreviewTaskKind.Launch ? "取消启动" : "取消";
     public double Percent => Total > 0 ? Math.Clamp(100d * Bytes / Total, 0, 100) : TotalFiles>0?Math.Clamp(100d*CompletedFiles/TotalFiles,0,100):0;
-    public string DownloadLabel => Kind==PreviewTaskKind.Export&&TotalFiles>0
-        ? $"{CompletedFiles} / {TotalFiles} 个文件"+(Total>0?$"，已处理 {Bytes/1048576d:0.0} / {Total/1048576d:0.0} MiB":"")
-        : Total>0 ? $"{Bytes / 1048576d:0.0} / {Total / 1048576d:0.0} MiB" : Bytes>0?$"已下载 {Bytes/1048576d:0.0} MiB":"";
-    public string Speed => BytesPerSecond > 0 && IsActive ? $"{BytesPerSecond / 1048576d:0.0} MiB/s" : "";
+    public string ProgressLabel => ShowProgress && !IsIndeterminate ? $"{Math.Floor(Percent):0}%" : "";
+    public string DownloadLabel
+    {
+        get
+        {
+            var transferred = Total > 0 ? $"{RuntimeSupport.FormatSize(Bytes)} / {RuntimeSupport.FormatSize(Total)}" : "";
+            if (Kind == PreviewTaskKind.Export && TotalFiles > 0)
+            {
+                var files = $"{CompletedFiles} / {TotalFiles} 个文件";
+                return Total > 0 ? files + "，已处理 " + transferred : files;
+            }
+            if (Total > 0) return transferred;
+            return Bytes > 0 ? "已下载 " + RuntimeSupport.FormatSize(Bytes) : "";
+        }
+    }
+    public string Speed => BytesPerSecond > 0 && IsActive ? RuntimeSupport.FormatSize(BytesPerSecond) + "/s" : "";
 }

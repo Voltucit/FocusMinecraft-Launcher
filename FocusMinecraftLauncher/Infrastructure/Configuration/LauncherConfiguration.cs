@@ -29,6 +29,21 @@ public sealed class LauncherConfiguration
     public string MinecraftDirectory => Path.Combine(BaseDirectory, ".minecraft");
     public string LauncherFile => Path.Combine(ConfigDirectory, "Launcher_config.json");
     public string AccountFile => Path.Combine(ConfigDirectory, "account_config.json");
+    public int MaximumDownloadThreads
+    {
+        get
+        {
+            lock (_gate)
+            {
+                var value = _launcher["downloads"]?["maximumThreads"];
+                // 设置页直接写入 int，旧配置里的小数形式也能继续读取。
+                if (value is JsonValue json && json.TryGetValue<int>(out var threads))
+                    return Math.Clamp(threads, 1, 64);
+                return (int)Math.Clamp(Number(value, 16), 1, 64);
+            }
+        }
+    }
+
     /// <summary>最小化到托盘需用户主动开启，不沿用旧精简模式默认开启的配置。</summary>
     public bool MinimizeToTray
     {

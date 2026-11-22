@@ -142,6 +142,7 @@ public static class EasyTierWorker
     private static async Task RunNetworkAsync(WorkerRequest request, NetworkWire wire, RoomLease lease, CancellationToken token)
     {
         string? work = null; Process? core = null;
+        EasyTierComponents.WorkerDirectory? directory = null;
         using var job = new NetworkProcessJob();
         using var firewall = new NetworkFirewall();
         using var guestStop = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -150,7 +151,8 @@ public static class EasyTierWorker
         {
             var room = request.Room!;
             CheckSubnet(room.Subnet);
-            work = await EasyTierComponents.PrepareWorkerAsync(token).ConfigureAwait(false);
+            directory = await EasyTierComponents.PrepareWorkerAsync(token).ConfigureAwait(false);
+            work = directory.DirectoryPath;
             var corePath = Path.Combine(work, "easytier-core.exe");
             var cliPath = Path.Combine(work, "easytier-cli.exe");
             firewall.AllowCore(corePath);
@@ -213,16 +215,38 @@ public static class EasyTierWorker
         }
         finally
         {
-            await lease.AnnounceCloseAsync().ConfigureAwait(false);
-            await guestStop.CancelAsync().ConfigureAwait(false);
-            if (guestWatch != null) try { await guestWatch.ConfigureAwait(false); } catch (Exception e) when (e is IOException or OperationCanceledException) { }
+            // 每个清理步骤独立执行，保留原始联机异常；通知、监听或进程结束失败都不能跳过后面的清理。
+            async Task CleanupStep(string name, Func<Task> cleanup)
+            {
+                try { await cleanup().ConfigureAwait(false); }
+                catch (Exception error) { Trace.TraceWarning("联机退出清理（{0}）：{1}：{2}", name, error.GetType().Name, error.Message); }
+            }
+            await CleanupStep("通知成员", lease.AnnounceCloseAsync).ConfigureAwait(false);
+            await CleanupStep("取消房主监听", () => guestStop.CancelAsync()).ConfigureAwait(false);
+            if (guestWatch != null) await CleanupStep("等待房主监听结束", () => guestWatch).ConfigureAwait(false);
             if (core != null)
             {
-                if (!core.HasExited) { core.Kill(true); await core.WaitForExitAsync().ConfigureAwait(false); }
-                core.Dispose();
+                await CleanupStep("结束联机核心", () =>
+                {
+                    if (!core.HasExited) core.Kill(true);
+                    return Task.CompletedTask;
+                }).ConfigureAwait(false);
             }
-            job.Dispose();
-            if (work != null) EasyTierComponents.DeleteWorkerDirectory(work);
+            // Job 释放会结束仍存活的查询进程；等核心真正退出后再关闭占用标记和删除文件。
+            await CleanupStep("释放联机进程组", () => { job.Dispose(); return Task.CompletedTask; }).ConfigureAwait(false);
+            var coreExited = core == null;
+            if (core != null)
+            {
+                await CleanupStep("等待联机核心退出", async () =>
+                {
+                    await core.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+                    coreExited = true;
+                }).ConfigureAwait(false);
+                await CleanupStep("释放联机核心句柄", () => { core.Dispose(); return Task.CompletedTask; }).ConfigureAwait(false);
+            }
+            await CleanupStep("释放临时目录占用", () => { directory?.Dispose(); return Task.CompletedTask; }).ConfigureAwait(false);
+            if (work != null && coreExited) await EasyTierComponents.DeleteWorkerDirectoryAsync(work).ConfigureAwait(false);
+            else if (work != null) Trace.TraceWarning("联机核心尚未退出，运行目录保留至下次清理：{0}", work);
         }
     }
 

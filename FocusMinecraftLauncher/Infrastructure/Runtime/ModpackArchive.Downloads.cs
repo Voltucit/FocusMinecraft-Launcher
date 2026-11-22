@@ -15,7 +15,7 @@ public static partial class ModpackArchive
 
     /// <summary>仅编排资源来源；传输、重试、SHA-1、大小校验和原子写入仍由核心负责。</summary>
     private static async Task DownloadPackFilesAsync(PackFile[] files, PreviewInstance instance, int concurrency,
-        Action<DownloadBatchProgress> progress, CancellationToken token)
+        Action<DownloadBatchProgress> progress, CancellationToken token, Action<DownloadProgress>? fileProgress)
     {
         if (files.Length == 0) return;
         var received = new long[files.Length];
@@ -69,6 +69,7 @@ public static partial class ModpackArchive
                     {
                         lock (gate)
                         {
+                            fileProgress?.Invoke(value);
                             received[index] = value.DownloadedBytes;
                             transferred[index] = value.TransferredBytes;
                             Report();

@@ -259,7 +259,9 @@ public static partial class ModpackArchive
         return overrides;
     }
 
-    public static async Task InstallContentAsync(string archivePath, PackManifest manifest, PreviewInstance instance, InstanceOptions options, int concurrency, Action<DownloadBatchProgress> progress, CancellationToken token, Func<string, bool>? include = null)
+    public static async Task InstallContentAsync(string archivePath, PackManifest manifest, PreviewInstance instance, InstanceOptions options, int concurrency,
+        Action<DownloadBatchProgress> progress, CancellationToken token, Func<string, bool>? include = null,
+        Action<DownloadProgress>? fileProgress = null, Action<string>? phase = null)
     {
         EnsureGameDirectoryWritePath(instance);
         using var archive = ZipFile.OpenRead(archivePath);
@@ -267,6 +269,7 @@ public static partial class ModpackArchive
         var files = manifest.Files.Where(f => f.Client == "required" && !overrides.ContainsKey(f.Path.Replace('\\','/')) && (include == null || include(f.Path))).ToArray();
         foreach (var file in files) ProtectProfile(file.Path, instance.Id, !instance.UsesGameIsolation);
         var manualFiles = files.Where(file => file.Urls.Length == 0 || file.SourcePath.Length > 0).ToArray();
+        if (manualFiles.Length > 0) phase?.Invoke("复制已补齐的资源");
         long copied = 0, copyTotal = manualFiles.Sum(file => file.Size);
         for (var index = 0; index < manualFiles.Length; index++)
         {
@@ -276,13 +279,16 @@ public static partial class ModpackArchive
             progress(new DownloadBatchProgress(manualFiles.Length, index + 1, 0, 1, copied, copyTotal));
         }
         var downloads = files.Where(file => file.Urls.Length > 0 && file.SourcePath.Length == 0).ToArray();
-        await DownloadPackFilesAsync(downloads, instance, concurrency, progress, token);
+        if (downloads.Length > 0) phase?.Invoke("下载整合包资源");
+        await DownloadPackFilesAsync(downloads, instance, concurrency, progress, token, fileProgress);
+        phase?.Invoke("校验整合包文件");
         foreach (var file in files)
         {
             await using var stream = File.OpenRead(SafePath(instance.GameDirectory, file.Path));
             if (file.Sha512.Length > 0 && !Convert.ToHexString(await SHA512.HashDataAsync(stream, token)).Equals(file.Sha512, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("整合包资源 SHA-512 校验失败：" + file.Path);
             RecordPackOrigin(file, instance, options);
         }
+        phase?.Invoke("应用整合包内容");
         foreach(var item in overrides.Where(item => include == null || include(item.Key)))
         {
             token.ThrowIfCancellationRequested();var destination=SafePath(instance.GameDirectory,item.Key);

@@ -42,7 +42,7 @@ public sealed class InstanceOverviewViewModel : ObservableObject
             try {Infrastructure.Runtime.RuntimeSupport.OpenFolder(p is string folder&&folder.Length>0?Path.Combine(instance.GameDirectory,folder):instance.GameDirectory);}
             catch(Exception error){Notice=Infrastructure.Runtime.RuntimeSupport.Error(error);}
         });
-        Repair=new(_=>session.Enqueue(PreviewTaskKind.Repair,instance.Name+"文件检查",instance.Version,instance.Root,instance.Id,(task,token)=>session.EnsureFilesAsync(instance,task,token)),_=>!session.IsBusy);
+        Repair=new(_=>session.StartFileRepair(instance),_=>!session.IsBusy);
         ExportScript=new(async _=>
         {
             var dialog=new SaveFileDialog{Title="导出启动脚本",Filter="Windows 启动脚本|*.cmd",DefaultExt=".cmd",AddExtension=true,FileName="启动游戏.cmd"};

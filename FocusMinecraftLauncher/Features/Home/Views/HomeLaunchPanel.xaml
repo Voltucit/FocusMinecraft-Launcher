@@ -34,7 +34,7 @@
                            Style="{StaticResource LaunchVersionLabel}"/>
             </Grid>
         </fluent:Button>
-        <!-- 状态位于原启动区域；文本可滚动，取消和重试始终处于稳定位置。 -->
+        <!-- 启动状态的长文本可滚动。 -->
         <ScrollViewer MaxHeight="{Binding FeedbackMaxHeight, ElementName=Root}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel>
                 <TextBlock Text="{Binding Session.InstanceError}" Style="{StaticResource ErrorMessage}" Margin="0,8,0,0"/>
@@ -47,11 +47,23 @@
             </StackPanel>
         </ScrollViewer>
         <!-- 字节和速度来自核心回调；未知总量时保留不确定进度。 -->
-        <TextBlock Text="{Binding Session.LaunchTask.DownloadLabel}" Style="{StaticResource Caption}" Margin="0,8,0,0"/><TextBlock Text="{Binding Session.LaunchTask.Speed}" Style="{StaticResource Caption}"/><ProgressBar Value="{Binding Session.LaunchTask.Percent, Mode=OneWay}" IsIndeterminate="{Binding Session.LaunchTask.IsIndeterminate, Mode=OneWay}" Margin="0,8,0,0" Visibility="{Binding Session.LaunchTask.ShowProgress, Converter={StaticResource BoolVisibility}, FallbackValue=Collapsed}" AutomationProperties.Name="游戏启动进行中"/>
+        <TextBlock Text="{Binding Session.LaunchTask.DownloadLabel}" Style="{StaticResource Caption}" Margin="0,8,0,0"/>
+        <TextBlock Text="{Binding Session.LaunchTask.Speed}" Style="{StaticResource Caption}"/>
+        <Grid Margin="0,8,0,0" Visibility="{Binding Session.LaunchTask.ShowProgress, Converter={StaticResource BoolVisibility}, FallbackValue=Collapsed}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <ProgressBar Value="{Binding Session.LaunchTask.Percent, Mode=OneWay}"
+                         IsIndeterminate="{Binding Session.LaunchTask.IsIndeterminate, Mode=OneWay}"
+                         VerticalAlignment="Center" AutomationProperties.Name="当前启动阶段进度"/>
+            <TextBlock Grid.Column="1" Text="{Binding Session.LaunchTask.ProgressLabel}"
+                       Style="{StaticResource Caption}" Margin="8,0,0,0" MinWidth="32" VerticalAlignment="Center"
+                       TextAlignment="Right" TextWrapping="NoWrap"
+                       Visibility="{Binding Text, RelativeSource={RelativeSource Self}, Converter={StaticResource TextVisibility}}"/>
+        </Grid>
         <fluent:Button Content="{Binding Session.LaunchTask.CancelText}" Command="{Binding Session.CancelTask}" CommandParameter="{Binding Session.LaunchTask}" Margin="0,8,0,0"
                        Style="{StaticResource QuietButton}" Visibility="{Binding ShowTask, Converter={StaticResource BoolVisibility}}"/>
-        <fluent:Button Content="重试" Command="{Binding Session.RetryTask}" CommandParameter="{Binding Session.LaunchTask}" Margin="0,8,0,0"
-                       Style="{StaticResource QuietButton}" Visibility="{Binding CanRetryLaunch, Converter={StaticResource BoolVisibility}}"/>
         <fluent:Button Content="添加账号" Command="{Binding AddAccount}" Style="{StaticResource QuietButton}" Margin="0,8,0,0"
                        Visibility="{Binding ShowAddAccountGuide, Converter={StaticResource BoolVisibility}}"/>
         <Grid Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>

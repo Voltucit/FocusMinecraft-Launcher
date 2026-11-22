@@ -31,7 +31,10 @@ public static class RuntimeSupport
         return java?.Executable ?? throw new InvalidOperationException(required.HasValue ? $"未找到 Java {required} 或更高版本，请在设置中选择可用的 Java。" : "未找到可用的 Java，请先安装 Java 并在设置中选择。");
     }
     /// <summary>自动选择逐个调用核心的公开配置检查，不复制核心的 Java 兼容性规则。</summary>
-    public static async Task<(FMCore.Launch.MinecraftLauncher Launcher,string JavaPath,IReadOnlyList<string> UnknownPlaceholders)> SelectCheckedLauncherAsync(PreviewInstance instance,FMCore.Accounts.IMinecraftAccount account,InstanceOptions settings,PreviewSettings global,CancellationToken token,IReadOnlyList<JavaInfo>? javaCandidates=null)
+    public static async Task<(FMCore.Launch.MinecraftLauncher Launcher, string JavaPath, IReadOnlyList<string> UnknownPlaceholders)> SelectCheckedLauncherAsync(
+        PreviewInstance instance, FMCore.Accounts.IMinecraftAccount account, InstanceOptions settings, PreviewSettings global,
+        CancellationToken token, IReadOnlyList<JavaInfo>? javaCandidates = null,
+        Func<JavaInfo, Task>? prepareFiles = null)
     {
         var ordered=javaCandidates??await ReadLaunchJavaCandidatesAsync(instance,settings,global,token);
         if (ordered.Count == 0)
@@ -47,6 +50,7 @@ public static class RuntimeSupport
         foreach(var java in ordered)
         {
             token.ThrowIfCancellationRequested();
+            if (prepareFiles != null) await prepareFiles(java);
             var jvmArguments = LaunchJvmArguments(instance, account, configuredArguments, java.MajorVersion, global.GcMode);
             var launcher=new FMCore.Launch.MinecraftLauncher(new()
             {
@@ -136,12 +140,21 @@ public static class RuntimeSupport
         else candidates = [await JavaReader.GetJavaInfoAsync(preferred, token)];
         // 手动指定时尊重用户选择；自动检测缺少目标版本时回退到更高版本，再把兼容性交给核心配置检查。
         var target = instance.RequiredJava;
+        var preferredMajor = target ?? (instance.PrefersLegacyJava8 ? 8 : (int?)null);
         var result=candidates.Where(java=>!string.IsNullOrWhiteSpace(preferred)||!target.HasValue||java.MajorVersion>=target.Value)
-            .OrderBy(java=>string.IsNullOrWhiteSpace(preferred)&&target.HasValue&&java.MajorVersion!=target.Value?1:0)
+            .OrderByDescending(java => java.MajorVersion == preferredMajor)
             .ThenByDescending(java=>java.MajorVersion).ToArray();
         // 结果可能为空：由调用方决定是提示下载 Java，还是直接报告缺少运行时。
         return result;
     }
+
+    internal static Architecture GetJavaArchitecture(JavaInfo java) => java.Architecture switch
+    {
+        "x86" => Architecture.X86,
+        "x64" => Architecture.X64,
+        "arm64" => Architecture.Arm64,
+        _ => RuntimeInformation.OSArchitecture
+    };
     public static void OpenFolder(string folder)
     {
         if (!Directory.Exists(folder)) throw new DirectoryNotFoundException("文件夹尚不存在。");
@@ -164,19 +177,25 @@ public static class RuntimeSupport
     {
         if (error is OperationCanceledException) return "操作已取消或请求超时，请检查操作状态后重试。";
         var (reason, advice) = LauncherError.Describe(error);
-        return SafeText(reason + Environment.NewLine + "建议：" + advice);
+        return SafeText(UseCommonSizeUnits(reason + Environment.NewLine + "建议：" + advice));
     }
+
+    internal static string UseCommonSizeUnits(string text) => text.Contains("iB", StringComparison.Ordinal)
+        ? Regex.Replace(text, @"(?<=[0-9] )([KMGT])iB\b", "$1B") : text;
+
     /// <summary>把字节数写成 1.2 GB / 340 MB 这类短文本，用于进度与列表。</summary>
-    public static string FormatSize(long bytes)
+    public static string FormatSize(double bytes)
     {
-        const double kilo = 1024, mega = kilo * 1024, giga = mega * 1024;
-        return bytes switch
+        const double kilo = 1024, mega = kilo * 1024, giga = mega * 1024, tera = giga * 1024;
+        var (value, unit) = bytes switch
         {
-            >= (long)giga => (bytes / giga).ToString("0.0", CultureInfo.InvariantCulture) + " GB",
-            >= (long)mega => (bytes / mega).ToString("0.0", CultureInfo.InvariantCulture) + " MB",
-            >= (long)kilo => (bytes / kilo).ToString("0", CultureInfo.InvariantCulture) + " KB",
-            _ => bytes + " B"
+            >= tera => (bytes / tera, "TB"),
+            >= giga => (bytes / giga, "GB"),
+            >= mega => (bytes / mega, "MB"),
+            >= kilo => (bytes / kilo, "KB"),
+            _ => (bytes, "B")
         };
+        return value.ToString("0.##", CultureInfo.InvariantCulture) + " " + unit;
     }
     public static (double Total, double Available) Memory()
     {

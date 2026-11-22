@@ -10,7 +10,7 @@ namespace FocusMinecraftLauncher.Preview;
 public sealed partial class PreviewSession
 {
     /// <summary>UI 捕获 JavaNotFoundException 后展示下载或手动选择引导，不把底层异常直接当作玩家提示。</summary>
-    private async Task<bool> GuideJavaAsync(JavaNotFoundException error, PreviewTask task, CancellationToken token)
+    private async Task<bool> GuideJavaAsync(JavaNotFoundException error, PreviewTask task, CancellationToken token, bool retrying = false)
     {
         try
         {
@@ -21,7 +21,7 @@ public sealed partial class PreviewSession
             if (choice == Presentation.Dialogs.JavaRuntimeChoice.Cancel)
             {
                 task.Error = error.Message;
-                if (task.Failure is { } report) NotifyError(report);
+                if (task.Failure is { } report) NotifyError(report, task);
                 return false;
             }
             if (choice == Presentation.Dialogs.JavaRuntimeChoice.Manual)
@@ -29,8 +29,10 @@ public sealed partial class PreviewSession
                 var dialog = new OpenFileDialog { Filter = "Java|java.exe;javaw.exe", CheckFileExists = true };
                 if (dialog.ShowDialog() != true) return false;
                 var java = await JavaReader.GetJavaInfoAsync(dialog.FileName, token);
+                if (required is { } minimum && java.MajorVersion < minimum)
+                    throw new JavaNotFoundException(error.Instance, required, $"选择的 Java 为 {java.MajorVersion}，需要 Java {minimum} 或更高版本。");
                 await SaveJavaPathAsync(error.Instance, java.Executable);
-                string action = task.Kind == PreviewTaskKind.Launch ? "正在重新启动。" : "请再次开始安装。";
+                string action = task.Kind == PreviewTaskKind.Launch ? "正在重新启动。" : retrying ? "正在重新安装。" : "请再次开始安装。";
                 task.Error = $"已选择 Java {java.MajorVersion}，{action}";
                 NotifyTask($"已选择 Java，{action}", false);
                 return true;
@@ -44,8 +46,12 @@ public sealed partial class PreviewSession
             JavaScanner.Remember(installed);
             await SaveJavaScanCacheAsync(JavaScanner.Cached);
             await SaveJavaPathAsync(error.Instance, installed.Executable);
-            task.State = "失败"; task.Stage = task.Kind is PreviewTaskKind.Launch ? "启动失败" : "安装失败";
-            string downloadAction = task.Kind == PreviewTaskKind.Launch ? "正在重新启动。" : "请再次开始安装。";
+            if (!retrying)
+            {
+                task.State = "失败";
+                task.Stage = task.Kind is PreviewTaskKind.Launch ? "启动失败" : "安装失败";
+            }
+            string downloadAction = task.Kind == PreviewTaskKind.Launch ? "正在重新启动。" : retrying ? "正在重新安装。" : "请再次开始安装。";
             task.Error = $"Java {installed.MajorVersion} 已安装，{downloadAction}";
             NotifyTask($"Java {installed.MajorVersion} 已安装，{downloadAction}", false);
             return true;

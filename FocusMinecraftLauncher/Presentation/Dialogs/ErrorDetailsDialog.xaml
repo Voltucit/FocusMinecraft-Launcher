@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:fluent="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:visual="clr-namespace:FocusMinecraftLauncher.Presentation.Controls"
-        Title="错误详情" Width="680" SizeToContent="Height" MaxHeight="760"
+        Title="错误详情" Width="680" Height="560"
         WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         FontFamily="Segoe UI Variable Text, Microsoft YaHei UI" FontSize="14"
@@ -27,8 +27,9 @@
     <Border Style="{StaticResource ErrorSurface}" Margin="20">
         <Grid Margin="28,24">
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-            <TextBlock Text="错误详情" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,20" MouseLeftButtonDown="DragWindow"/>
-            <ScrollViewer x:Name="ReportScroll" Grid.Row="1" MaxHeight="510" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <TextBlock x:Name="DialogHeading" Text="错误详情" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,16"
+                       MouseLeftButtonDown="DragWindow"/>
+            <ScrollViewer x:Name="ReportScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel>
                     <TextBlock Text="{Binding Action}" FontWeight="SemiBold" TextWrapping="Wrap"/>
                     <TextBlock Text="{Binding Location}" TextWrapping="Wrap" Margin="0,8,0,0"/>
@@ -36,6 +37,7 @@
                     <TextBlock Text="{Binding RelatedInformation}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,8,0,0" Visibility="{Binding RelatedInformation, Converter={StaticResource TextVisibility}}"/>
                     <TextBlock Text="处理建议" FontWeight="SemiBold" Margin="0,20,0,8"/>
                     <TextBlock Text="{Binding Advice}" TextWrapping="Wrap"/>
+                    <WrapPanel x:Name="RecoveryButtons" Margin="0,10,0,0" Visibility="Collapsed"/>
                     <Expander Header="技术详情" Margin="0,20,0,0">
                         <TextBox x:Name="DetailsText" IsReadOnly="True" AcceptsReturn="True" Height="220" FontFamily="Consolas, Microsoft YaHei UI" FontSize="12"
                                  TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
@@ -46,10 +48,33 @@
                     <TextBlock x:Name="Feedback" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,8,0,0" AutomationProperties.LiveSetting="Polite"/>
                 </StackPanel>
             </ScrollViewer>
-            <WrapPanel Grid.Row="2" HorizontalAlignment="Right" Margin="0,20,0,0">
+            <Grid x:Name="BundlePreview" Grid.Row="1" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock x:Name="BundleNotice" Style="{StaticResource Caption}" Margin="0,0,0,8" TextWrapping="Wrap"
+                           MaxHeight="48" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
+                           AutomationProperties.LiveSetting="Polite"/>
+                <visual:AnimatedComboBox x:Name="BundleFiles" Grid.Row="1" DisplayMemberPath="Title"
+                                         Margin="0,0,0,10" Visibility="Collapsed" AutomationProperties.Name="选择要预览的诊断文件"/>
+                <TextBox x:Name="BundleText" Grid.Row="2" Text="{Binding SelectedItem.Content, ElementName=BundleFiles, Mode=OneWay}"
+                         IsReadOnly="True" AcceptsReturn="True" Visibility="Collapsed" TextChanged="BundleTextChanged"
+                         TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                         FontFamily="Consolas, Microsoft YaHei UI" FontSize="12" AutomationProperties.Name="脱敏后的诊断文件内容"/>
+            </Grid>
+            <WrapPanel x:Name="ReportActions" Grid.Row="2" HorizontalAlignment="Right" Margin="0,16,0,0">
                 <fluent:Button Content="复制错误信息" Click="CopyReport" Margin="0,0,8,8"/>
+                <fluent:Button x:Name="PreviewBundleButton" Content="预览诊断包" Click="PreviewBundle" Margin="0,0,8,8"/>
                 <fluent:Button x:Name="OpenReportButton" Content="打开报告目录" Click="OpenReport" Margin="0,0,8,8"/>
                 <fluent:Button Content="关闭" Style="{StaticResource PrimaryButton}" IsDefault="True" IsCancel="True" Click="CloseDialog" MinWidth="80" Margin="0,0,0,8"/>
+            </WrapPanel>
+            <WrapPanel x:Name="BundleActions" Grid.Row="2" HorizontalAlignment="Right" Margin="0,16,0,0" Visibility="Collapsed">
+                <fluent:Button x:Name="BackToReportButton" Content="返回错误详情" Click="BackToReport" Margin="0,0,8,8"/>
+                <fluent:Button Content="关闭" Click="CloseDialog" IsCancel="True" Margin="0,0,8,8"/>
+                <fluent:Button x:Name="SaveBundleButton" Content="保存诊断包" Click="SaveBundle"
+                               Style="{StaticResource PrimaryButton}" IsEnabled="False" Margin="0,0,0,8"/>
             </WrapPanel>
         </Grid>
     </Border>

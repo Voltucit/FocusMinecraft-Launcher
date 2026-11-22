@@ -125,9 +125,14 @@ public sealed partial class PreviewSession : ObservableObject, IDisposable
         Launch = new(async _ => await BeginLaunchAsync(), _ => CanLaunch);
         CancelTask = new(p => Cancel(p as PreviewTask ?? _active), p => (p as PreviewTask ?? _active)?.IsActive == true);
         RetryTask = new(p => Retry(p as PreviewTask), p => p is PreviewTask { CanRetry: true });
+        ShowTaskError = new(p =>
+        {
+            if (p is PreviewTask { Failure: { } report } task) ShowError(report, task);
+        }, p => p is PreviewTask { Failure: not null });
         OpenTasks = new(_ => { DownloadTab = 1; Navigate(MainPage.Downloads); });
         RefreshInstances = new(async _ => await RefreshInstancesAsync(), _ => !IsLoading);
         RestoreConfiguration();
+        RestorePendingInstallations();
     }
     public void Navigate(MainPage page) => NavigateRequested?.Invoke(page);
     public void OpenVersions() { DownloadTab = 0; Navigate(MainPage.Downloads); }

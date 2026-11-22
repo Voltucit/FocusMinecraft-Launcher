@@ -79,29 +79,37 @@ public static class GameLogs
         }
         else message += "尚未从本次日志中识别出明确原因。";
         var analysis = string.Join(Environment.NewLine, findings.Select(item => item.Detail));
-        return new GameExitException(message, advice, text, analysis);
+        return new GameExitException(message, advice, text, analysis)
+        {
+            GameEntryMissing = findings.Any(item => item.GameEntryMissing)
+        };
     }
 
     public static IReadOnlyList<LogFinding> Analyze(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return [];
         var findings = new List<LogFinding>();
-        void Add(string title, string detail, string advice, params string[] signatures)
+        void AddFinding(string title, string detail, string advice, bool gameEntryMissing, params string[] signatures)
         {
             var evidence = text.Split('\n').FirstOrDefault(line => signatures.Any(key => line.Contains(key, StringComparison.OrdinalIgnoreCase)))?.Trim();
             if (evidence == null) return;
             if (evidence.Length > 500) evidence = evidence[..500] + "…";
-            findings.Add(new(title, detail + "\n日志依据：" + RuntimeSupport.SafeText(evidence), advice));
+            findings.Add(new(title, detail + "\n日志依据：" + RuntimeSupport.SafeText(evidence), advice)
+            {
+                GameEntryMissing = gameEntryMissing
+            });
         }
+        void Add(string title, string detail, string advice, params string[] signatures) =>
+            AddFinding(title, detail, advice, false, signatures);
         Add("Java 版本不匹配", "游戏或 Mod 需要的 Java 比当前使用的版本新。",
             "在游戏的“启动设置”中选择该游戏或整合包要求的 Java 版本，再重试。",
             "UnsupportedClassVersionError", "has been compiled by a more recent version of the Java Runtime");
         Add("Java 启动参数无效", "Java 拒绝了当前启动参数。",
             "检查“启动设置”的高级 JVM 参数，移除不受当前 Java 支持的参数；保留修改前的参数以便恢复。",
             "Unrecognized VM option", "Unrecognized option:", "Improperly specified VM option");
-        Add("Java 无法找到启动文件或主类", "Java 未能加载游戏入口。",
+        AddFinding("Java 无法找到启动文件或主类", "Java 未能加载游戏入口。",
             "检查并补全游戏文件，核对高级启动参数中的主类和文件路径，并检查文件是否被安全软件隔离。",
-            "Unable to access jarfile", "Could not find or load main class");
+            true, "Unable to access jarfile", "Could not find or load main class");
         Add("内存不足或内存分配失败", "日志记录了内存耗尽或无法预留内存。",
             "堆内存不足时适当增加游戏内存；无法预留内存时减少分配，并关闭占用较高的程序。检查 Java 是否为 64 位。",
             "java.lang.OutOfMemoryError", "Could not reserve enough space", "There is insufficient memory for the Java Runtime", "Native memory allocation (malloc) failed");
@@ -133,11 +141,16 @@ public static class GameLogs
     }
 }
 
-public sealed record LogFinding(string Title, string Detail, string Advice);
+public sealed record LogFinding(string Title, string Detail, string Advice)
+{
+    internal bool GameEntryMissing { get; init; }
+}
 
 public sealed class GameExitException(string message, string advice, string evidence, string analysis) : InvalidOperationException(message)
 {
     public string Advice { get; } = advice;
     public string Analysis { get; } = analysis;
-    public override string ToString() => base.ToString() + Environment.NewLine + evidence;
+    internal bool GameEntryMissing { get; init; }
+    internal string Evidence { get; } = evidence;
+    public override string ToString() => base.ToString() + Environment.NewLine + Evidence;
 }

@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Input;
 using FocusMinecraftLauncher.Common;
 using FocusMinecraftLauncher.Infrastructure.Configuration;
+using FocusMinecraftLauncher.Infrastructure.Runtime;
 using FocusMinecraftLauncher.Infrastructure.Updates;
 using FocusMinecraftLauncher.Preview;
 
@@ -161,7 +162,8 @@ public sealed class LauncherUpdateViewModel : ObservableObject, IDisposable
             {
                 if (!_working || !_downloading) return;
                 _percent = p.Total > 0 ? Math.Clamp(100d * p.Bytes / p.Total, 0, 100) : 0;
-                _transfer = $"{p.Bytes / 1048576d:0.0} / {p.Total / 1048576d:0.0} MiB" + (p.BytesPerSecond > 0 ? $"，{p.BytesPerSecond / 1048576d:0.0} MiB/s" : "");
+                _transfer = $"{RuntimeSupport.FormatSize(p.Bytes)} / {RuntimeSupport.FormatSize(p.Total)}";
+                if (p.BytesPerSecond > 0) _transfer += $"，{RuntimeSupport.FormatSize(p.BytesPerSecond)}/s";
                 if (p.Bytes == p.Total) _status = "正在校验更新文件"; Publish();
             }), _operation!.Token);
             _ready = true; SavePrepared(_job);

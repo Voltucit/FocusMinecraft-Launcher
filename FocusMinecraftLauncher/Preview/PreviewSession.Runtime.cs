@@ -22,6 +22,8 @@ public sealed partial class PreviewSession
     private readonly Dictionary<string, SemaphoreSlim> _rootWriters = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _incomplete = new(StringComparer.OrdinalIgnoreCase);
     private int _refreshRevision;
+    private bool _instanceRefreshPending;
+    private Task? _instanceRefreshTask;
     private string _selectedRoot = "", _restoreId = "";
     private InstanceDirectoryWatcher? _instanceWatcher;
     public string SelectedRoot => _selectedRoot;
@@ -52,7 +54,7 @@ public sealed partial class PreviewSession
     public DownloadSource MetadataSource => LauncherConfiguration.Text(_configuration.ReadLauncher()["downloads"]?["versionListSource"]) == "自动选择"
         ? DownloadSource.Automatic : IsMirrorSource(LauncherConfiguration.Text(_configuration.ReadLauncher()["downloads"]?["versionListSource"])) ? DownloadSource.BmclApi : DownloadSource.Official;
     private static bool IsMirrorSource(string value)=>value.Contains("BMCLAPI")||value.StartsWith("优先使用镜像");
-    public int DownloadConcurrency => Math.Clamp((int)LauncherConfiguration.Number(_configuration.ReadLauncher()["downloads"]?["maximumThreads"], 16), 1, 64);
+    public int DownloadConcurrency => _configuration.MaximumDownloadThreads;
 
     private void RestoreRuntimeConfiguration(JsonObject root)
     {
@@ -181,46 +183,68 @@ public sealed partial class PreviewSession
         });
     }
     /// <summary>重新查询同一份实例目录；修订号阻止较早查询覆盖用户刚切换的目录，安装中的实例不提前登记。</summary>
-    public async Task RefreshInstancesAsync()
+    public Task RefreshInstancesAsync()
     {
-        var revision = ++_refreshRevision;
-        var root = SelectedRoot;
+        _instanceRefreshPending = true;
+        ++_refreshRevision;
+        if (_instanceRefreshTask is { IsCompleted: false }) return _instanceRefreshTask;
+        return _instanceRefreshTask = RefreshInstancesCoreAsync();
+    }
+    private async Task RefreshInstancesCoreAsync()
+    {
         IsLoading = true; InstanceError = ""; Signal();
         try
         {
-            var found = await Task.Run(() => InstanceStore.ScanAsync(root, _lifetime.Token), _lifetime.Token);
-            if (revision != _refreshRevision || _lifetime.IsCancellationRequested) return;
-            var wanted = CurrentInstance?.Id ?? _restoreId;
-            var items = found.Where(i => !_incomplete.Contains(InstanceStore.Key(root, i.Id))).ToArray();
-            foreach (var item in items) item.IsolationMode = SavedSettings.VersionIsolation;
-            // 尽量保留原对象，避免安装刷新打断当前编辑页及选择。
-            bool SameInstance(PreviewInstance left, PreviewInstance right) =>
-                string.Equals(InstanceStore.Key(left.Root, left.Id), InstanceStore.Key(right.Root, right.Id), StringComparison.OrdinalIgnoreCase)
-                && left.Version == right.Version && left.Loader == right.Loader && left.LoaderVersion == right.LoaderVersion;
-            foreach (var old in Instances.ToArray()) if (!items.Any(i => SameInstance(i, old))) Instances.Remove(old);
-            foreach (var item in items)
+            while (_instanceRefreshPending && !_lifetime.IsCancellationRequested)
             {
-                var existing = Instances.FirstOrDefault(i => SameInstance(i, item));
-                if (existing == null) Instances.Add(item);
-                else
+                _instanceRefreshPending = false;
+                var revision = _refreshRevision;
+                var root = SelectedRoot;
+                InstanceError = "";
+                try
                 {
-                    existing.Name = item.Name; existing.Description = item.Description; existing.Category = item.Category;
-                    existing.RequiredJava = item.RequiredJava; existing.MetadataIssue = item.MetadataIssue;
-                    existing.IsolationMode = SavedSettings.VersionIsolation;
-                    existing.IsFavorite = item.IsFavorite; existing.Options = item.Options; existing.IconImage = item.IconImage;existing.FallbackIconImage=item.FallbackIconImage;
-                    existing.RefreshOptiFineState();
+                    var found = await Task.Run(() => InstanceStore.ScanAsync(root, _lifetime.Token), _lifetime.Token);
+                    if (_lifetime.IsCancellationRequested) return;
+                    if (revision != _refreshRevision || !string.Equals(root, SelectedRoot, StringComparison.OrdinalIgnoreCase)) continue;
+                    var wanted = CurrentInstance?.Id ?? _restoreId;
+                    var items = found.Where(i => !_incomplete.Contains(InstanceStore.Key(root, i.Id))).ToArray();
+                    foreach (var item in items) item.IsolationMode = SavedSettings.VersionIsolation;
+                    // 尽量保留原对象，避免安装刷新打断当前编辑页及选择。
+                    bool SameInstance(PreviewInstance left, PreviewInstance right) =>
+                        string.Equals(InstanceStore.Key(left.Root, left.Id), InstanceStore.Key(right.Root, right.Id), StringComparison.OrdinalIgnoreCase)
+                        && left.Version == right.Version && left.Loader == right.Loader && left.LoaderVersion == right.LoaderVersion;
+                    foreach (var old in Instances.ToArray()) if (!items.Any(i => SameInstance(i, old))) Instances.Remove(old);
+                    foreach (var item in items)
+                    {
+                        var existing = Instances.FirstOrDefault(i => SameInstance(i, item));
+                        if (existing == null) Instances.Add(item);
+                        else
+                        {
+                            existing.Name = item.Name; existing.Description = item.Description; existing.Category = item.Category;
+                            existing.RequiredJava = item.RequiredJava; existing.MetadataIssue = item.MetadataIssue;
+                            existing.PrefersLegacyJava8 = item.PrefersLegacyJava8;
+                            existing.IsolationMode = SavedSettings.VersionIsolation;
+                            existing.IsFavorite = item.IsFavorite; existing.Options = item.Options; existing.IconImage = item.IconImage;existing.FallbackIconImage=item.FallbackIconImage;
+                            existing.RefreshOptiFineState();
+                        }
+                    }
+                    CurrentInstance = Instances.FirstOrDefault(i => i.Id == wanted) ?? Instances.FirstOrDefault();
+                    _restoreId = "";
+                }
+                catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { return; }
+                catch (Exception error)
+                {
+                    if (revision == _refreshRevision && string.Equals(root, SelectedRoot, StringComparison.OrdinalIgnoreCase))
+                    { InstanceError = RuntimeSupport.Error(error); Log("读取游戏：" + InstanceError); }
                 }
             }
-            CurrentInstance = Instances.FirstOrDefault(i => i.Id == wanted) ?? Instances.FirstOrDefault();
-            _restoreId = "";
         }
-        catch (OperationCanceledException) { }
-        catch (Exception error) { if (revision == _refreshRevision) { InstanceError = RuntimeSupport.Error(error); Log("读取游戏：" + InstanceError); } }
-        finally { if (revision == _refreshRevision) { IsLoading = false; Signal(); } }
+        finally { IsLoading = false; Signal(); }
     }
     public async Task InitializeRuntimeAsync()
     {
         LoadJavaScanCache();
+        await ResolveStartupDirectoriesAsync();
         StartInstanceWatcher();
         await RefreshInstancesAsync();
     }
@@ -271,7 +295,7 @@ public sealed partial class PreviewSession
             {
                 Application.Current?.Dispatcher.BeginInvoke(async () =>
                 {
-                    if (_lifetime.IsCancellationRequested || IsLoading) return;
+                    if (_lifetime.IsCancellationRequested) return;
                     await RefreshInstancesAsync();
                 });
             });
@@ -282,45 +306,92 @@ public sealed partial class PreviewSession
         }
     }
 
-    /// <summary>把 SDK 的实际下载数据调度至 UI；进度百分比不改变任务终态。</summary>
+    /// <summary>把实际下载与文件检查进度调度至 UI；进度百分比不改变任务终态。</summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PreviewTask,long> _progressTimes = new();
-    public void Report(PreviewTask task, string stage, DownloadBatchProgress? batch = null, DownloadProgress? file = null)
+    public void Report(PreviewTask task, string stage, DownloadBatchProgress? batch = null, DownloadProgress? file = null,
+        (int Completed, int Total)? files = null)
     {
+        stage = RuntimeSupport.UseCommonSizeUnits(stage);
         // 诊断阶段不受进度节流和 UI 调度延迟影响；批量下载不能把最近进度文件认作失败文件。
+        var stageChanged = !_taskStages.TryGetValue(task, out var lastStage) || lastStage != stage;
         _taskStages[task] = stage;
+        if (file != null)
+        {
+            task.RecordDownloadHost(file.SourceHost);
+            if (file.Attempt > 1) task.RecordDownloadAttempt(file.FilePath, file.Attempt);
+        }
         var now=Environment.TickCount64;
-        if(_progressTimes.TryGetValue(task,out var last)&&now-last<100)return;
+        var batchComplete = batch is { ActiveFiles: 0 } && batch.CompletedFiles == batch.TotalFiles;
+        if (!(stageChanged && batch == null && file == null) && !batchComplete
+            && _progressTimes.TryGetValue(task, out var last) && now - last < 100) return;
         _progressTimes[task]=now;
         PostUi(() =>
         {
-            if (!task.IsActive) return;
+            if (!task.IsActive || !_taskStages.TryGetValue(task, out var currentStage) || currentStage != stage) return;
             task.Stage = stage;
             task.Bytes = batch?.ProcessedBytes ?? file?.DownloadedBytes ?? 0;
             task.Total = batch?.TotalBytes ?? file?.TotalBytes ?? 0;
             task.BytesPerSecond = batch?.BytesPerSecond ?? file?.BytesPerSecond ?? 0;
+            task.CompletedFiles = files?.Completed ?? batch?.CompletedFiles ?? (file is { AlreadyPresent: true } ? 1 : 0);
+            task.TotalFiles = files?.Total ?? batch?.TotalFiles ?? (file != null ? 1 : 0);
+            task.ActiveFiles = batch is { PeakActiveFiles: > 0 } ? batch.ActiveFiles
+                : file is { AlreadyPresent: false } ? 1 : null;
+            task.PeakActiveFiles = Math.Max(task.PeakActiveFiles, batch?.PeakActiveFiles ?? task.ActiveFiles ?? 0);
+            task.RemainingTime = batch?.RemainingTime ?? file?.RemainingTime;
             task.Refresh(); Signal();
         });
     }
     public PreviewTask Enqueue(PreviewTaskKind kind, string name, string version, string root, string instanceId, Func<PreviewTask, CancellationToken, Task> run)
+        => EnqueueCore(kind, name, version, root, instanceId, run, null);
+
+    private PreviewTask EnqueueCore(PreviewTaskKind kind, string name, string version, string root, string instanceId,
+        Func<PreviewTask, CancellationToken, Task> run, PendingInstallation? installation)
     {
+        if (_cleaningStorage && installation != null) throw new InvalidOperationException("正在清理整合包缓存，请稍后重试。");
         if (IsInstallingLauncherUpdate) throw new InvalidOperationException("正在安装启动器更新，请稍后重试。");
         if (IsRemovingInstance) throw new InvalidOperationException("正在删除游戏，请稍后重试。");
         if (IsApplyingIsolation) throw new InvalidOperationException("正在应用版本隔离设置，请稍后重试。");
-        var item = new PreviewTask(kind, name, version) { Root = root, InstanceId = instanceId };
+        var item = new PreviewTask(kind, name, version) { Root = root, InstanceId = instanceId, Installation = installation };
         _retryOperations[item] = run; Tasks.Insert(0, item); _active = item;
         _executions[item] = ExecuteAsync(item, run); Signal(); return item;
     }
     /// <summary>等待共享任务的执行和清理结束；调用方读取任务终态，不把进度事件当作完成。</summary>
     public Task WaitForTaskAsync(PreviewTask task) => _executions.TryGetValue(task,out var execution) ? execution : Task.CompletedTask;
-    private async Task ExecuteAsync(PreviewTask task, Func<PreviewTask, CancellationToken, Task> run)
+    private async Task ExecuteAsync(PreviewTask task, Func<PreviewTask, CancellationToken, Task> run, JavaNotFoundException? configureJava = null)
     {
         if (_operations.ContainsKey(task)) return;
         using var cancellation = task.Kind == PreviewTaskKind.Launch ? new CancellationTokenSource() : CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         _operations[task] = cancellation;
+        var previousFailure = task.Failure;
+        var previousStage = task.Stage;
+        task.ResetDownloadDetails();
+        if (previousFailure is { Reason.Length: > 0 }) task.RecordDownloadNote("上次未能完成：" + previousFailure.Reason);
         task.State = "进行中"; task.Error = ""; task.Failure = null; task.Stage = "正在准备"; _taskStages[task] = task.Stage; task.Bytes = task.Total = 0;task.CompletedFiles=task.TotalFiles=0; task.Refresh(); Signal();
         var retryAfterJavaGuide = false;
         try
         {
+            if (configureJava != null)
+            {
+                Report(task, "配置 Java");
+                if (!await GuideJavaAsync(configureJava, task, cancellation.Token, retrying: true))
+                {
+                    if (task.Failure == null && previousFailure != null)
+                    {
+                        task.State = "失败";
+                        task.Stage = previousStage;
+                        task.Error = previousFailure.Summary;
+                        task.Failure = previousFailure;
+                    }
+                    return;
+                }
+                cancellation.Token.ThrowIfCancellationRequested();
+            }
+            if (task.Installation != null)
+            {
+                Report(task, "保存安装记录");
+                await SaveInstallationQueueAsync();
+                cancellation.Token.ThrowIfCancellationRequested();
+            }
             await run(task, cancellation.Token);
             cancellation.Token.ThrowIfCancellationRequested();
             task.State = "已完成";
@@ -329,8 +400,8 @@ public sealed partial class PreviewSession
         catch (OperationCanceledException error) when(cancellation.IsCancellationRequested || error is UserCanceledOperationException) { task.State = "已取消"; task.Stage = "已取消"; }
         catch (JavaNotFoundException error)
         {
-            await SetTaskFailureAsync(task, error, notify: false);
-            retryAfterJavaGuide = await GuideJavaAsync(error, task, cancellation.Token);
+            await SetTaskFailureAsync(task, error, notify: configureJava != null);
+            if (configureJava == null) retryAfterJavaGuide = await GuideJavaAsync(error, task, cancellation.Token);
             task.Refresh();
         }
         catch (Exception error)
@@ -353,7 +424,7 @@ public sealed partial class PreviewSession
     {
         var removal = _instanceRemoval;
         var pending=_operations.Where(pair=>!pair.Key.IsRunningGame).ToArray();
-        foreach(var pair in pending){pair.Value.Cancel();pair.Key.Stage="正在取消";pair.Key.Refresh();}
+        foreach(var pair in pending){pair.Value.Cancel();pair.Key.Stage=pair.Key.Installation != null ? "正在停止安装" : "正在取消";pair.Key.Refresh();}
         await Task.WhenAll(pending.Where(pair=>_executions.ContainsKey(pair.Key)).Select(pair=>_executions[pair.Key]));
         // 回收站操作开始后不强制中断；退出前等待它完成，失败由删除入口反馈。
         if (removal != null)
@@ -369,10 +440,19 @@ public sealed partial class PreviewSession
         if (!task.IsActive || !_operations.TryGetValue(task, out cancellation) || cancellation.IsCancellationRequested) return;
         cancellation.Cancel(); task.Stage = task.IsRunningGame ? "正在关闭游戏" : "正在取消"; task.Refresh();
     }
-    private void Retry(PreviewTask? task)
+    private bool CanRetry(PreviewTask task)
     {
-        if (task is not { CanRetry: true } || !_retryOperations.TryGetValue(task, out var run)) return;
-        if (Tasks.Any(other => other != task && other.IsActive && string.Equals(InstanceStore.Key(other.Root, other.InstanceId), InstanceStore.Key(task.Root, task.InstanceId), StringComparison.OrdinalIgnoreCase))) return;
+        if (!task.CanRetry || !_retryOperations.ContainsKey(task) || _operations.ContainsKey(task)
+            || IsInstallingLauncherUpdate || IsRemovingInstance || IsApplyingIsolation
+            || (_cleaningStorage && task.Installation != null)) return false;
+        return task.InstanceId.Length == 0 || !Tasks.Any(other => other != task && other.IsActive
+            && string.Equals(InstanceStore.Key(other.Root, other.InstanceId), InstanceStore.Key(task.Root, task.InstanceId), StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void Retry(PreviewTask? task, JavaNotFoundException? configureJava = null)
+    {
+        if (task == null || !CanRetry(task)) return;
+        var run = _retryOperations[task];
         if(task.Kind==PreviewTaskKind.Launch)
         {
             if(!CanLaunch||CurrentInstance==null||CurrentAccount==null)
@@ -383,50 +463,72 @@ public sealed partial class PreviewSession
             run=(item,token)=>RunLaunchAsync(instance,account,item,token);
             _retryOperations[task]=run;_launch=task;
         }
-        task.State = "排队中"; _executions[task] = ExecuteAsync(task, run);
+        _executions[task] = ExecuteAsync(task, run, configureJava);
     }
-    private async Task SetIncompleteAsync(string root, string id, bool incomplete)
+    private async Task SetIncompleteAsync(string root, string id, bool incomplete, PreviewTask? completedTask = null)
     {
         var key = InstanceStore.Key(root, id);
         if (incomplete) _incomplete.Add(key); else _incomplete.Remove(key);
-        _configuration.ChangeLauncher(document => document["incompleteInstallations"] = new JsonArray(_incomplete.Select(s => (JsonNode?)JsonValue.Create(s)).ToArray()));
-        if(!await _configuration.FlushAsync())throw new IOException("无法保存安装状态，请检查启动器配置目录的写入权限。");
+        if (completedTask == null) { await SaveInstallationQueueAsync(); return; }
+        var installation = completedTask.Installation;
+        completedTask.Installation = null;
+        try
+        {
+            await SaveInstallationQueueAsync();
+        }
+        catch
+        {
+            completedTask.Installation = installation;
+            _incomplete.Add(key);
+            UpdateInstallationQueue();
+            throw;
+        }
     }
     /// <summary>同根目录安装串行，其他目录可以同时安装；只在核心安装成功并保存来源后刷新对应目录。</summary>
     public PreviewTask InstallGame(string name, string game, string loader, string loaderVersion, string optifine)
     {
         var root = SelectedRoot;
-        if (Tasks.Any(t => t.IsActive && string.Equals(InstanceStore.Key(t.Root, t.InstanceId), InstanceStore.Key(root, name), StringComparison.OrdinalIgnoreCase))) throw new InvalidOperationException("这个版本正在安装。");
-        var target = Path.Combine(root, "versions", name);
-        // 隐藏的原版父版本可以原地安装成正式的纯原版实例，不必要求用户换名或手动删目录。
-        var reuseBase = (loader is "" or "原版") && string.Equals(name, game, StringComparison.OrdinalIgnoreCase)
-            && Directory.Exists(target) && !File.Exists(Path.Combine(target, InstanceStore.FileName));
-        if (Directory.Exists(target) && !_incomplete.Contains(InstanceStore.Key(root, name)) && !reuseBase) throw new IOException("这个安装名称已存在，请使用其他名称。");
-        return Enqueue(PreviewTaskKind.Install, name, game, root, name, async (task, token) =>
+        if (IsInstallationTargetReserved(root, name)) throw new InvalidOperationException("这个版本已有安装任务，请在任务记录中继续。");
+        var plan = new PendingInstallation
         {
-            if (!_rootWriters.TryGetValue(root, out var writer)) _rootWriters[root] = writer = new(1, 1);
-            await writer.WaitAsync(token);
-            var baseExisted = File.Exists(Path.Combine(root, "versions", game, game + ".json"));
-            try
-            {
-                await SetIncompleteAsync(root, name, true);
-                await InstallComponentsAsync(root, name, game, loader, loaderVersion, optifine, task, token);
-                await RemoveAutoInstalledBaseAsync(root, game, name, baseExisted);
-                if (!baseExisted && !string.Equals(name, game, StringComparison.OrdinalIgnoreCase)) MarkDependencyVersion(root, game);
-                token.ThrowIfCancellationRequested();
-                var instance = new PreviewInstance(name, name, game, loader) { Root = root, IsolationMode = SavedSettings.VersionIsolation };
-                var options = InstanceStore.Read(instance); options.Name = name; options.Source = "Minecraft";
-                await InstanceStore.SaveAsync(instance, options);
-                await SetIncompleteAsync(root, name, false);
-                if (string.Equals(root, SelectedRoot, StringComparison.OrdinalIgnoreCase)) await RefreshInstancesAsync();
-                NotifyTask(name + "安装完成", false);
-            }
-            finally
-            {
-                if (!baseExisted && !string.Equals(name, game, StringComparison.OrdinalIgnoreCase)) MarkDependencyVersion(root, game);
-                writer.Release();
-            }
-        });
+            Origin = InstallationOrigin.Game, Name = name, Root = root, TargetId = name,
+            Game = game, Loader = loader, LoaderVersion = loaderVersion, OptiFine = optifine,
+            Isolation = SavedSettings.VersionIsolation
+        };
+        ValidateInstallationTarget(plan);
+        return EnqueueInstallation(plan);
+    }
+
+    private async Task RunGameInstallationAsync(PendingInstallation plan, PreviewTask task, CancellationToken token)
+    {
+        var (root, name, game, loader, loaderVersion, optifine) =
+            (plan.Root, plan.TargetId, plan.Game, plan.Loader, plan.LoaderVersion, plan.OptiFine);
+        task.DownloadSourceSetting = FileSource.Name;
+        if (!_rootWriters.TryGetValue(root, out var writer)) _rootWriters[root] = writer = new(1, 1);
+        Report(task, "等待游戏目录可用");
+        await writer.WaitAsync(token);
+        var baseExisted = File.Exists(Path.Combine(root, "versions", game, game + ".json"));
+        try
+        {
+            ValidateInstallationTarget(plan);
+            await SetIncompleteAsync(root, name, true);
+            await InstallComponentsAsync(root, name, game, loader, loaderVersion, optifine, task, token);
+            await RemoveAutoInstalledBaseAsync(root, game, name, baseExisted);
+            if (!baseExisted && !string.Equals(name, game, StringComparison.OrdinalIgnoreCase)) MarkDependencyVersion(root, game);
+            token.ThrowIfCancellationRequested();
+            var instance = new PreviewInstance(name, name, game, loader) { Root = root, IsolationMode = SavedSettings.VersionIsolation };
+            var options = InstanceStore.Read(instance); options.Name = name; options.Source = "Minecraft";
+            await InstanceStore.SaveAsync(instance, options);
+            token.ThrowIfCancellationRequested();
+            await SetIncompleteAsync(root, name, false, task);
+            if (string.Equals(root, SelectedRoot, StringComparison.OrdinalIgnoreCase)) await RefreshInstancesAsync();
+            NotifyTask(name + "安装完成", false);
+        }
+        finally
+        {
+            if (!baseExisted && !string.Equals(name, game, StringComparison.OrdinalIgnoreCase)) MarkDependencyVersion(root, game);
+            writer.Release();
+        }
     }
     /// <summary>加载器安装器自动补装的原版父版本只作为依赖保留，不在游戏列表中显示。</summary>
     private static void MarkDependencyVersion(string root, string id)
@@ -652,6 +754,7 @@ public sealed partial class PreviewSession
             instance.Loader = updated.Loader;
             instance.LoaderVersion = updated.LoaderVersion;
             instance.RequiredJava = updated.RequiredJava;
+            instance.PrefersLegacyJava8 = updated.PrefersLegacyJava8;
             instance.Options = updated.Options;
         }
     }
@@ -692,7 +795,7 @@ public sealed partial class PreviewSession
         var plan = await ResourceFileInstaller.PlanAsync(instance,
             [new ResourceInstallFile("mods/" + file.Filename, "P7dR8mSH", version.Id, "Fabric API", file)], token);
         await ResourceFileInstaller.ApplyAsync(instance, plan, client, _configuration.ConfigDirectory,
-            (stage, progress) => Report(task, stage, file: progress), token);
+            (stage, progress) => Report(task, stage, progress), token, DownloadConcurrency, task.RecordDownloadHost);
     }
     private Task BeginLaunchAsync()
     {
@@ -704,14 +807,20 @@ public sealed partial class PreviewSession
     /// <summary>开始及重试都明确传入当前确认的账户与实例，不复用失败任务捕获的旧账户。</summary>
     private async Task RunLaunchAsync(PreviewInstance instance,PreviewAccount account,PreviewTask task,CancellationToken token)
     {
+            var timing = new LaunchTiming();
+            task.RecoveryInstance = instance;
+            task.DiagnosticJava = null;
             Report(task, "验证账号");
             if (account.IsMicrosoft) { await AuthenticateMicrosoftAsync(account, false); if (!account.IsValid) throw new InvalidOperationException("登录已过期，请重新登录。"); }
             if (account.RuntimeAccount == null) throw new InvalidOperationException("账号不可用，请重新登录。");
+            timing.Enter("启动设置");
             Report(task, "读取启动设置");
             var settings = InstanceStore.Read(instance);
             var global = SavedSettings.Copy();
+            timing.Enter("Java 检测");
             Report(task, "检测 Java");
             var requiredJava = instance.RequiredJava;
+            var prefersLegacyJava8 = instance.PrefersLegacyJava8;
             IReadOnlyList<FMCore.Java.JavaInfo> javaCandidates;
             try { javaCandidates = await RuntimeSupport.ReadLaunchJavaCandidatesAsync(instance, settings, global, token); }
             catch (Exception error) when (error is not OperationCanceledException)
@@ -725,19 +834,25 @@ public sealed partial class PreviewSession
                 throw new JavaNotFoundException(instance, instance.RequiredJava, instance.RequiredJava is { } missingJava
                     ? $"未检测到 Java {missingJava} 或更高版本。"
                     : "未检测到可用的 Java。");
+            task.DiagnosticJava = "首选候选：" + DiagnosticBundle.DescribeJava(javaCandidates[0]);
             var pendingOptions = InstanceStore.Read(instance);
             if (pendingOptions.PendingLoader.Length > 0)
             {
+                timing.Enter("补装加载器");
                 await InstallPendingLoaderAsync(instance, pendingOptions, javaCandidates[0].Executable, task, token);
                 settings = InstanceStore.Read(instance);
             }
+            timing.Enter("文件检查与补全");
             Report(task, "准备共享资源目录");
             await EnsureResourceLinksAsync(instance.Root);
             Report(task, "检查游戏文件与配置");
-            await EnsureFilesAsync(instance, task, token);
+            var initialArchitecture = RuntimeSupport.GetJavaArchitecture(javaCandidates[0]);
+            await EnsureFilesAsync(instance, task, token, initialArchitecture);
+            var checkedArchitectures = new HashSet<System.Runtime.InteropServices.Architecture> { initialArchitecture };
             // 恢复缺少的父版本后才能得到完整 Java 声明，此时重新按核心元数据选择。
-            if (requiredJava != instance.RequiredJava)
+            if (requiredJava != instance.RequiredJava || prefersLegacyJava8 != instance.PrefersLegacyJava8)
             {
+                timing.Enter("复查 Java");
                 try { javaCandidates = await RuntimeSupport.ReadLaunchJavaCandidatesAsync(instance, settings, global, token); }
                 catch (Exception error) when (error is not OperationCanceledException)
                 {
@@ -745,12 +860,14 @@ public sealed partial class PreviewSession
                         "配置的 Java 无法使用，请在设置中重新选择 Java 或切换为自动选择。", error);
                 }
                 javaCandidates = await ResolveJavaAsync(instance, settings, global, javaCandidates, task, token);
+                task.DiagnosticJava = javaCandidates.Count > 0 ? "首选候选：" + DiagnosticBundle.DescribeJava(javaCandidates[0]) : null;
             }
             // 缺少匹配版本时使用更高版本的 Java 兜底；这类兜底启动失败要额外弹框说明原因。
             var fallbackJava = instance.RequiredJava is { } required && javaCandidates.Count > 0 && javaCandidates[0].MajorVersion > required;
             // 启动前自动备份：失败只写日志，不阻断启动。
             if (GameBackupService.ShouldBackup(instance))
             {
+                timing.Enter("自动备份");
                 Report(task, "自动备份");
                 try
                 {
@@ -759,14 +876,27 @@ public sealed partial class PreviewSession
                 }
                 catch (Exception error) when (error is not OperationCanceledException) { Log("自动备份失败：" + RuntimeSupport.Error(error)); }
             }
+            timing.Enter("启动准备");
             Report(task, "检查启动配置");
             IReadOnlyList<string> unknownPlaceholders = [];
             try
             {
             // 自动内存按“可选用的内存”计算，先释放启动器占用再读取，读数才反映真实可用量。
             if (settings.GlobalMemory ? global.OptimizeMemory : settings.OptimizeMemory) RuntimeSupport.ReleaseLauncherMemory();
-            var selectedLauncher = await RuntimeSupport.SelectCheckedLauncherAsync(instance,account.RuntimeAccount,settings,global,token,javaCandidates);
+            var selectedLauncher = await RuntimeSupport.SelectCheckedLauncherAsync(instance, account.RuntimeAccount, settings, global,
+                token, javaCandidates, async java =>
+                {
+                    var architecture = RuntimeSupport.GetJavaArchitecture(java);
+                    if (!checkedArchitectures.Add(architecture)) return;
+                    timing.Enter("补查游戏文件");
+                    Report(task, "检查游戏文件与配置");
+                    await EnsureFilesAsync(instance, task, token, architecture);
+                    timing.Enter("启动准备");
+                    Report(task, "检查启动配置");
+                });
             var launcher = selectedLauncher.Launcher;
+            if (javaCandidates.FirstOrDefault(java => string.Equals(java.Executable, selectedLauncher.JavaPath, StringComparison.OrdinalIgnoreCase)) is { } selectedJava)
+                task.DiagnosticJava = "实际使用：" + DiagnosticBundle.DescribeJava(selectedJava);
             unknownPlaceholders = selectedLauncher.UnknownPlaceholders;
             if (unknownPlaceholders.Count > 0)
                 Log("版本包含未解析占位符：" + string.Join("、", unknownPlaceholders));
@@ -784,9 +914,15 @@ public sealed partial class PreviewSession
                 }
                 Log(line);
             }
+            timing.Enter("创建进程");
             Report(task, "创建游戏进程");
             var code = await launcher.LaunchAsync(p =>
             {
+                if (p.Stage == LaunchStage.JavaStarted)
+                {
+                    var sample = timing.Finish();
+                    PostUi(() => SaveLaunchTiming(instance, sample));
+                }
                 _taskStages[task] = p.Stage == LaunchStage.JavaStarted ? "游戏运行" : p.Stage == LaunchStage.GameExited ? "游戏退出" : "启动游戏进程";
                 PostUi(() =>
             {
@@ -865,21 +1001,5 @@ public sealed partial class PreviewSession
 
     /// <summary>把核心的 Java 下载进度映射到启动任务上，让任务记录显示百分比与速度。</summary>
     private void ReportJavaInstall(PreviewTask task, FMCore.Java.JavaInstallProgress progress)
-    {
-        _taskStages[task] = progress.Message;
-        PostUi(() =>
-        {
-            if (!task.IsActive) return;
-            task.Stage = progress.Message;
-            if (progress.Download is { } download)
-            {
-                task.Total = download.TotalBytes;
-                task.Bytes = download.ProcessedBytes;
-                task.BytesPerSecond = download.BytesPerSecond;
-                task.CompletedFiles = download.CompletedFiles;
-                task.TotalFiles = download.TotalFiles;
-            }
-            task.Refresh(); Signal();
-        });
-    }
+        => Report(task, progress.Message, progress.Download);
 }

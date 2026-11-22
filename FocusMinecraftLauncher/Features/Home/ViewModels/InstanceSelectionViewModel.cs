@@ -84,6 +84,8 @@ public sealed class InstanceSelectionViewModel : ObservableObject, IDisposable
         RefreshVersions();
         foreach (var group in Groups)
             group.SelectedInstance = Session.CurrentInstance is { } instance && group.Versions.Contains(instance) ? instance : null;
+        // 进入页面重新读取磁盘，不仅刷新已缓存的集合视图。首次扫描尚未完成时复用其结果。
+        if (!Session.IsLoading) _ = Session.RefreshInstancesAsync();
     }
 
     private bool Matches(PreviewInstance instance)
@@ -108,7 +110,12 @@ public sealed class InstanceSelectionViewModel : ObservableObject, IDisposable
         var path = Path.TrimEndingDirectorySeparator(dialog.FolderName);
         path = Infrastructure.Runtime.InstanceStore.NormalizeRoot(path);
         var existing = Folders.FirstOrDefault(folder => SamePath(folder.FullPath, path));
-        if (existing != null) { SelectedFolder = existing; Notice = "已选择列表中的文件夹"; return; }
+        if (existing != null)
+        {
+            if (ReferenceEquals(SelectedFolder, existing)) _ = SelectRootAsync();
+            else SelectedFolder = existing;
+            Notice = "已选择列表中的文件夹"; return;
+        }
         var name = Path.GetFileName(path);
         Session.RememberFolder(path);
         var added = new InstanceFolderOption(name.Length > 0 ? name : path, path, true);

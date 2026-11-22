@@ -12,6 +12,7 @@ public partial class App
     {
         DispatcherUnhandledException += ReportUnhandledUi;
         AppDomain.CurrentDomain.UnhandledException += ReportUnhandledProcess;
+        _ = Task.Run(LauncherError.PruneSavedReports);
     }
     private void DisposeErrorReporting()
     {
