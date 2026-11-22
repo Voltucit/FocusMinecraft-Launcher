@@ -6,12 +6,12 @@ namespace FocusMinecraftLauncher.Features.Downloads.Models;
 /// <summary>列表页的磁盘缓存格式：只保存摘要字段，文件列表与正文仍按需联网读取。</summary>
 public sealed record CachedProject(string Id, DownloadSection Category, string Name, string[] Aliases, string Description,
     string[] Tags, string[]? GameVersions, string[]? Environments, string? Author, string? Source, long? Downloads,
-    string? Updated, string? ImageKey, string? IconUrl, string? ChineseName)
+    string? Updated, string? ImageKey, string? IconUrl, string? ChineseName, string? Slug = null)
 {
     public static CachedProject From(ResourceProject project) => new(project.Id, project.Category, project.Name, project.Aliases,
         project.Description, project.Tags, project.GameVersions, project.Environments, project.Author, project.Source,
         project.Downloads, project.Updated?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), project.ImageKey, project.IconUrl,
-        project.ChineseName);
+        project.ChineseName, project.Slug);
 
     public ResourceProject ToProject()
     {
@@ -20,6 +20,7 @@ public sealed record CachedProject(string Id, DownloadSection Category, string N
             Downloads, updated, ImageKey)
         {
             IconUrl = IconUrl,
+            Slug = Slug,
             ChineseName = ChineseName
         };
     }

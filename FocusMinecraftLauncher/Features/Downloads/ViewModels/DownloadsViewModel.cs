@@ -150,7 +150,8 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
         var revision=++_navigationRevision;
         var entry=EnsureEntry(id,name);
         // 上次可能只拿到了项目正文、版本接口失败并留下空文件列表；重新打开时强制补取一次。
-        if(entry.Project.Files.Count==0)_catalog.Invalidate(id);
+        var applyMergedFilter = entry.IsCrossPlatform && !entry.HasFiles;
+        if(!entry.IsCrossPlatform&&entry.Project.Files.Count==0)_catalog.Invalidate(id);
         try
         {
             Preview=null;
@@ -163,17 +164,19 @@ public sealed class DownloadsViewModel : ObservableObject, IDisposable
             vm.BeginLoading();
             vm.ClearNotice();
             // 项目正文先到先显示；版本列表随后在后台补齐，不把首屏卡在整条详情链上。
-            var project=await _catalog.LoadProjectAsync(id,_lifetime.Token);
+            var project=await entry.LoadProjectAsync(_lifetime.Token);
             if(_disposed||revision!=_navigationRevision)return;
             entry.UpdateProject(project);
             vm.ReportLoading(50);
             vm.ClearNotice();
-            var full=await _catalog.LoadAsync(id,_lifetime.Token);
+            var full=await entry.LoadVersionsAsync(_lifetime.Token);
             if(_disposed||revision!=_navigationRevision)return;
             entry.UpdateProject(full);
             if(full.Files.Count==0)Session.Log("资源文件列表为空 ["+id+"; "+Infrastructure.Runtime.CommunitySource.Current.Name+"; UA="+Infrastructure.Runtime.CommunitySource.UserAgent+"]");
             vm.FinishLoading();
-            vm.ClearNotice();
+            if (applyMergedFilter) vm.ApplyFilter(filter);
+            if (entry.SourceLoadNotice.Length > 0) vm.ShowNotice(entry.SourceLoadNotice, true);
+            else if (!applyMergedFilter) vm.ClearNotice();
         }
         catch(Exception error)
         {

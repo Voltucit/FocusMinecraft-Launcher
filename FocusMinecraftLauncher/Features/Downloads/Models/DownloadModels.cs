@@ -27,6 +27,7 @@ public sealed record ResourceProject(string Id, DownloadSection Category, string
 {
     public IReadOnlyList<ResourceFileItem> Files { get; set; } = [];
     public string[] Gallery { get; init; } = [];
+    public string? Slug { get; init; }
     public string Body { get; init; } = "";
     /// <summary>CurseForge 项目没有独立的图标字段，这里保留原始图标地址供异步加载。</summary>
     public string? IconUrl { get; init; }

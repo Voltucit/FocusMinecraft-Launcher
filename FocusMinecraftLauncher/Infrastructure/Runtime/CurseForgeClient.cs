@@ -191,16 +191,30 @@ public sealed partial class CurseForgeClient
         return ReadFile(document.RootElement.GetProperty("data")) ?? throw new InvalidDataException("CurseForge 没有返回这个文件的下载信息。");
     }
 
-    public async Task<IReadOnlyList<CurseForgeFile>> GetFilesAsync(long id, string? gameVersion, string? loader, CancellationToken token)
+    public async Task<IReadOnlyList<CurseForgeFile>> GetFilesAsync(long id, string? gameVersion, string? loader,
+        CancellationToken token, bool allPages = false)
     {
         var builder = new StringBuilder($"mods/{id}/files?pageSize=50");
         if (!string.IsNullOrWhiteSpace(gameVersion)) builder.Append("&gameVersion=").Append(Uri.EscapeDataString(gameVersion));
         if (LoaderType(loader) is { } type) builder.Append("&modLoaderType=").Append(type);
-        using var document = await GetAsync(builder.ToString(), token);
-        var files = new List<CurseForgeFile>();
-        foreach (var item in document.RootElement.GetProperty("data").EnumerateArray())
-            if (ReadFile(item) is { } file) files.Add(file);
-        return files;
+        var query = builder.ToString();
+        var files = new Dictionary<long, CurseForgeFile>();
+        var offset = 0;
+        while (true)
+        {
+            using var document = await GetAsync(offset == 0 ? query : query + "&index=" + offset.ToString(CultureInfo.InvariantCulture), token);
+            var data = document.RootElement.GetProperty("data");
+            var previousCount = files.Count;
+            foreach (var item in data.EnumerateArray())
+                if (ReadFile(item) is { } file) files.TryAdd(file.Id, file);
+
+            offset += data.GetArrayLength();
+            if (!allPages || files.Count == previousCount
+                || !document.RootElement.TryGetProperty("pagination", out var pagination)
+                || !pagination.TryGetProperty("totalCount", out var total)
+                || offset >= total.GetInt32())
+                return files.Values.ToArray();
+        }
     }
 
     /// <summary>用文件指纹反查 CurseForge 文件；批量上限 1000，需要明确反馈失败的详情跳转可启用 requireSuccess。</summary>

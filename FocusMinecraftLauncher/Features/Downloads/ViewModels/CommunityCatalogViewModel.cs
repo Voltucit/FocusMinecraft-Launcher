@@ -63,7 +63,9 @@ public sealed class CommunityCatalogViewModel : ObservableObject
     public int Page=>_page;
     public bool IsEmpty=>!_busy&&!_queryFailed&&PageItems.Count==0;
     public string PageText=>_busy?$"第 {_page} 页，正在加载"
-        :$"第 {_page} / {_pageCount} 页，{(_partialFailure?"已获取":"共")} {_total} 项";
+        : Category == DownloadSection.Mods && Source == AllSources
+            ? $"第 {_page} / {_pageCount} 页，本页 {PageItems.Count} 项"
+            : $"第 {_page} / {_pageCount} 页，{(_partialFailure ? "已获取" : "共")} {_total} 项";
     public bool IsDetailLoading=>_detailTotal>0&&_detailDone<_detailTotal;
     public double DetailProgress=>_detailTotal==0?0:Math.Clamp(100d*_detailDone/_detailTotal,0,100);
     public string DetailProgressText=>IsDetailLoading?$"正在加载资源详情 {_detailDone} / {_detailTotal}（{DetailProgress:0}%）":"";
@@ -232,9 +234,11 @@ public sealed class CommunityCatalogViewModel : ObservableObject
         var pages=new List<SourcePage>();
         var errors=new List<string>();
         var finished=new HashSet<string>();
-        var pending=sources.Select(source=>ReceiveAsync(source,source=="CurseForge"
-            ?CursePageAsync(keyword,gameVersion,loader,tag,offset,limit,fresh)
-            :SourcePageAsync(_catalog,Category,source,keyword,gameVersion,loader,categoryIds,null,offset,limit,false,fresh))).ToList();
+        var modSearchName = Category == DownloadSection.Mods && WikiNameService.CanResolveModSearch(keyword)
+            ? new Lazy<Task<WikiNameService.ModSearchName?>>(() => WikiNameService.ResolveModSearchNameAsync(keyword))
+            : null;
+        var pending = sources.Select(source => ReceiveAsync(source,
+            QuerySourceAsync(source, keyword, gameVersion, loader, tag, categoryIds, offset, limit, revision, fresh, modSearchName))).ToList();
         try
         {
             while(pending.Count>0)
@@ -267,12 +271,57 @@ public sealed class CommunityCatalogViewModel : ObservableObject
             if(revision==_revision){_busy=false;Refresh();CommandManager.InvalidateRequerySuggested();QueueDetailPrefetch(PageItems);}
         }
     }
-    /// <summary>只有需要分类筛选的 CurseForge 请求才等待分类编号，其他来源不受影响。</summary>
-    private async Task<SourcePage> CursePageAsync(string keyword,string? version,string? loader,string tag,int offset,int limit,bool fresh=false)
+    private async Task<SourcePage> QuerySourceAsync(string source, string keyword, string? version, string? loader,
+        string tag, string[] categories, int offset, int limit, int revision, bool fresh,
+        Lazy<Task<WikiNameService.ModSearchName?>>? modSearchName)
     {
-        if(tag!="全部")await EnsureCurseTagsAsync();
-        int? categoryId=_sourceTagIds.TryGetValue(tag,out var id)?id:null;
-        return await SourcePageAsync(_catalog,Category,"CurseForge",keyword,version,loader,[],categoryId,offset,limit,false,fresh);
+        int? categoryId = null;
+        if (source == "CurseForge")
+        {
+            if (tag != "全部") await EnsureCurseTagsAsync();
+            if (_sourceTagIds.TryGetValue(tag, out var id)) categoryId = id;
+            categories = [];
+        }
+
+        Task<SourcePage> LoadAsync(string term, int pageOffset) =>
+            SourcePageAsync(_catalog, Category, source, term, version, loader, categories, categoryId, pageOffset, limit, fresh: fresh);
+
+        if (modSearchName is null) return await LoadAsync(keyword, offset);
+
+        // 始终用首页决定查询词，防止翻页后在中文结果和英文结果之间切换。
+        var original = await LoadAsync(keyword, 0);
+        Task<SourcePage> OriginalPageAsync() => offset == 0 || revision != _revision
+            ? Task.FromResult(original) : LoadAsync(keyword, offset);
+
+        if (revision != _revision) return original;
+        if (original.Items.Any(item =>
+            WikiNameService.HasLiteralTitleMatch(item.Project.TitleText, keyword)))
+            return await OriginalPageAsync();
+
+        var match = await modSearchName.Value;
+        if (revision != _revision) return original;
+        if (match is null) return await OriginalPageAsync();
+
+        try
+        {
+            var firstTranslatedPage = await LoadAsync(match.English, 0);
+            if (revision != _revision) return original;
+            // 已有搜索结果时，只有确认译名指向真实项目才切换关键词。
+            if (original.Total == 0 || firstTranslatedPage.Items.Any(item => match.MatchesEnglish(item.Project.Name)))
+            {
+                var translated = offset == 0 ? firstTranslatedPage : await LoadAsync(match.English, offset);
+                if (revision != _revision) return original;
+                var items = translated.Items.OrderByDescending(item => match.MatchesEnglish(item.Project.Name)).ToArray();
+                foreach (var (project, _) in items)
+                    if (project.ChineseName is null && match.MatchesEnglish(project.Name)) project.ChineseName = match.Chinese;
+                return new(items, translated.Total);
+            }
+        }
+        catch (Exception error) when (original.Total > 0)
+        {
+            System.Diagnostics.Trace.TraceWarning("模组译名补充搜索失败：{0}", error.GetType().Name);
+        }
+        return await OriginalPageAsync();
     }
     /// <summary>观察每个来源的异常，保留可用结果；一个来源失败不被解释成所有来源均无结果。</summary>
     private static async Task<SourceResult> ReceiveAsync(string source,Task<SourcePage> request)
@@ -310,15 +359,15 @@ public sealed class CommunityCatalogViewModel : ObservableObject
         load.ContinueWith(task =>
         {
             if(task.Status!=TaskStatus.RanToCompletion)return;
-            CommunityCache.WriteText("page2:"+key,CachedPageList.Serialize(task.Result.Items,task.Result.Total));
+            CommunityCache.WriteText("page3:"+key,CachedPageList.Serialize(task.Result.Items,task.Result.Total));
         },TaskScheduler.Default);
         return load;
     }
     /// <summary>读回一页列表；结构不对或文件损坏时当作没有缓存。</summary>
     private static SourcePage? ReadDisk(string key)
     {
-        // 旧缓存没有保存 Modrinth 图标地址，升级后按新键重新查询一次。
-        var json=CommunityCache.ReadText("page2:"+key,DiskPageLifetime);
+        // 旧缓存没有项目 slug，无法确认跨平台身份。
+        var json=CommunityCache.ReadText("page3:"+key,DiskPageLifetime);
         if(json is null)return null;
         var page=CachedPageList.Deserialize(json);
         return page is null?null:new SourcePage(page.Items.Select(item=>(item.ToProject(),item.IconUrl)).ToArray(),page.Total);
@@ -343,7 +392,7 @@ public sealed class CommunityCatalogViewModel : ObservableObject
         var revision=_revision;
         var pending=new List<ResourceEntryViewModel>();
         foreach(var entry in entries)
-            if(_detailPrefetching.Add(entry.Project.Id))pending.Add(entry);
+            if(!entry.IsCrossPlatform && _detailPrefetching.Add(entry.Project.Id))pending.Add(entry);
         if(pending.Count==0)return;
         var progressRevision=++_detailProgressRevision;
         _detailDone=0;_detailTotal=pending.Count;
@@ -388,29 +437,47 @@ public sealed class CommunityCatalogViewModel : ObservableObject
             if(progressRevision==_detailProgressRevision){_detailDone++;NotifyDetailProgress();}
         }
     }
-    /// <summary>同一个资源在两个站各有一份时只显示一次，避免列表里出现两行一样的项目。</summary>
-    private void Present(IReadOnlyList<(ResourceProject Project,string? Icon)> items)
+    /// <summary>全部来源下只合并同一项目，名称相同的独立模组继续单独显示。</summary>
+    private void Present(IReadOnlyList<(ResourceProject Project, string? Icon)> items)
     {
-        var seen=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var added=new List<ResourceProject>();
-        var index=0;
-        foreach(var (project,icon) in items)
+        var pairs = Category == DownloadSection.Mods && Source == AllSources
+            ? CrossPlatformMod.Match(items.Select(item => item.Project))
+            : new Dictionary<string, CrossPlatformMod>(StringComparer.Ordinal);
+        var seen = new HashSet<string>(Category == DownloadSection.Mods ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
+        var added = new List<ResourceEntryViewModel>();
+        var index = 0;
+        foreach (var (result, icon) in items)
         {
-            if(!seen.Add(project.Name.Trim()))continue;
-            if(!_entries.TryGetValue(project.Id,out var entry))_entries[project.Id]=entry=new(project,_catalog,_open);
-            var previous=PageItems.IndexOf(entry);
-            if(previous<0)
+            var pair = pairs.GetValueOrDefault(result.Id);
+            var id = pair?.Id ?? result.Id;
+            if (!seen.Add(Category == DownloadSection.Mods ? id : result.Name.Trim())) continue;
+            var project = pair is null ? result : pair.Combine(pair.Modrinth, pair.CurseForge) with { Files = [] };
+            if (!_entries.TryGetValue(id, out var entry))
             {
-                PageItems.Insert(index,entry);
-                added.Add(entry.Project);
-                if(entry.Project.LoadedImage==null)_ = LoadImageAsync(entry,icon);
+                _entries[id] = entry = new(project, _catalog, _open, pair);
+                if (pair is not null && PageItems.Any(row => row.IsExpanded
+                    && (row.Project.Id == pair.Modrinth.Id || row.Project.Id == pair.CurseForge.Id)))
+                    entry.IsExpanded = true;
             }
-            else if(previous!=index)PageItems.Move(previous,index);
+            else if (entry.Project.ChineseName is null && project.ChineseName is { } chineseName)
+            {
+                entry.Project.ChineseName = chineseName;
+                entry.Refresh();
+            }
+
+            var previous = PageItems.IndexOf(entry);
+            if (previous < 0)
+            {
+                PageItems.Insert(index, entry);
+                added.Add(entry);
+                if (entry.Project.LoadedImage is null) _ = LoadImageAsync(entry, project.IconUrl ?? icon);
+            }
+            else if (previous != index) PageItems.Move(previous, index);
             index++;
         }
-        while(PageItems.Count>index)PageItems.RemoveAt(PageItems.Count-1);
+        while (PageItems.Count > index) PageItems.RemoveAt(PageItems.Count - 1);
         _ = TranslateAsync(added);
-        _ = LookupNamesAsync(added);
+        _ = LookupNamesAsync(added.Select(entry => entry.Project).ToArray());
     }
     /// <summary>中文名要按百科的节奏慢慢查，只在后台补齐，取到一条就替换一行。</summary>
     private async Task LookupNamesAsync(IReadOnlyList<ResourceProject> projects)
@@ -430,18 +497,15 @@ public sealed class CommunityCatalogViewModel : ObservableObject
         }
     }
     /// <summary>列表先用原文显示，译文到了再逐行替换，不让翻译拖慢首页。</summary>
-    private async Task TranslateAsync(IEnumerable<ResourceProject> projects)
+    private async Task TranslateAsync(IEnumerable<ResourceEntryViewModel> entries)
     {
-        var wanted = projects
-            .Where(project => project.TranslatedDescription is null)
-            .Select(project => project.Id)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var wanted = entries.Where(entry => entry.Project.TranslatedDescription is null).ToArray();
         if (wanted.Length == 0) return;
-        var translations = await FocusMinecraftLauncher.Infrastructure.Runtime.TranslationService.TranslateAsync(wanted);
-        foreach (var (id, text) in translations)
+        var translations = await TranslationService.TranslateAsync(wanted.Select(entry => entry.PrimaryProjectId));
+        foreach (var entry in wanted)
         {
-            if (!_entries.TryGetValue(id, out var entry) || entry.Project.TranslatedDescription is not null) continue;
+            if (entry.Project.TranslatedDescription is not null
+                || !translations.TryGetValue(entry.PrimaryProjectId, out var text)) continue;
             entry.Project.TranslatedDescription = text;
             entry.Refresh();
         }
@@ -460,6 +524,10 @@ public sealed class ResourceEntryViewModel : ObservableObject
 {
     private readonly ResourceCatalog _catalog;
     private readonly Action<string, bool> _open;
+    private readonly CrossPlatformMod? _crossPlatform;
+    internal bool IsCrossPlatform => _crossPlatform is not null;
+    internal string PrimaryProjectId => _crossPlatform?.Modrinth.Id ?? Project.Id;
+    internal string SourceLoadNotice { get; private set; } = "";
     private bool _expanded, _dependenciesExpanded, _loadingDetails;
     private string _dependencyError="";
     private ResourceFileItem? _selectedFile;
@@ -484,10 +552,46 @@ public sealed class ResourceEntryViewModel : ObservableObject
     public UiCommand OpenDetails { get; }
     public UiCommand ChooseVersion { get; }
     public ResourceEntryViewModel(ResourceProject project, ResourceCatalog catalog, Action<string, bool> open)
+        : this(project, catalog, open, null) { }
+
+    internal ResourceEntryViewModel(ResourceProject project, ResourceCatalog catalog, Action<string, bool> open,
+        CrossPlatformMod? crossPlatform)
     {
-        Project = project; _catalog = catalog; _open = open; _selectedFile = project.Files.FirstOrDefault();
+        Project = project; _catalog = catalog; _open = open; _crossPlatform = crossPlatform; _selectedFile = project.Files.FirstOrDefault();
         OpenDetails = new(_ => open(project.Id, false)); ChooseVersion = new(_ => open(project.Id, true));
         _dependenciesExpanded = false;
+    }
+
+    internal Task<ResourceProject> LoadProjectAsync(CancellationToken token) => _crossPlatform is { } pair
+        ? LoadCrossPlatformAsync(pair, false, token) : _catalog.LoadProjectAsync(Project.Id, token);
+
+    internal Task<ResourceProject> LoadVersionsAsync(CancellationToken token = default) => _crossPlatform is { } pair
+        ? LoadCrossPlatformAsync(pair, true, token) : _catalog.LoadAsync(Project.Id, token);
+
+    private async Task<ResourceProject> LoadCrossPlatformAsync(CrossPlatformMod pair, bool loadVersions, CancellationToken token)
+    {
+        async Task<(ResourceProject Project, Exception? Error)> ReadSourceAsync(ResourceProject source)
+        {
+            try
+            {
+                var project = loadVersions ? await _catalog.LoadAllVersionsAsync(source.Id, token)
+                    : await _catalog.LoadProjectAsync(source.Id, token);
+                return (project, null);
+            }
+            catch (Exception error) when (!token.IsCancellationRequested)
+            {
+                return (_catalog.Find(source.Id) ?? source, error);
+            }
+        }
+
+        var sources = await Task.WhenAll(pair.Sources.Select(ReadSourceAsync));
+        var failures = sources.Where(source => source.Error is not null).ToArray();
+        if (failures.Length == sources.Length)
+            throw new AggregateException("两个平台的模组资料均未能加载。", failures.Select(source => source.Error!));
+        var combined = pair.Combine(sources[0].Project, sources[1].Project);
+        if (!loadVersions) return combined with { Files = Project.Files };
+        SourceLoadNotice = failures.Length == 0 ? "" : $"暂时无法读取 {failures[0].Project.Source} 的版本，已显示可用文件。";
+        return combined;
     }
     public void UpdateProject(ResourceProject project) {var wanted=SelectedFile?.Id;var translated=Project.TranslatedDescription;var chinese=Project.ChineseName;var image=Project.LoadedImage;Project=project;if(Project.TranslatedDescription is null)Project.TranslatedDescription=translated;if(Project.ChineseName is null)Project.ChineseName=chinese;if(Project.LoadedImage is null)Project.LoadedImage=image;SelectedFile=project.Files.FirstOrDefault(file=>file.Id==wanted)??project.Files.FirstOrDefault();Refresh(); }
     private async Task EnsureExpandedAsync()
@@ -497,7 +601,7 @@ public sealed class ResourceEntryViewModel : ObservableObject
         try
         {
             // 展开时才补详情与前置，列表阶段只显示搜索返回的摘要，避免一页几十次网络请求。
-            if(!HasFiles)UpdateProject(await _catalog.LoadAsync(Project.Id));
+            if(!HasFiles)UpdateProject(await LoadVersionsAsync());
             await ResolveDependenciesAsync();
         }
         catch(Exception error){_dependencyError=FocusMinecraftLauncher.Infrastructure.Runtime.RuntimeSupport.Error(error);}

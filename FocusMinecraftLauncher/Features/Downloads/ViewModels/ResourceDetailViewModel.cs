@@ -26,6 +26,7 @@ public sealed class ResourceFileRowViewModel : ObservableObject
     private readonly ResourceDetailViewModel _owner;
     public ResourceFileItem File { get; }
     public bool IsSelected => ReferenceEquals(_owner.SelectedFile, File);
+    public string SourceText => _owner.Entry.IsCrossPlatform ? (File.IsCurseForge ? "CurseForge" : "Modrinth") : "";
     public UiCommand Select { get; }
     public UiCommand DownloadPreview { get; }
     public ResourceFileRowViewModel(ResourceDetailViewModel owner, ResourceFileItem file, Action<ResourceFileItem> preview)

@@ -18,6 +18,7 @@ public sealed class ResourceCatalog : IDisposable
     private readonly Dictionary<string, ResourceProject> _projects = [];
     private readonly HashSet<string> _loaded=[];
     private readonly HashSet<string> _projectLoaded=[];
+    private readonly HashSet<string> _completeCurseForgeFiles = [];
     private readonly Dictionary<string,Task> _dependencyLoads=[];
     private readonly ConcurrentDictionary<string,Task<ResourceProject>> _detailLoads=[];
     private readonly ConcurrentDictionary<string,Task<ResourceProject>> _projectLoads=[];
@@ -32,7 +33,7 @@ public sealed class ResourceCatalog : IDisposable
         if (_projects.TryGetValue(hit.ProjectId, out var old)) return old;
         var project = new ResourceProject(hit.ProjectId, section, hit.Title, [], hit.Description, hit.Tags.Select(t => t.DisplayName).ToArray(), hit.Versions.ToArray(),
             hit.Categories.Where(c => c is "fabric" or "forge" or "neoforge" or "quilt" or "iris" or "optifine").ToArray(), hit.Author, "Modrinth", hit.Downloads, DateOnly.FromDateTime(hit.UpdatedAt.Date), null)
-        { IconUrl = hit.IconUrl };
+        { IconUrl = hit.IconUrl, Slug = hit.Slug };
         _projects[project.Id] = project; return project;
     }
     /// <summary>同一资源的详情请求只发一次：页面预读与用户打开详情共用结果，后到的调用直接等同一个任务。</summary>
@@ -68,7 +69,7 @@ public sealed class ResourceCatalog : IDisposable
             var detail=await MirrorGate.RunAsync(()=>Client.GetProjectAsync(key,CancellationToken.None));
             var result=new ResourceProject(detail.Id, detail.Loaders.Contains("datapack")?DownloadSection.Datapacks:Section(detail.ProjectType), detail.Title, [], detail.Description, detail.Tags.Select(t => t.DisplayName).ToArray(), detail.GameVersions.ToArray(), detail.Loaders.ToArray(),
                 string.Join(" / ", detail.Authors.Select(a => a.DisplayName)), "Modrinth", detail.Downloads, DateOnly.FromDateTime(detail.UpdatedAt.Date), null)
-            { Body = detail.Body, Gallery = detail.Gallery.Select(g => g.Url).ToArray(), IconUrl = detail.IconUrl };
+            { Body = detail.Body, Gallery = detail.Gallery.Select(g => g.Url).ToArray(), IconUrl = detail.IconUrl, Slug = detail.Slug };
             // 详情和版本可能并发加载；后完成的详情请求不能把已经补好的文件列表覆盖成空。
             var existing=_projects.GetValueOrDefault(key);
             result.Files=existing?.Files is {Count:>0} files?files:previous?.Files??[];
@@ -92,6 +93,7 @@ public sealed class ResourceCatalog : IDisposable
         if(_projects.TryGetValue(key,out var alias))key=alias.Id;
         _loaded.Remove(key);
         _projectLoaded.Remove(key);
+        _completeCurseForgeFiles.Remove(key);
         _detailLoads.TryRemove(key,out _);
         _projectLoads.TryRemove(key,out _);
     }
@@ -119,7 +121,7 @@ public sealed class ResourceCatalog : IDisposable
                 var detail=await detailTask!;
                 result=new ResourceProject(detail.Id, detail.Loaders.Contains("datapack")?DownloadSection.Datapacks:Section(detail.ProjectType), detail.Title, [], detail.Description, detail.Tags.Select(t => t.DisplayName).ToArray(), detail.GameVersions.ToArray(), detail.Loaders.ToArray(),
                     string.Join(" / ", detail.Authors.Select(a => a.DisplayName)), "Modrinth", detail.Downloads, DateOnly.FromDateTime(detail.UpdatedAt.Date), null)
-                { Body = detail.Body, Gallery = detail.Gallery.Select(g => g.Url).ToArray(), IconUrl = detail.IconUrl };
+                { Body = detail.Body, Gallery = detail.Gallery.Select(g => g.Url).ToArray(), IconUrl = detail.IconUrl, Slug = detail.Slug };
                 result.Files=previous?.Files??[];
                 _projects[id]=result;
                 _projectLoaded.Add(id);
@@ -167,12 +169,39 @@ public sealed class ResourceCatalog : IDisposable
         if (_projects.TryGetValue(key, out var existing) && _loaded.Contains(key)) return existing;
         var project = new ResourceProject(key, section, mod.Name, [], mod.Summary, mod.Categories, null, null,
             mod.Author, "CurseForge", mod.Downloads, mod.Updated, null)
-        { Files = mod.LatestFiles.Where(Installable).Select(file => FileItem(key, file, section)).ToArray(), IconUrl = mod.Icon };
+        { Files = mod.LatestFiles.Where(Installable).Select(file => FileItem(key, file, section)).ToArray(), IconUrl = mod.Icon, Slug = mod.Slug };
         _projects[key] = project;
         return project;
     }
 
-    /// <summary>详情页需要完整文件列表，搜索响应里的 latestFiles 只够列表展示。</summary>
+    /// <summary>打开合并版本时补齐 CurseForge 的所有分页，普通列表预读继续读取首批。</summary>
+    internal Task<ResourceProject> LoadAllVersionsAsync(string id, CancellationToken token)
+    {
+        if (!id.StartsWith("cf-", StringComparison.Ordinal)) return LoadAsync(id, token);
+        if (_completeCurseForgeFiles.Contains(id) && Find(id) is { } cached) return Task.FromResult(cached);
+        var key = "all-versions:" + id;
+        return _detailLoads.GetOrAdd(key, _ => LoadCompleteCurseForgeAsync(id, key)).WaitAsync(token);
+    }
+
+    private async Task<ResourceProject> LoadCompleteCurseForgeAsync(string id, string loadKey)
+    {
+        try
+        {
+            var project = await LoadProjectAsync(id);
+            var files = await CurseForge.GetFilesAsync(long.Parse(id[3..], CultureInfo.InvariantCulture), null, null,
+                CancellationToken.None, allPages: true);
+            project = Find(id) ?? project;
+            project.Files = files.Where(Installable).Select(file => FileItem(id, file, project.Category))
+                .Concat(project.Files).DistinctBy(file => file.Id).OrderByDescending(file => file.Date).ToArray();
+            _projects[id] = project;
+            _loaded.Add(id);
+            _completeCurseForgeFiles.Add(id);
+            return project;
+        }
+        finally { _detailLoads.TryRemove(loadKey, out _); }
+    }
+
+    /// <summary>用项目资料和首批文件补齐列表预读。</summary>
     public async Task<ResourceProject> LoadCurseForgeAsync(long id, DownloadSection? section, CancellationToken token)
     {
         var key = "cf-" + id.ToString(CultureInfo.InvariantCulture);
@@ -189,7 +218,9 @@ public sealed class ResourceCatalog : IDisposable
         }
         var category=section??project!.Category;
         var files = new List<CurseForgeFile>(mod?.LatestFiles??[]);
-        foreach (var file in await filesTask)
+        var loadedFiles = await filesTask;
+        if (_completeCurseForgeFiles.Contains(key) && Find(key) is { } complete) return complete;
+        foreach (var file in loadedFiles)
             if (files.All(existing => existing.Id != file.Id)) files.Add(file);
         project!.Files = files.Where(Installable).OrderByDescending(file => file.Date).Select(file => FileItem(key, file, category)).ToArray();
         _projects[key] = project; _projectLoaded.Add(key); _loaded.Add(key);
